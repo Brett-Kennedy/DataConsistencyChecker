@@ -1,5 +1,4 @@
 import os
-
 import pandas as pd
 import numpy as np
 import numbers
@@ -15,7 +14,8 @@ import statistics
 import datetime
 import time
 from dateutil.relativedelta import relativedelta
-from pandas.api.types import is_numeric_dtype
+#from pandas.api.types import is_numeric_dtype
+import pandas.api.types as pandas_types
 import random
 import string
 import scipy
@@ -23,7 +23,6 @@ from itertools import combinations
 from IPython import get_ipython
 from IPython.display import display, Markdown
 from textwrap import wrap
-from operator import sub
 
 # Visualization
 import matplotlib.pyplot as plt
@@ -766,7 +765,7 @@ class DataConsistencyChecker:
         for col_name in self.orig_df.columns:
             if self.orig_df[col_name].nunique() == 2:
                 self.binary_cols.append(col_name)
-            elif is_numeric_dtype(self.orig_df[col_name]):
+            elif pandas_types.is_numeric_dtype(self.orig_df[col_name]):
                 self.numeric_cols.append(col_name)
             elif self.orig_df[col_name].dtype in [np.datetime64, 'datetime64[ns]']:
                 self.date_cols.append(col_name)
@@ -1876,7 +1875,7 @@ class DataConsistencyChecker:
 
         num_feats = len(self.binary_cols) + len(self.string_cols)
         if num_feats > 50:
-            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest"
+            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest "
                    "correlation with the final score"))
             num_feats = 50
             feats = self.binary_cols + self.string_cols
@@ -1904,9 +1903,9 @@ class DataConsistencyChecker:
                     sub_df = df.copy()
                     sub_df[col_name] = df[col_name].map(map_dict)
                     sub_df[col_name] = sub_df[col_name].fillna("Other")
-                    s = sns.boxplot(data=sub_df,  x=sub_df[col_name], y=sub_df['FINAL SCORE'], ax=cur_ax)
+                    s = sns.boxplot(data=sub_df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
                 else:
-                    s = sns.boxplot(data=df,  x=df[col_name], y=df['FINAL SCORE'], ax=cur_ax)
+                    s = sns.boxplot(data=df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
                 s.set_title(col_name)
 
             clear_last_plots()
