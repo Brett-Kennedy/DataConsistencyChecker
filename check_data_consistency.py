@@ -1,7 +1,7 @@
-import os
 import pandas as pd
 import numpy as np
 import numbers
+import os
 import sys
 from sklearn import metrics
 from sklearn.linear_model import Lasso
@@ -14,7 +14,6 @@ import statistics
 import datetime
 import time
 from dateutil.relativedelta import relativedelta
-#from pandas.api.types import is_numeric_dtype
 import pandas.api.types as pandas_types
 import random
 import string
@@ -53,7 +52,6 @@ TEST_DEFN_SHORTLIST = 3     # Element 3 indicates if the test is in the shortlis
 TEST_DEFN_IMPLEMENTED = 4   # Element 4 specifies if the test is implemented
 
 # todo:
-#   test synth data with very low & very high number of rows
 #   test all methods with Nones (Test_DC_Synthetic has a cell to test this)
 #   we may want to add the comcept of minimum_valid_rows -- any test needs to have this many rows have non-missing values
 #       in all columns. For example, if there are 1000 rows and min_valid_rows is 800, then when running LARGER, we
@@ -65,15 +63,24 @@ TEST_DEFN_IMPLEMENTED = 4   # Element 4 specifies if the test is implemented
 #       generate diff synth data and see what it finds. Or mangle real data from OpenML with very small / large / negative
 #       inverted, etc values.
 
+
 class DataConsistencyChecker:
-    def __init__(self, execute_list=None, exclude_list=None, iqr_limit=3.5, max_combinations=1_000_000, verbose=1):
+    def __init__(self,
+                 execute_list=None,
+                 exclude_list=None,
+                 iqr_limit=3.5,
+                 idr_limit=1.0,
+                 max_combinations=1_000_000,
+                 verbose=1):
         """
         execute_list: a list of test ids. If specified, only these tests will be executed.
         exclude_list: a list of test ids. If specified, these tests will not be executed; all others will be.
-        iqr_limt: Inter-quartile range is used in several tests to find unusually small or large values. For example, to
+        iqr_limit: Inter-quartile range is used in several tests to find unusually small or large values. For example, to
                     identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
                     inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
                     is used here.
+        idr_limit: Inter-decile range is used in several tests, particularly to identify very small values, as IQR
+                    can work poorly where the values are strictly positive.
         max_combinations: Several tests check many combinations of columns, which can be very slow to execute where
                     there are many columns. For example, BIN_NUM_SAME will check subsets of the binary columns,
                     testing different sizes of subsets. For some sizes of subsets, there may be a very large number of
@@ -95,15 +102,14 @@ class DataConsistencyChecker:
         self.execution_test_list = []  # The complete list for one call to check_data_quality()
 
         self.contamination_level = -1
-        self.sample_contamination_level = -1  # todo: remove. we just use 1.
         self.max_combinations = max_combinations
         self.verbose = verbose
 
         # iqr_limit indicates how many multiples of the IQR below the 1st quartile or above the 3rd quartile are
         # considered outliers. This is used in numerous tests checking for small or large values. To reduce noise, a
         # stricter limit than the 1.5 or 2.2 normally used should be specified.
-        # todo: specify idr_limit as well. currently use 1.0
         self.iqr_limit = iqr_limit
+        self.idr_limit = idr_limit
 
         # Synthetic data, if specified to create
         self.synth_df = None
@@ -350,8 +356,8 @@ class DataConsistencyChecker:
                                           'columns'),
                                          self.__check_sum_of_columns, self.__generate_sum_of_columns,
                                          True, True),
-            'MEAN_OF_COLUMNS':          (('Check if one column is consistently similar to the mean of two or more other '
-                                          'columns'),
+            'MEAN_OF_COLUMNS':          (('Check if one column is consistently similar to the mean of two or more '
+                                          'other columns'),
                                          self.__check_mean_of_columns, self.__generate_mean_of_columns,
                                          True, True),
             'MIN_OF_COLUMNS':           (('Check if one column is consistently similar to the sum of two or more other '
@@ -538,17 +544,17 @@ class DataConsistencyChecker:
                                               'in each value in the column '),
                                               self.__check_number_non_alphanumeric_chars,
                                               self.__generate_number_non_alphanumeric_chars,
-                                            True, True),
+                                              True, True),
             'NUMBER_CHARS':             (('Check if there is a consistent number of characters in each value in the '
                                           'column'),
-                                        self.__check_number_chars, self.__generate_number_chars,
+                                         self.__check_number_chars, self.__generate_number_chars,
                                          True, True),
             'MANY_CHARS':               ('Check if any values have an unusually large number of characters ',
                                          self.__check_many_chars, self.__generate_many_chars,
                                          False, True),
             'FEW_CHARS':                ('Check if any values have an unusually small number of characters ',
-                                          self.__check_few_chars, self.__generate_few_chars,
-                                          False, True),
+                                         self.__check_few_chars, self.__generate_few_chars,
+                                         False, True),
             'POSITION_NON-ALPHANUMERIC':('Check if the positions of the non-alphanumeric characters is consistent',
                                          self.__check_position_non_alphanumeric,
                                          self.__generate_position_non_alphanumeric,
@@ -632,8 +638,8 @@ class DataConsistencyChecker:
                                          self.__check_same_first_word, self.__generate_same_first_word,
                                          True, True),
             'SAME_LAST_WORD':          ('Check if two string columns consistently end with the same word.',
-                                        self.__check_same_last_word, self.__generate_same_last_word,
-                                        True, True),
+                                         self.__check_same_last_word, self.__generate_same_last_word,
+                                         True, True),
             'SAME_ALPHA_CHARS':         (('Check if two string columns consistently contain the same set of  '
                                           'alphabetic characters.'),
                                          self.__check_same_alpha_chars, self.__generate_same_alpha_chars,
@@ -676,8 +682,8 @@ class DataConsistencyChecker:
             # Tests on two string and one numeric column
             'LARGE_GIVEN_PAIR':         (('Check if a numeric or date column is large given the pair of values in two '
                                           'string or binary columns'),
-                                          self.__check_large_given_pair, self.__generate_large_given_pair,
-                                          True, True),
+                                         self.__check_large_given_pair, self.__generate_large_given_pair,
+                                         True, True),
             'SMALL_GIVEN_PAIR':         (('Check if a numeric or date column is large given the pair of values in two '
                                           'string or binary columns'),
                                          self.__check_small_given_pair, self.__generate_small_given_pair,
@@ -688,10 +694,6 @@ class DataConsistencyChecker:
                                           'a decision tree'),
                                          self.__check_dt_classifier, self.__generate_dt_classifier,
                                          True, True),
-            'PRISM_RULES':              (('Check if the categorical column can be derived from the other columns using '
-                                          'PRISM rules'),
-                                         self.__check_prism, self.__generate_prism,
-                                         True, False),
 
             # Tests on sets of four columns of any type
             'TWO_PAIRS':                ('Check that, given two pairs of columns, the first pair have matching values '
@@ -749,7 +751,7 @@ class DataConsistencyChecker:
 
         # Remove any columns where there are not two or more unique values, or the values are all Null
         cols = [x for x in self.orig_df.columns if
-                (self.orig_df[x].nunique() > 1) and (self.orig_df[x].isna().sum() < self.num_rows)]
+                (self.orig_df[x].nunique(dropna=False) > 1) and (self.orig_df[x].isna().sum() < self.num_rows)]
         if self.verbose >= 2 and len(cols) < len(self.orig_df.columns):
             removed_cols = set(self.orig_df.columns) - set(cols)
             print()
@@ -809,7 +811,6 @@ class DataConsistencyChecker:
         # in violation of a pattern where we still consider the pattern to potentially hold.
         num_sample_rows = len(self.sample_df)
         contamination_frac = self.contamination_level / self.num_rows
-        self.sample_contamination_level = num_sample_rows * contamination_frac
 
         # Calculate the number of valid (ie, not missing) values there are per row
         self.num_valid_rows = {}
@@ -880,14 +881,21 @@ class DataConsistencyChecker:
 
     def check_data_quality(self, df, test_start_id=-1, contamination_level=0.005):
         """
-        df: the dataframe containing all data to be assessed
-        test_start_id: Each test has a unique number. Specifying a value greater than 0 will skip the initial tests.
-            This may be specified to continue a previous execution that was incomplete.
-        contamination_level: The maximum fraction of rows in violation of the pattern where we consider the pattern to
-            still be in place. If set as an integer, this defines the maximum number of rows, as opposed to the fraction.
+        Run the specified tests on the dataset specified here. The tests are specified in the constructor. This method
+        populates the patterns, results_summary, and results dataframes.
 
-        This method populates the patterns, results_summary, and results dataframes.
-        It returns the results_summary dataframe.
+        Args:
+            df: the dataframe containing all data to be assessed
+
+            test_start_id: Each test has a unique number. Specifying a value greater than 0 will skip the initial tests.
+                This may be specified to continue a previous execution that was incomplete.
+
+            contamination_level: The maximum fraction of rows in violation of the pattern where we consider the pattern
+                to still be in place. If set as an integer, this defines the maximum number of rows, as opposed to the
+                fraction.
+
+        Returns:
+            This returns the results_summary dataframe.
         """
 
         if df is None or len(df) == 0:
@@ -1075,7 +1083,7 @@ class DataConsistencyChecker:
         df = pd.DataFrame(summary_arr, columns=cols)
         df = df.set_index("Test ID", drop=True)
         if heatmap and len(df):
-            fig, ax = plt.subplots(figsize=(len(df.columns) * 0.5, len(df) * 0.5))
+            plt.subplots(figsize=(len(df.columns) * 0.5, len(df) * 0.5))
             s = sns.heatmap(df, cmap='Blues', linewidths=1.1, linecolor='black', annot=True, fmt="d")
             s.set(ylabel=None)
             plt.show()
@@ -1252,7 +1260,7 @@ class DataConsistencyChecker:
             return None
 
         sorted_df = self.test_results_df.sort_values('FINAL SCORE', ascending=False)
-        sorted_df.index = [x[0] if type(x) == tuple else x for x in sorted_df.index ]
+        sorted_df.index = [x[0] if type(x) == tuple else x for x in sorted_df.index]
         if with_results:
             self.__display_rows_with_tests(sorted_df, nrows, check_score=True)
         else:
@@ -1490,7 +1498,7 @@ class DataConsistencyChecker:
         #plt.legend().remove()
         plt.show()
 
-    def __plot_count_plot(self, test_id, column_name):
+    def __plot_count_plot(self, column_name):
         plt.subplots(figsize=(4, 4))
         s = sns.countplot(x=self.orig_df[column_name])
         s.set_title(f"Counts of unique values in {column_name}")
@@ -1865,7 +1873,11 @@ class DataConsistencyChecker:
             nrows = math.ceil(num_feats / 4)
             fig, ax = plt.subplots(nrows=nrows, ncols=4, figsize=(14, 4 * nrows))
             for feat_idx, col_name in enumerate(feats):
-                s = sns.scatterplot(data=df, x=df[col_name], y=df['FINAL SCORE'], ax=ax[feat_idx // 4][feat_idx % 4])
+                if nrows == 1:
+                    cur_ax = ax[feat_idx]
+                else:
+                    cur_ax = ax[feat_idx // 4][feat_idx % 4]
+                s = sns.scatterplot(data=df, x=df[col_name], y=df['FINAL SCORE'], ax=cur_ax)
                 s.set(xlabel=None)
                 s.set_title(col_name)
             clear_last_plots()
@@ -1963,8 +1975,11 @@ class DataConsistencyChecker:
         print("Data consistency check complete.")
         print(f"Analysed {self.num_rows:,} rows, {len(self.orig_df.columns)} columns")
         print(f"Executed {self.n_tests_executed} tests.")
-        print(f"{self.results_summary_df['Test ID'].nunique()} tests ({self.results_summary_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) flagged at least one row each.")
-        print(f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at least one issue.")
+        print((f"{self.results_summary_df['Test ID'].nunique()} tests "
+               f"({self.results_summary_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
+               f"flagged at least one row each."))
+        print((f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at "
+               f"least one issue."))
         # todo: this lists all the column sets, not the original columns. We need a way to get the set of columns for each. WE can use that for other summaries, for cliearning columns etc.
         print(f"Flagged {self.results_summary_df['Column(s)'].nunique()} column(s) with at least one issue.")
         print(f"Flagged {self.results_summary_df['Number of Exceptions'].sum():,} issues in total.")
@@ -2268,7 +2283,7 @@ class DataConsistencyChecker:
         """
         pass
 
-    def clear_issues_by_id(self, ids=[]):
+    def clear_issues_by_id(self, ids: list):
         """
         This may be used to iteratively clean the results until all issues are acknowledged or understood.
         This removes a set of issues identified by id. The id corresponds to the row number in results_summary_df.
@@ -2319,34 +2334,30 @@ class DataConsistencyChecker:
                                     [random.choice(['a', 'b', 'c']) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('missing vals most',
                                     [random.choice(['a', 'b', 'c']) for _ in range(self.num_synth_rows-2)] + [None] + [np.NaN])
+        self.__add_synthetic_column('missing vals most null',
+                                    [None] * (self.num_synth_rows-1) + ['a'])
 
     def __check_missing(self, test_id):
         for col_name in self.orig_df.columns:
             null_arr = self.orig_df[col_name].isna()
+            non_null_arr = ~null_arr
             num_null = null_arr.sum()
-            if (self.num_rows * 0.995) < num_null < self.num_rows:
-                pattern_str = f"The column contains values that are consistently NULL, with exceptions"
-                self.results_summary_arr.append([
+            if (self.num_rows - self.contamination_level) < num_null < self.num_rows:
+                self.__process_analysis_binary(
                     test_id,
                     col_name,
-                    pattern_str,
-                    num_null])
-                results_col_name = self.get_results_col_name(test_id, col_name)
-                results_col = ~null_arr
-                self.__add_result_column(results_col_name, results_col, [col_name])
-                self.__update_results_by_column(results_col, [col_name])
+                    [col_name],
+                    null_arr,
+                    f"The column contains values that are consistently NULL, with exceptions"
+                )
             if 0 < num_null < self.contamination_level:
-                pattern_str = f"The column contains values that are consistently non-NULL, with exceptions"
-                self.results_summary_arr.append([
+                self.__process_analysis_binary(
                     test_id,
                     col_name,
-                    pattern_str,
-                    num_null])
-                results_col_name = self.get_results_col_name(test_id, col_name)
-                results_col = null_arr
-                self.__add_result_column(results_col_name, results_col, [col_name])
-                # Update test_results_by_column_df
-                self.__update_results_by_column(results_col, [col_name])
+                    [col_name],
+                    non_null_arr,
+                    f"The column contains values that are consistently non-NULL, with exceptions"
+                )
 
     def __generate_rare_values(self):
         """
@@ -2699,32 +2710,34 @@ class DataConsistencyChecker:
             if same_indicator.count(True) < (len(arr1) * 0.1):
                 return False
 
-            other_values_1 = pd.Series([np.NaN if y == 1 else x
-                                        for x, y in zip(arr1, same_indicator)])
-            other_values_2 = pd.Series([np.NaN if y == 1 else x
-                                        for x, y in zip(arr2, same_indicator)])
+            # Exclude column pairs which are the same value in over 95% of rows
+            if same_indicator.count(True) > (len(arr1) * 0.95):
+                return False
+
+            other_values_1 = pd.Series([np.NaN if y == 1 else x for x, y in zip(arr1, same_indicator)])
+            other_values_2 = pd.Series([np.NaN if y == 1 else x for x, y in zip(arr2, same_indicator)])
             vc_1 = other_values_1.value_counts()
             vc_2 = other_values_2.value_counts()
             if len(vc_1) <= 5:
                 common_alternatives = [x for x, y in zip(vc_1.index, vc_1.values) if y > self.contamination_level]
-                col_values = np.array([1 if ((x == 1) or (y in common_alternatives)) else 0
+                col_values = np.array([True if ((x == 1) or (y in common_alternatives)) else False
                                        for x, y in zip(same_indicator, arr1)])
                 if is_sample:
-                    return col_values.tolist().count(False) < self.sample_contamination_level
+                    return col_values.tolist().count(False) <= 1
                 else:
                     self.__process_analysis_binary(
                         test_id,
                         f'"{col_name_2}" AND "{col_name_1}"',
                         [col_name_2, col_name_1],
                         col_values,
-                        (f'The values in "{col_name_1}" are consistently either the same as those in "{col_name_2}, '
+                        (f'The values in "{col_name_1}" are consistently either the same as those in "{col_name_2}", '
                          f'or one of {common_alternatives}'))
             elif len(vc_2) <= 5:
                 common_alternatives = [x for x, y in zip(vc_2.index, vc_2.values) if y > self.contamination_level]
-                col_values = np.array([1 if ((x == 1) or (y in common_alternatives)) else 0
-                              for x, y in zip(same_indicator, arr2)])
+                col_values = np.array([True if ((x == 1) or (y in common_alternatives)) else False
+                                       for x, y in zip(same_indicator, arr2)])
                 if is_sample:
-                    return col_values.tolist().count(False) < self.sample_contamination_level
+                    return col_values.tolist().count(False) <= 1
                 else:
                     self.__process_analysis_binary(
                         test_id,
@@ -2733,6 +2746,8 @@ class DataConsistencyChecker:
                         col_values,
                         (f'The values in "{col_name_2}" are consistently either the same as those in "{col_name_1}, '
                          f'or one of {common_alternatives}'))
+            else:
+                return False
 
         # For this test, we do not use self.sample_df, as it has the extreme values removed, which may be preferable
         # to keep for this test
@@ -2835,7 +2850,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The column contains values consistently with {array_to_str(common_num_digits)} decimals or less',
-                allow_patterns=False
+                allow_patterns=((len(common_num_digits) > 1) or (common_num_digits[0] != 0))
             )
 
     def __generate_column_increasing(self):
@@ -2946,7 +2961,8 @@ class DataConsistencyChecker:
                 col_percentiles = self.orig_df[col_name].rank(pct=True)
 
                 # Test for negative correlation
-                test_series = np.array([abs(x-(1.0 - y)) < 0.1 for x, y in zip(col_percentiles, row_numbers_percentiles)])
+                test_series = np.array([abs(x-(1.0 - y)) < 0.1 for x, y in
+                                        zip(col_percentiles, row_numbers_percentiles)])
                 self.__process_analysis_binary(
                     test_id,
                     col_name,
@@ -2962,9 +2978,12 @@ class DataConsistencyChecker:
             order of magnitude of each other, with one value many orders of magnitude larger. 'unusual_number rand'
             may occasionally randomly generate unsual values as well, which may be flagged as exceptions.
         """
-        self.__add_synthetic_column('unusual_number rand', [random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('unusual_number all ', [random.randint(1, 5) * 100 for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('unusual_number most', [random.randint(1, 5) * 100 for _ in range(self.num_synth_rows-1)] + [999_999_999])
+        self.__add_synthetic_column('unusual_number rand', [random.randint(1000, 1_000_000)
+                                                            for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('unusual_number all ', [random.randint(1, 5) * 100
+                                                            for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('unusual_number most', [random.randint(1, 5) * 100
+                                                            for _ in range(self.num_synth_rows-1)] + [999_999_999])
 
     def __check_unusual_numeric(self, test_id):
         for col_name in self.numeric_cols:
@@ -3026,8 +3045,14 @@ class DataConsistencyChecker:
         Patterns with exception:
         """
         self.__add_synthetic_column('few in range rand', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('few in range all ', [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000) for _ in range(100)])
-        self.__add_synthetic_column('few in range most', [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000) for _ in range(97)] + [5000, 5001, 5002])
+        self.__add_synthetic_column(
+            'few in range all ',
+            [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000)
+                                                                                    for _ in range(100)])
+        self.__add_synthetic_column(
+            'few in range most',
+            [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000)
+                                                                                    for _ in range(97)] + [5000, 5001, 5002])
 
     def __check_few_within_range(self, test_id):
         # This identifies only internal outliers, and not extreme values. It flags values where there are few values
@@ -3072,9 +3097,12 @@ class DataConsistencyChecker:
         Patterns without exceptions:
         Patterns with exception:
         """
-        self.__add_synthetic_column('very small rand', [random.randint(1, 100_000_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('very small all ', [random.randint(1000, 2000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('very small most', [random.randint(1000, 2000) for _ in range(self.num_synth_rows-1)] + [3])
+        self.__add_synthetic_column('very small rand', [random.randint(1, 100_000_000)
+                                                        for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('very small all ', [random.randint(1000, 2000)
+                                                        for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('very small most', [random.randint(1000, 2000)
+                                                        for _ in range(self.num_synth_rows-1)] + [3])
 
     def __check_very_small(self, test_id):
         """
@@ -3084,14 +3112,15 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols:
             d1 = self.orig_df[col_name].quantile(0.25)
             d9 = self.orig_df[col_name].quantile(0.75)
-            lower_limit = d1 - (d9 - d1)
+            lower_limit = d1 - (self.idr_limit(d9 - d1))
             test_series = self.orig_df[col_name] > lower_limit
             self.__process_analysis_binary(
                 test_id,
                 col_name,
                 [col_name],
                 test_series,
-                f"The test marked any values less than {lower_limit} as very small given the 10th decile is {d1} and the 90th is {d9}",
+                (f"The test marked any values less than {lower_limit} as very small given the 10th decile is {d1} and "
+                 f"the 90th is {d9}. The coefficient is set at {self.idr_limit}"),
                 allow_patterns=False
             )
 
@@ -3148,7 +3177,7 @@ class DataConsistencyChecker:
             abs_vals = self.orig_df[col_name].abs()
             d1 = abs_vals.quantile(0.25)
             d9 = abs_vals.quantile(0.75)
-            lower_limit = d1 - (d9 - d1)
+            lower_limit = d1 - (self.idr_limit(d9 - d1))
             test_series = abs_vals > lower_limit
             self.__process_analysis_binary(
                 test_id,
@@ -3156,7 +3185,8 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 (f"Some values were unusually close to zero. Any values with absolute value less than {lower_limit} "
-                 f"were flagged, given the 10th percentile of absolute values is {d1} and the 90th is {d9}"),
+                 f"were flagged, given the 10th percentile of absolute values is {d1} and the 90th is {d9}. " 
+                 f" The coefficient is set at {self.idr_limit}"),
                 "",
                 allow_patterns=False
             )
@@ -3513,9 +3543,11 @@ class DataConsistencyChecker:
                 if statistics.median(test_series_a) != 0 \
                 else 0.0
             if nmad < 0.01:
-                test_series = abs(test_series_a - statistics.median(test_series_a)) < abs(0.01 * statistics.median(test_series_a))
+                test_series = abs(test_series_a - statistics.median(test_series_a)) < \
+                              abs(0.01 * statistics.median(test_series_a))
                 num_exceptions = test_series.tolist().count(False)
-                pattern_str = f'The sum of "{col_name_1}" and "{col_name_2}" is consistently close to {statistics.median(test_series_a)}'
+                pattern_str = (f'The sum of "{col_name_1}" and "{col_name_2}" is consistently close to '
+                               f'{statistics.median(test_series_a)}')
                 columns_str = f"{col_name_1} AND {col_name_2}"
                 if num_exceptions == 0:
                     self.patterns_arr.append([test_id, columns_str, pattern_str])
@@ -3934,8 +3966,10 @@ class DataConsistencyChecker:
         Patterns without exceptions:
         Patterns with exception:
         """
-        self.__add_synthetic_column('opp_zero all_a', [random.randint(1, 500) if x % 2 == 0 else 0 for x in range(self.num_synth_rows)])
-        self.__add_synthetic_column('opp_zero all_b', [random.randint(1000, 2000) if x % 2 == 1 else 0 for x in range(self.num_synth_rows)])
+        self.__add_synthetic_column('opp_zero all_a',
+                                    [random.randint(1, 500) if x % 2 == 0 else 0 for x in range(self.num_synth_rows)])
+        self.__add_synthetic_column('opp_zero all_b',
+                                    [random.randint(1000, 2000) if x % 2 == 1 else 0 for x in range(self.num_synth_rows)])
         self.__add_synthetic_column('opp_zero most', self.synth_df['opp_zero all_b'])
         self.synth_df.loc[998, 'opp_zero most'] = 600
 
@@ -4442,87 +4476,6 @@ class DataConsistencyChecker:
 
     def __check_ratio_exact(self, test_id):
         pass
-
-    '''
-    def __generate_similar_to_mean(self):
-        """
-        Patterns without exceptions:
-        Patterns with exception:
-        """
-        self.__add_synthetic_column('similar to mean rand_a', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to mean rand_b', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to mean all', self.synth_df[['similar to mean rand_a', 'similar to mean rand_b']].mean(axis=1))
-        self.__add_synthetic_column('similar to mean most', self.synth_df['similar to mean all'].copy())
-        self.synth_df.at[999, 'similar to mean most'] = self.synth_df.at[999, 'similar to mean most'] * 5.0
-
-    def __check_similar_to_mean(self, test_id):
-        # todo: sum, mean, min, and max should check any number of columns that are on similar scales, not just two
-        # todo: actually loop through each col3 once, at for each, all unique doubles of the other columns, but do
-        #   want to handle many columns, not just 2
-        for col_name_1, col_name_2, col_name_3 in self.__get_numeric_column_triples_unique():
-            if not self.check_columns_same_scale_3(col_name_1, col_name_2, col_name_3):
-                continue
-            test_series_a = self.orig_df[col_name_3] / self.orig_df[[col_name_1, col_name_2]].mean(axis=1)
-            test_series = np.where((test_series_a > 0.5) & (test_series_a < 2.0), True, False)
-            self.__process_analysis_binary(
-                test_id,
-                f'"{col_name_1}", "{col_name_2}", AND "{col_name_3}"',
-                [col_name_1, col_name_2, col_name_3],
-                test_series,
-                f'"{col_name_3}" is consistently similar to the mean of "{col_name_1}" and "{col_name_2}"')
-
-    def __generate_similar_to_min(self):
-        """
-        Patterns without exceptions:
-        Patterns with exception:
-        """
-        self.__add_synthetic_column('similar to min rand_a', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to min rand_b', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to min all', self.synth_df[['similar to min rand_a', 'similar to min rand_b']].min(axis=1))
-        self.__add_synthetic_column('similar to min most', self.synth_df[['similar to min rand_a', 'similar to min rand_b']].min(axis=1))
-        self.synth_df.at[999, 'similar to min most'] = self.synth_df.at[999, 'similar to min most'] * 5.0
-
-    def __check_similar_to_min(self, test_id):
-        # todo: actually loop through each col3 once, at for each, all unique doubles of the other columns, but do
-        #   want to handle many columns, not just 2
-        for col_name_1, col_name_2, col_name_3 in self.__get_numeric_column_triples_unique():
-            if not self.check_columns_same_scale_3(col_name_1, col_name_2, col_name_3):
-                continue
-            test_series_a = self.orig_df[col_name_3] / self.orig_df[[col_name_1, col_name_2]].min(axis=1)
-            test_series = np.where((test_series_a > 0.5) & (test_series_a < 2.0), True, False)
-            self.__process_analysis_binary(
-                test_id,
-                f'"{col_name_1}", "{col_name_2}", AND "{col_name_3}"',
-                [col_name_1, col_name_2, col_name_3],
-                test_series,
-                f'"{col_name_3}" is consistently similar to the min of "{col_name_1}" and "{col_name_2}"')
-
-    def __generate_similar_to_max(self):
-        """
-        Patterns without exceptions:
-        Patterns with exception:
-        """
-        self.__add_synthetic_column('similar to max rand_a', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to max rand_b', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('similar to max all', self.synth_df[['similar to max rand_a', 'similar to max rand_b']].max(axis=1))
-        self.__add_synthetic_column('similar to max most', self.synth_df[['similar to max rand_a', 'similar to max rand_b']].max(axis=1))
-        self.synth_df.at[999, 'similar to max most'] = self.synth_df.at[999, 'similar to max most'] * 5.0
-
-    def __check_similar_to_max(self, test_id):
-        # todo: actually loop through each col3 once, at for each, all unique doubles of the other columns, but do
-        #   want to handle many columns, not just 2
-        for col_name_1, col_name_2, col_name_3 in self.__get_numeric_column_triples_unique():
-            if not self.check_columns_same_scale_3(col_name_1, col_name_2, col_name_3):
-                continue
-            test_series_a = self.orig_df[col_name_3] / self.orig_df[[col_name_1, col_name_2]].max(axis=1)
-            test_series = np.where((test_series_a > 0.5) & (test_series_a < 2.0), True, False)
-            self.__process_analysis_binary(
-                test_id,
-                f'"{col_name_1}", "{col_name_2}", AND "{col_name_3}"',
-                [col_name_1, col_name_2, col_name_3],
-                test_series,
-                f'"{col_name_3}" is consistently similar to the max of "{col_name_1}" and "{col_name_2}"')
-    '''
 
     def __generate_larger_than_sum(self):
         """
@@ -5537,7 +5490,7 @@ class DataConsistencyChecker:
         drop_features = []
         categorical_features = []
         for col_name in self.orig_df.columns:
-            if not is_numeric_dtype(self.orig_df[col_name]):
+            if not pandas_types.is_numeric_dtype(self.orig_df[col_name]):
                 if self.orig_df[col_name].nunique() > 5:
                     drop_features.append(col_name)
                 else:
@@ -5617,8 +5570,12 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('lin regr 1d', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1e', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1f', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('lin regr 2', (4.1 * self.synth_df['lin regr 1a']) + (2.1 * self.synth_df['lin regr 1b']) + (5.1 * self.synth_df['lin regr 1c']))
-        self.__add_synthetic_column('lin regr 3', (4.1 * self.synth_df['lin regr 1d']) + (2.1 * self.synth_df['lin regr 1e']) + (5.1 * self.synth_df['lin regr 1f']))
+        self.__add_synthetic_column(
+            'lin regr 2',
+            (4.1 * self.synth_df['lin regr 1a']) + (2.1 * self.synth_df['lin regr 1b']) + (5.1 * self.synth_df['lin regr 1c']))
+        self.__add_synthetic_column(
+            'lin regr 3',
+            (4.1 * self.synth_df['lin regr 1d']) + (2.1 * self.synth_df['lin regr 1e']) + (5.1 * self.synth_df['lin regr 1f']))
         self.synth_df.at[999, 'lin regr 3'] = self.synth_df.at[999, 'lin regr 3'] * 10.0
 
     def __check_lin_regressor(self, test_id):
@@ -5776,8 +5733,6 @@ class DataConsistencyChecker:
                         col_name,
                         f"The test flagged any values later than {upper_limit} as very late given the 25th quartile is {q1} and 75th is {q3}",
                         results_col.tolist().count(True)])
-
-    #(sorted_test_series[2].value - sorted_test_series[1].value) / 1_000_000_000
 
     # also check for unusual dates (with distant neighbors)
     # difference in days between each entry:
@@ -6087,11 +6042,17 @@ class DataConsistencyChecker:
         Patterns with exception:
         """
         test_date1 = datetime.datetime.strptime("01-7-2022", "%d-%m-%Y")
-        self.__add_synthetic_column('date_later all_1', pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
-        self.__add_synthetic_column('date_later all_2',
-                                    [self.synth_df.loc[x]['date_later all_1'] + datetime.timedelta(days=random.randint(15, 20)) for x in self.synth_df.index])
-        self.__add_synthetic_column('date_later most',
-                                    [self.synth_df.loc[x]['date_later all_1'] + datetime.timedelta(days=random.randint(15, 20)) for x in self.synth_df.index] )
+        self.__add_synthetic_column(
+            'date_later all_1',
+            pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
+        self.__add_synthetic_column(
+            'date_later all_2',
+            [self.synth_df.loc[x]['date_later all_1'] + datetime.timedelta(days=random.randint(15, 20))
+             for x in self.synth_df.index])
+        self.__add_synthetic_column(
+            'date_later most',
+            [self.synth_df.loc[x]['date_later all_1'] + datetime.timedelta(days=random.randint(15, 20))
+             for x in self.synth_df.index] )
         self.synth_df.loc[999, 'date_later most'] = test_date1
 
     def __check_date_later(self, test_id):
@@ -6420,7 +6381,7 @@ class DataConsistencyChecker:
                 if num_val1 < target_count_1:
                     continue
                 num_ones_not_matching = len([1 for x, y in zip(self.orig_df[col_name], self.orig_df[col_name_other])
-                                         if ((x == val1) and (y != val1))])
+                                             if ((x == val1) and (y != val1))])
                 if num_ones_not_matching > self.contamination_level:
                     continue
                 set_other_cols.append(col_name_other)
@@ -7420,9 +7381,15 @@ class DataConsistencyChecker:
         Patterns without exceptions:
         Patterns with exception:
         """
-        self.__add_synthetic_column('number numeric 1', [[''.join(random.choice(digits) for _ in range(random.randint(1,10)))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('number numeric 2', [[''.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('number numeric 3', [[''.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['432'])
+        self.__add_synthetic_column(
+            'number numeric 1',
+            [[''.join(random.choice(digits) for _ in range(random.randint(1,10)))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'number numeric 2',
+            [[''.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'number numeric 3',
+            [[''.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['432'])
 
     def __check_number_numeric_chars(self, test_id):
         for col_name in self.string_cols:
@@ -7499,8 +7466,12 @@ class DataConsistencyChecker:
         Patterns without exceptions:
         Patterns with exception:
         """
-        self.__add_synthetic_column('many_chars all', [''.join(['a' for _ in range(np.random.randint(2,20))]) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('many_chars most', [''.join(['a' for _ in range(np.random.randint(2,20))]) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'many_chars all',
+            [''.join(['a' for _ in range(np.random.randint(2,20))]) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'many_chars most',
+            [''.join(['a' for _ in range(np.random.randint(2,20))]) for _ in range(self.num_synth_rows)])
         self.synth_df.loc[999, 'many_chars most'] = ''.join(['a']*100)
 
     def __check_many_chars(self, test_id):
@@ -7539,7 +7510,7 @@ class DataConsistencyChecker:
             val_lens = self.orig_df[col_name].astype(str).str.len()
             d1 = val_lens.quantile(0.1)
             d9 = val_lens.quantile(0.9)
-            lower_limit = d1 - (d9 - d1)
+            lower_limit = d1 - (self.idr_limit(d9 - d1))
             test_series = val_lens > lower_limit
             self.__process_analysis_binary(
                 test_id,
@@ -7547,7 +7518,8 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 (f"Some values were unusually short. Any values with length less than {lower_limit} characters "
-                 f"were flagged, given the 10th percentile of string length is {d1} and the 90th is {d9}"),
+                 f"were flagged, given the 10th percentile of string length is {d1} and the 90th is {d9}. "
+                 f"The coefficient is set at {self.idr_limit}"),
                 allow_patterns=False
             )
 
@@ -8666,9 +8638,6 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'same_num most'] = '1234'
 
     def __check_same_numeric_chars(self, test_id):
-        # def get_digits(x):
-        #     return [c for c in x if c.isdigit()]
-
         for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
             # Test on a sample first
             digits_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
@@ -8715,17 +8684,12 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'same_special most'] = '&&^%'
 
     def __check_same_special_chars(self, test_id):
-        # def get_special(x):
-        #     return [c for c in x if (not c.isalpha()) and (not c.isdigit())]
-
         for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
             # Test on a sample first.
-            #special_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x).apply(get_special)
             special_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_1]
             if [len(x) > 0 for x in special_col_1].count(False) > 1:
                 continue
-            #special_col_2 = self.sample_df[col_name_2].apply(lambda x: "" if is_missing(x) else x).apply(get_special)
             special_col_2 = self.sample_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
             special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_2]
             if [len(x) > 0 for x in special_col_2].count(False) > 1:
@@ -8735,12 +8699,10 @@ class DataConsistencyChecker:
                 continue
 
             # Test on the full columns
-            #special_col_1 = self.orig_df[col_name_1].apply(lambda x: "" if is_missing(x) else x).apply(get_special)
             special_col_1 = self.orig_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_1]
             if [len(x) > 0 for x in special_col_1].count(False) > self.contamination_level:
                 continue
-            #special_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x).apply(get_special)
             special_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
             special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_2]
             if [len(x) > 0 for x in special_col_2].count(False) > self.contamination_level:
@@ -9218,7 +9180,7 @@ class DataConsistencyChecker:
         drop_features = []
         categorical_features = []
         for col_name in self.orig_df.columns:
-            if not is_numeric_dtype(self.orig_df[col_name]):
+            if not pandas_types.is_numeric_dtype(self.orig_df[col_name]):
                 if self.orig_df[col_name].nunique() > 5:
                     drop_features.append(col_name)
                 else:
@@ -9270,215 +9232,6 @@ class DataConsistencyChecker:
                     f'All values in the column are consistently predictable based using a decision tree with the '
                     f'following rules: \n{rules}'
                 )
-                # errors_arr = (y_pred != y)
-                # num_errors = errors_arr.tolist().count(True)
-                # if num_errors == 0:
-                #     self.patterns_arr.append([test_id, col_name, f'The values in the column are consistently predictable from a decision tree'])
-                # else:
-                #     self.results_summary_arr.append([
-                #         test_id,
-                #         col_name,
-                #         f'The values in the column are consistently predictable from a decision tree, with exceptions',
-                #         num_errors])
-                #     results_col_name = self.get_results_col_name(test_id, col_name)
-                #     results_col = errors_arr
-                #     self.__add_result_column(results_col_name, results_col, [col_name])
-
-    def __generate_prism(self):
-        """
-        Patterns without exceptions: 'prism all' has values for A, B,
-        Patterns with exception: 'prism most' follows a pattern for values A, B, and C. There is no strong pattern for
-            value D. Row 999 is an exception to the pattern for value A, having instead value X.
-        """
-        return # Under construction
-
-        # Test with string columns
-        self.__add_synthetic_column('prism rand_a', np.random.choice(['a', 'b'], self.num_synth_rows))
-        self.__add_synthetic_column('prism rand_b', np.random.choice(['a', 'b'], self.num_synth_rows))
-        self.__add_synthetic_column('prism rand_c', np.random.choice(['a', 'b'], self.num_synth_rows))
-        self.__add_synthetic_column('prism rand_d', np.random.choice(['a', 'b'], self.num_synth_rows))
-
-        target_vals = []
-        for i in range(self.num_synth_rows):
-            if (self.synth_df.iloc[i]['prism rand_a'] == 'a') and (self.synth_df.iloc[i]['prism rand_b'] == 'b'):
-                target_vals.append('A')
-            elif (self.synth_df.iloc[i]['prism rand_a'] == 'b') and (self.synth_df.iloc[i]['prism rand_b'] == 'a'):
-                target_vals.append('A')
-            elif (self.synth_df.iloc[i]['prism rand_a'] == 'a') and (self.synth_df.iloc[i]['prism rand_b'] == 'a'):
-                target_vals.append('B')
-            elif (self.synth_df.iloc[i]['prism rand_a'] == 'b') and (self.synth_df.iloc[i]['prism rand_b'] == 'b'):
-                target_vals.append('C')
-            else:
-                target_vals.append('D')
-        self.__add_synthetic_column('prism all', target_vals)
-
-        target_vals = []
-        for i in range(self.num_synth_rows):
-            if (self.synth_df.iloc[i]['prism rand_c'] == 'a') and (self.synth_df.iloc[i]['prism rand_d'] == 'a'):
-                target_vals.append('A')
-            elif (self.synth_df.iloc[i]['prism rand_c'] == 'a') and (self.synth_df.iloc[i]['prism rand_d'] == 'b'):
-                target_vals.append('A')
-            elif (self.synth_df.iloc[i]['prism rand_c'] == 'b') and (self.synth_df.iloc[i]['prism rand_d'] == 'b'):
-                target_vals.append('B')
-            elif (self.synth_df.iloc[i]['prism rand_c'] == 'c') and (self.synth_df.iloc[i]['prism rand_d'] == 'c'):
-                target_vals.append('B')
-            elif (self.synth_df.iloc[i]['prism rand_c'] == 'c') and (self.synth_df.iloc[i]['prism rand_d'] == 'c'):
-                target_vals.append('C')
-            else:
-                target_vals.append('D')
-        self.__add_synthetic_column('prism most', target_vals)
-        self.synth_df.loc[999, 'prism rand_c'] = 'a'
-        self.synth_df.loc[999, 'prism rand_d'] = 'a'
-        self.synth_df.loc[999, 'prism most'] = 'X'
-
-        # Test with numeric columns
-        self.__add_synthetic_column('prism num_rand_a', np.random.randint(0, 1000, self.num_synth_rows))
-        self.__add_synthetic_column('prism num_rand_b', np.random.randint(0, 1000, self.num_synth_rows))
-        self.__add_synthetic_column('prism num_rand_c', np.random.randint(0, 1000, self.num_synth_rows))
-        target_vals = []
-        for i in range(self.num_synth_rows):
-            if (self.synth_df.iloc[i]['prism num_rand_a'] < 300) and (self.synth_df.iloc[i]['prism num_rand_b'] < 300):
-                target_vals.append('A')
-            elif (self.synth_df.iloc[i]['prism num_rand_a'] > 300) and \
-                    (self.synth_df.iloc[i]['prism num_rand_a'] < 600) and \
-                    (self.synth_df.iloc[i]['prism num_rand_b'] > 300) and \
-                    (self.synth_df.iloc[i]['prism num_rand_b'] < 600):
-                target_vals.append('B')
-            elif (self.synth_df.iloc[i]['prism num_rand_a'] > 600) and (self.synth_df.iloc[i]['prism num_rand_b'] > 600):
-                target_vals.append('C')
-            else:
-                target_vals.append('D')
-        self.__add_synthetic_column('prism num_most', target_vals)
-        self.synth_df.loc[999, 'prism num_rand_a'] = 100
-        self.synth_df.loc[999, 'prism num_rand_b'] = 100
-        self.synth_df.loc[999, 'prism num_most'] = 'X'
-
-    def __check_prism(self, test_id):
-        pass
-
-    def __check_prism_optimized(self, test_id):
-        # This converts the data to numpy arrays with numeric values, which is quicker to execute, but difficult
-        # to debug
-
-        """
-        This creates simple rules, similar to a decision tree or other rules induction algorithms. This is done only
-        for string and binary columns as targets, but uses string, binary, and numeric columns for the rules. Numeric
-        columns are binned, using 5 equal-count bins.
-        """
-
-        def get_rule(remaining_encoded_rows, target_col_idx, target_v):
-            """
-            Get the best rule available to predict target_v in target_col_idx for the set remaining_encoded_rows.
-            """
-
-            # Get the subset of the remaining rows representing the current target value
-            target_v_idxs = np.where(remaining_encoded_rows[:, target_col_idx] == target_v)
-            sub_np_target_v = remaining_encoded_rows[target_v_idxs, :][0]
-
-            max_prob = 0
-            max_prob_col_idx = -1
-            max_prob_val = -1
-            for c_idx, c in enumerate(cols):
-                if c_idx == target_col_idx:
-                    continue
-
-                # Determine how often each value occurs
-                val_counts_source_col = {}
-                counts_info = np.unique(remaining_encoded_rows[:, c_idx], axis=0, return_counts=True)
-                # Element 0 contains the unique values. Element 1 contains their counts
-                for source_v in vals_encoded_dict[c_idx]:
-                    if source_v in counts_info[0]:
-                        i = counts_info[0].tolist().index(source_v)
-                        val_counts_source_col[source_v] = counts_info[1][i]
-
-                # Determine how often each value occurs when the target column has the target value
-                val_counts_given_target = {}
-                counts_info = np.unique(sub_np_target_v[:, c_idx], axis=0, return_counts=True)
-                for source_v in vals_encoded_dict[c_idx]:
-                    if source_v in counts_info[0]:
-                        i = counts_info[0].tolist().index(source_v)
-                        val_counts_given_target[source_v] = counts_info[1][i]
-
-                for source_v in val_counts_source_col.keys():
-                    if source_v in val_counts_given_target:
-                        prob = val_counts_given_target[source_v] / val_counts_source_col[source_v]
-                        if prob > max_prob:
-                            max_prob = prob
-                            max_prob_col_idx = c_idx
-                            max_prob_val = source_v
-
-            # Determine the rows not covered by this rule
-            rule_idxs = np.where((remaining_encoded_rows[:, target_col_idx] == target_v) &
-                                 (remaining_encoded_rows[:, max_prob_col_idx] == max_prob_val))
-            not_rule_idxs = list(set(range(len(remaining_encoded_rows))) - set(rule_idxs[0]))
-            remaining_encoded_rows = remaining_encoded_rows[not_rule_idxs, :]
-
-            return (max_prob_col_idx, max_prob_val), remaining_encoded_rows
-
-        def get_count_target_v(remaining_encoded_rows, target_col_idx, target_v):
-            return remaining_encoded_rows[:, target_col_idx].tolist().count(target_v)
-
-        # Get the set of columns that may be used for the rules. Put these into an encoded numpy array for faster
-        # access
-        cols = []
-        encoded_np = None
-        vals_orig_dict = {}         # The set of original unique values for each column
-        vals_encoded_dict = {}      # The set of encoded unique values for each column
-        col_idx = 0
-        for col_name in (self.string_cols + self.binary_cols):
-            if self.orig_df[col_name].nunique() <= 5:
-                cols.append(col_name)
-                res = pd.factorize(self.orig_df[col_name])
-                vals_orig_dict[col_idx] = res[1]
-                vals_encoded_dict[col_idx] = list(range(len(res[1])))
-                vals_arr = np.array(res[0]).reshape(-1, 1)
-                if encoded_np is None:
-                    encoded_np = vals_arr
-                else:
-                    encoded_np = np.hstack([encoded_np, vals_arr])
-                col_idx += 1
-        for col_name in self.numeric_cols:
-            # todo: save the ranges before re-labelling
-            vals_arr = np.array(pd.qcut(self.orig_df[col_name], 5, labels=[0, 1, 2, 3, 4])).reshape(-1, 1)
-            cols.append(col_name)
-            vals_orig_dict[col_idx] = [0, 1, 2, 3, 4]  # todo: use the original ranges
-            vals_encoded_dict[col_idx] = [0, 1, 2, 3, 4]
-            if encoded_np is None:
-                encoded_np = vals_arr
-            else:
-                encoded_np = np.hstack([encoded_np, vals_arr])
-            col_idx += 1
-        assert len(cols) == len(vals_orig_dict) == len(vals_encoded_dict)
-
-        # Loop through each value in each column and treat this as a target. Determine if we can create a small set
-        # of simple rules to predict each value in the column. If so, flag any exceptions.
-        for target_col_idx, target_col_name in enumerate(cols):
-            if target_col_name not in (self.string_cols + self.binary_cols):
-                continue
-
-            # The number of rows not predicted by any of the generated rules for its target value. Calculated each
-            # time the full set of rules is generated for each target column value.
-            col_num_remaining_rows = 0
-
-            # Discover the rules for target_v in col_name
-            for target_v in vals_encoded_dict[target_col_idx]:
-                remaining_encoded_rows = encoded_np.copy()
-                rule_list = []
-                rule, remaining_encoded_rows = get_rule(remaining_encoded_rows, target_col_idx, target_v)
-                rule_list.append(rule)
-                num_remaining_rows_for_v = get_count_target_v(remaining_encoded_rows, target_col_idx, target_v)
-                while num_remaining_rows_for_v > 1 and len(rule_list) < 5:
-                    rule, remaining_encoded_rows = get_rule(remaining_encoded_rows, target_col_idx, target_v)
-                    rule_list.append(rule)
-                    num_remaining_rows_for_v = get_count_target_v(remaining_encoded_rows, target_col_idx, target_v)
-
-                col_num_remaining_rows += num_remaining_rows_for_v
-                if col_num_remaining_rows > self.contamination_level:
-                    break
-
-            test_series = [True] * self.num_rows
-            if col_num_remaining_rows > self.contamination_level:
-                continue
 
     ####################################################################################
     # Data consistency checks for sets of four columns of any type
