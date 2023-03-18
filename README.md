@@ -1,11 +1,13 @@
 # DataConsistencyChecker
-A python tool to examine datasets for consistency. Performs approximately 130 tests. A useful step for any EDA (Exploratory Data Analysis) and for interpretable outlier detection.
+A python tool to examine datasets for consistency. It performs approximately 130 tests, identifying patterns in the data and any exceptions to these. The tool provides useful analysis for any EDA (Exploratory Data Analysis) and may be useful for interpretable outlier detection.
 
 ## Background
 
-This tool is actually a tool for EDA, and an interpretable outlier detector. It executes a large set of tests over a dataset, looking both for strong patterns and exceptions to any strong patterns found. For example, one test examines the number of decimal points typically found in a numeric column. If the data consistently contains four decimal points, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column almost always has four decimal points, with a small number of expections, this will be reported as a strong pattern with exceptions. 
+The idea of the tool was to automate the tests that would be done by a person examining a dataset and trying to determine the patterns within the columns, between the columns, and between the rows (in cases where there is some meaning to the order of the rows). 
 
-Many tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is usually larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum or mean of another set of columns). 
+The tool executes a large set of tests over a dataset, looking both for strong patterns and exceptions to any strong patterns found. For example, one test examines the number of decimal points typically found in a numeric column. If the data consistently contains four decimal points, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column almost always has four decimal digits, with a small number of expections (for example having six decimal digits), this will be reported as a strong pattern with exceptions. 
+
+The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is usually larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum or mean of another set of columns). 
 
 As the tests check a large number of combinations, some things will be flagged that are simply random quirks of the data. However, the rows and the columns that are flagged many times, particularly for many different types of issues, can safely be said to be unusual. 
 
@@ -49,3 +51,8 @@ dc.display_detailed_results()
 ```
 
 ## Documentation
+
+## Performance
+
+The tool typically runs in under a minute for small files, and under 30 minutes even for very large files. It is possible to reduce the execution time if necessary by 
+excluding some tests. 
