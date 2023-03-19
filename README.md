@@ -9,8 +9,6 @@ The tool executes a large set of tests over a dataset, looking both for strong p
 
 The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is usually larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum or mean of another set of columns). 
 
-As the tests check a large number of combinations, some things will be flagged that are simply random quirks of the data. However, the rows and the columns that are flagged many times, particularly for many different types of issues, can safely be said to be unusual. 
-
 The unusual data may be due to data collection errors, to mixing different types of data together, or other issues that may be considered errors, or that may be informative. 
 
 ### EDA
@@ -27,6 +25,7 @@ The majority of outlier detectors work on either strictly numeric data, or stric
 
 DataConsistencyChecker may flag a row, for example, for having a very large value in Column A, a value with an unsual number of digits in Column D, an unusually long string in Column C, and values with unusual rounding in Column D and Column G. As with any outlier detection scheme, it is difficult to gauge the outlier-ness of each of these, but DataConsistencyChecker does have the desirable property that each of these is simple to comprehend. 
 
+As this tool is limited to interpretable outlier detection methods, it does not test for the multi-dimensional outliers detected by other algorithms such as Isolation Forest. These outlier detection algorithms should generally also be executed to have a full understanding of the outliers present in the data. 
 
 ## Intallation
 The code consists of a single [python file](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/check_data_consistency.py) which may be downloaded and included in any projct. It does not rely on any other tools than numpy, pandas, scipy, matplotlib, seaborn, and other standard libraries. Once downloaded, it may be included as:
