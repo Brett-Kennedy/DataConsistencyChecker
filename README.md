@@ -1,5 +1,5 @@
 # DataConsistencyChecker
-A python tool to examine datasets for consistency. It performs approximately 130 tests, identifying patterns in the data and any exceptions to these. The tool provides useful analysis for any EDA (Exploratory Data Analysis) and may be useful for interpretable outlier detection.
+A python tool to examine datasets for consistency. It performs approximately 140 tests, identifying patterns in the data and any exceptions to these. The tool provides useful analysis for any EDA (Exploratory Data Analysis) and may be useful for interpretable outlier detection.
 
 ## Background
 
