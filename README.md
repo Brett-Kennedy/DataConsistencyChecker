@@ -53,8 +53,19 @@ dc.display_detailed_results()
 
 ## Performance
 
-The tool typically runs in under a minute for small files, and under 30 minutes even for very large files. It is possible to reduce the execution time if necessary by 
-excluding some tests. It is also possible to set the max_combinations parameter to a lower value, which will skip a significant amount of processing in some cases. It is also possible to run on a sample of the rows. Doing this, you will not be able to properly identify exceptions to the patterns, but will be able to identify the patterns themselves. As well, columns may be removed from the dataframe before running the tool to remove checks on these columns. 
+The tool typically runs in under a minute for small files, and under 30 minutes even for very large files, with many thousands of rows and/or columns. However, it is
+often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
+
+- Excluding some tests. Some may be of less interest to your project or may be slower to execute.  
+- Set the max_combinations parameter to a lower value, which will skip a significant amount of processing in some cases. The default is 1,000,000. 
+- Run on a sample of the rows. Doing this, you will not be able to properly identify exceptions to the patterns, but will be able to identify the patterns themselves. 
+- Columns may be removed from the dataframe before running the tool to remove checks on these columns. 
+- The fast_only parameters in check_data_quality() may be set to True
+
+## Date Columns
+
+It is recommended that the pandas dataframe passed has any date columns set such that the dtype is datetime64 or timestamp. However, the tool will attempt to convert any columns with dtype as object to datetime, and will treat any that can be successfully converted as datetime columns, which means all tests related to date or time values will be executed on these columns. If verbose is set to 2 or higher, the column data types used will be displayed at the top ot the output running check_data_quality(). If desired, you may pass a list of date columns, and the tool will attempt to treat only these columns as datetime columns. 
+
 
 ## Notes
 
