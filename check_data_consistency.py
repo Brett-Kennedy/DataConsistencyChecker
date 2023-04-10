@@ -149,7 +149,7 @@ class DataConsistencyChecker:
         # single column in test_results_df for that test and set of columns.
         self.test_results_df = None
 
-        # This maps the columns used in test_results_df to the original columns
+        # This maps the columns used in test_results_df and patterns_df to the original columns
         self.col_to_original_cols_dict = {}
 
         # This maps one-to-one with the original data, but in each cell contains a score for the corresponding cell in
@@ -218,8 +218,8 @@ class DataConsistencyChecker:
             'COLUMN_TENDS_DESC':        ('Check if the column is generally decreasing',
                                          self.__check_column_tends_desc, self.__generate_column_tends_desc,
                                          True, True, True),
-            'SIMILAR_PREVIOUS':         ('Check if all values are similar to the previous value in the column, relative '
-                                         'to the range of values in the column',
+            'SIMILAR_PREVIOUS':         (('Check if all values are similar to the previous value in the column, '
+                                          'relative to the range of values in the column'),
                                          self.__check_similar_previous, self.__generate_similar_previous,
                                          True, True, True),
             'UNUSUAL_NUMERIC':          (('Check if there are any unusual numeric values, in the sense of having an '
@@ -729,6 +729,12 @@ class DataConsistencyChecker:
             'DECISION_TREE_CLASSIFIER': (('Check if the categorical column can be derived from the other columns using '
                                           'a decision tree'),
                                          self.__check_dt_classifier, self.__generate_dt_classifier,
+                                         True, True, False),
+
+            # Tests on sets of three columns of any type
+            'C_IS_A_OR_B':              (('Check if one column is consistently equal to the value in one of two other '
+                                          'columns, though not constently either one of the two columns'),
+                                         self.__check_c_is_a_or_b, self.__generate_c_is_a_or_b,
                                          True, True, False),
 
             # Tests on sets of four columns of any type
@@ -2193,7 +2199,10 @@ class DataConsistencyChecker:
                 for columns_set in sub_patterns_test['Column(s)'].values:
                     sub_patterns = self.patterns_df[(self.patterns_df['Test ID'] == test_id) &
                                                     (self.patterns_df['Column(s)'] == columns_set)]
-                    if len(set(col_name_list).intersection(set(columns_set))) == 0:
+                    # if len(set(col_name_list).intersection(set(columns_set))) == 0:
+                    #     continue
+                    pattern_columns_arr = self.col_to_original_cols_dict[columns_set]
+                    if len(set(col_name_list).intersection(set(pattern_columns_arr))) == 0:
                         continue
                     if len(sub_patterns) > 0:
                         print_test_header(test_id)
@@ -2557,6 +2566,7 @@ class DataConsistencyChecker:
         num_true = test_series.tolist().count(True)
         if allow_patterns and num_true == self.num_rows:
             self.patterns_arr.append([test_id, col_name, pattern_string, display_info])
+            self.col_to_original_cols_dict[col_name] = original_cols  # todo: ensure __process_coutns() is the same
 
         if (self.num_rows - self.contamination_level) <= num_true < self.num_rows:
             if allow_patterns:
@@ -2618,6 +2628,7 @@ class DataConsistencyChecker:
 
         if test_series.nunique() == 1:
             self.patterns_arr.append([test_id, col_name, f'{pattern_string_1} {test_series[0]} {pattern_string_2}', None])
+            self.col_to_original_cols_dict[col_name] = original_cols
         elif test_series.nunique() <= 5:
             counts_series = test_series.value_counts(normalize=False)
             low_vals = [x for x, y in zip(counts_series.index, counts_series.values) if y < self.contamination_level]
@@ -10756,6 +10767,79 @@ class DataConsistencyChecker:
                     f'All values in the column are consistently predictable based using a decision tree with the '
                     f'following rules: \n{rules}'
                 )
+
+    ####################################################################################
+    # Data consistency checks for sets of three columns of any type
+    ####################################################################################
+
+    def __generate_c_is_a_or_b(self):
+        """
+        Patterns without exceptions:
+        Patterns with exception: 'c_is_a_or_a_c'
+        """
+        self.__add_synthetic_column('c_is_a_or_b_a', np.random.randint(0, 50, self.num_synth_rows))
+        self.__add_synthetic_column('c_is_a_or_b_b', np.random.randint(0, 50, self.num_synth_rows))
+        self.__add_synthetic_column('c_is_a_or_b_all', self.synth_df['c_is_a_or_b_a'][:500].tolist() +
+                                    self.synth_df['c_is_a_or_b_a'][500:].tolist())
+        self.__add_synthetic_column('c_is_a_or_b_most', self.synth_df['c_is_a_or_b_a'][:500].tolist() +
+                                    self.synth_df['c_is_a_or_b_b'][500:].tolist())
+        self.synth_df.loc[999, 'c_is_a_or_b_most'] = -87
+
+    def __check_c_is_a_or_b(self, test_id):
+        """
+        Given a set of columns, referred to as Column A, Column B, and Column C, check if Column C is constistenly
+        the same value as in either Column A or Column B, but not consistently the same as Column A or as Column B.
+        This is done for string, numeric, and date columns, but not binary.
+        """
+        def check_triple():
+            if (col_name_c == col_name_a) or (col_name_c == col_name_b):
+                return
+
+            columns_tuple = tuple(sorted([col_name_a, col_name_b, col_name_c]))
+            if columns_tuple in reported_dict:
+                return
+
+            # todo: check col_c does not equal col_a or col_b most of the time
+            # todo: test on a sample first
+            # todo: test with nulls
+            # todo: test with all_cols=True
+
+            test_series = [(z == x) or (z == y) for x, y, z in
+                           zip(self.orig_df[col_name_a], self.orig_df[col_name_b], self.orig_df[col_name_c])]
+            test_series = test_series | \
+                          self.orig_df[col_name_a].isna() | \
+                          self.orig_df[col_name_b].isna() | \
+                          self.orig_df[col_name_c].isna()
+            num_matching = test_series.tolist().count(True)
+            if num_matching >= (self.num_rows - self.contamination_level):
+                self.__process_analysis_binary(
+                    test_id,
+                    self.get_col_set_name([col_name_a, col_name_b, col_name_c]),
+                    [col_name_a, col_name_b, col_name_c],
+                    test_series,
+                    f'The values in "{col_name_c}" are consistently the same as those in either "{col_name_a}" or "{col_name_b}".'
+                )
+                reported_dict[columns_tuple] = True
+
+        reported_dict = {}
+
+        for col_name_c in self.numeric_cols:
+            num_pairs, pairs_arr = self.__get_numeric_column_pairs_unique()
+            for pair_idx, pair in enumerate(pairs_arr):
+                col_name_a, col_name_b = pair
+                check_triple()
+
+        for col_name_c in self.string_cols:
+            num_pairs, pairs_arr = self.__get_string_column_pairs_unique()
+            for pair_idx, pair in enumerate(pairs_arr):
+                col_name_a, col_name_b = pair
+                check_triple()
+
+        for col_name_c in self.date_cols:
+            num_pairs, pairs_arr = self.__get_date_column_pairs_unique()
+            for pair_idx, pair in enumerate(pairs_arr):
+                col_name_a, col_name_b = pair
+                check_triple()
 
     ####################################################################################
     # Data consistency checks for sets of four columns of any type
