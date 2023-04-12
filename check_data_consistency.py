@@ -67,6 +67,19 @@ TEST_DEFN_FAST = 5          # Element 5 indicates if the test is reasonably fast
 #       generate diff synth data and see what it finds. Or mangle real data from OpenML with very small / large / negative
 #       inverted, etc values.
 
+# todo from testing:
+# RARE_VALUES – add column for count of each value
+# SAME_OR_CONSTANT – give examples where not Null in the left column (test with 90% null)
+# UNIQUE_SETS_VALUES – once sets get too big, stop printing – just say: skipping until small enough
+# Calling dc.display_detailed_results(test_id_list=['NEGATIVE']) gives no results – fails on the intersection of columns
+# SIMILAR_PREVIOUS  - doesn’t work with date columns
+# All pos or all neg – remove checks for is_missing(), handle where adding to existing pattern.
+# A_rounded_b – fails with NaN values
+# Error executing NUMBER_DECIMALS: index -1 is out of bounds for axis 0 with size 0, line number: 1080 -- 3510 -- 4104
+# most_common_num_digits = counts_series.sort_values().index[-1] – I think must be all NaN
+# NUMBER_DECIMALS – show # decimals in column. And display as a string to get all decimals
+# Support dates like: 2019-02-20 09:31:13.450
+# LARGE_GIVEN_VALUE – values too large with timestamps, and Q1, q3, wrong if nans
 
 class DataConsistencyChecker:
     def __init__(self,
@@ -681,6 +694,13 @@ class DataConsistencyChecker:
                                          True, True, False),
             'A_PREFIX_OF_B':            ('Check if one column is consistently the prefix of another column.',
                                          self.__check_a_prefix_of_b, self.__generate_a_prefix_of_b,
+                                         True, True, False),
+            'A_SUFFIX_OF_B':            ('Check if one column is consistently the suffix of another column.',
+                                         self.__check_a_suffix_of_b, self.__generate_a_suffix_of_b,
+                                         True, True, False),
+            'B_CONTAINS_A':             (('Check if one column is consistently contained in another columns, but is '
+                                          'neither the prefix nor suffix of the second column.'),
+                                         self.__check_b_contains_a, self.__generate_b_contains_a,
                                          True, True, False),
             'CORRELATED_ALPHA_ORDER':   ('Check if the alphabetic orderings of two columns are consistently correlated',
                                          self.__check_correlated_alpha, self.__generate_correlated_alpha,
@@ -3527,17 +3547,20 @@ class DataConsistencyChecker:
     def __check_number_decimals(self, test_id):
         for col_name in self.numeric_cols:
 
-            # Test first on a sample
-            num_digits_series = self.sample_df[col_name].apply(get_num_digits)
-            num_digits_non_null_series = pd.Series([get_num_digits(x) for x in self.sample_df[col_name] if not is_missing(x)])
+            # Test first on a sample, unless the column is entirely null within the sample
+            if self.sample_df[col_name].isna().sum() < len(self.sample_df):
+                num_digits_series = self.sample_df[col_name].apply(get_num_digits)
+                num_digits_non_null_series = pd.Series([get_num_digits(x) for x in self.sample_df[col_name] if not is_missing(x)])
 
-            counts_series = num_digits_non_null_series.value_counts(normalize=False)
-            most_common_num_digits = counts_series.sort_values().index[-1]
-            rare_num_digits = [x for x in counts_series.index if (x > (most_common_num_digits * 1.2)) and (x >= (most_common_num_digits + 2))]
+                counts_series = num_digits_non_null_series.value_counts(normalize=False)
+                most_common_num_digits = counts_series.sort_values().index[-1]
+                rare_num_digits = [x for x in counts_series.index if (x > (most_common_num_digits * 1.2)) and (x >= (most_common_num_digits + 2))]
 
-            test_series = [x not in rare_num_digits for x in num_digits_series]
-            if test_series.count(False) > 1:
-                continue
+                test_series = [x not in rare_num_digits for x in num_digits_series]
+                if test_series.count(False) > 1:
+                    continue
+            else:
+                pass  # todo: test with columns 90% null. In this case, get another sample, of just this column
 
             # Test on the full column
             num_digits_series = self.orig_df[col_name].apply(get_num_digits)
@@ -3560,9 +3583,10 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 test_series,
-                f'The column contains values consistently with {array_to_str(common_num_digits)} decimals or less',
+                f'The column contains values consistently with {array_to_str(common_num_digits)} decimals',
                 allow_patterns=((len(common_num_digits) > 1) or (common_num_digits[0] != 0))
             )
+            # todo: we need to display the decimals better, likely converting to str; otherwise only a few decimals are shown.
 
     def __generate_column_increasing(self):
         """
@@ -3717,8 +3741,12 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols + self.date_cols:
             if self.orig_df[col_name].nunique(dropna=True) <= 2:
                 continue
-            diff_to_prev_arr = abs(self.orig_df[col_name].diff())
-            diff_to_median_arr = abs(self.orig_df[col_name] - self.orig_df[col_name].median())
+            if col_name in self.numeric_cols:
+                diff_to_prev_arr = abs(self.orig_df[col_name].diff())
+                diff_to_median_arr = abs(self.orig_df[col_name] - self.orig_df[col_name].median())
+            else:
+                diff_to_prev_arr = abs(self.orig_df[col_name].diff())
+                diff_to_median_arr = abs(self.orig_df[col_name] - self.orig_df[col_name].quantile(0.5, interpolation='midpoint'))
             test_series = diff_to_prev_arr < diff_to_median_arr
             test_series[0] = True  # Row 0 has no difference from the previous, so can not be tested
 
@@ -6228,8 +6256,8 @@ class DataConsistencyChecker:
         zero_dict = {}
         non_zero_dict = {}
         for col_idx, col_name in enumerate(self.numeric_cols):
-            num_zero = len([x for x in self.orig_df[col_name] if (x == 0) or is_missing(x)])
-            num_non_zero = len([x for x in self.orig_df[col_name] if (x != 0) or is_missing(x)])
+            num_zero = len([x for x in self.orig_df[col_name] if (x == 0)])
+            num_non_zero = len([x for x in self.orig_df[col_name] if (x != 0)])
             if num_zero > (self.num_rows * 0.1) and num_non_zero > (self.num_rows * 0.1):
                 cols.append(col_name)
 
@@ -6249,10 +6277,21 @@ class DataConsistencyChecker:
         for subset_size in range(num_cols, 1, -1):
             if found_any:
                 break
+
+            calc_size = math.comb(len(cols), subset_size)
+            skip_subsets = calc_size > self.max_combinations
+            if skip_subsets:
+                if self.verbose >= 2:
+                    print((f"    Skipping subsets of size {subset_size}. There are {calc_size} subsets. max_combinations"
+                           f"is currently set to {self.max_combinations:,}"))
+                    continue # todo: only print this message once.
+
             subsets = list(combinations(cols, subset_size))
             if self.verbose >= 2:
                 print(f"  Examining subsets of size {subset_size}. There are {len(subsets):,} subsets.")
-            for subset in subsets:
+            for subset_idx, subset in enumerate(subsets):
+                if self.verbose >= 3 and subset_idx > 0 and subset_idx % 10_000 == 0:
+                    print(f"    Examining subset {subset_idx}")
                 subset_matches = True
 
                 # Check if this subset has already been determined to be impossible from a portion of a previously
@@ -6286,7 +6325,7 @@ class DataConsistencyChecker:
                     know_failed_subsets[tuple(subset[:c_idx+1])] = True
                     continue
 
-                # Test of the full set of rows
+                # Test on the full set of rows
                 for c in subset:
                     # We compare all columns to the first column in the set, so this must be identical
                     if c == subset[0]:
@@ -6304,6 +6343,10 @@ class DataConsistencyChecker:
                 if not subset_matches:
                     continue
                 found_any = True
+
+                # todo: check if there already is a pattern. if so, just add these columns to the set.
+                # look for: found_existing_pattern
+
                 self.__process_analysis_binary(
                     test_id,
                     self.get_col_set_name(subset),
@@ -6697,8 +6740,10 @@ class DataConsistencyChecker:
 
     def __check_early_dates(self, test_id):
         for col_name in self.date_cols:
-            q1 = self.orig_df[col_name].quantile(0.25)
-            q3 = self.orig_df[col_name].quantile(0.75)
+            # todo: may need to cast back to datetime: pd.to_datetime(self.orig_df[col_name]) -- do all these methods
+            #   also add the interpolation all these methods
+            q1 = self.orig_df[col_name].quantile(0.25, interpolation='midpoint')
+            q3 = self.orig_df[col_name].quantile(0.75, interpolation='midpoint')
             lower_limit = q1 - (self.iqr_limit * (q3 - q1))
             test_series = self.orig_df[col_name] > lower_limit
             test_series = test_series | self.orig_df[col_name].isna()
@@ -6760,7 +6805,9 @@ class DataConsistencyChecker:
             if (max_date - min_date).days < 100:
                 continue
 
-            dow_list = pd.Series([x.day_of_week for x in self.orig_df[col_name]])
+            # datetime objects have day_of_week(); timestamps have dayofweek()
+            # todo: test all methods with timestamps
+            dow_list = pd.Series([x.day_of_week if hasattr(x, 'day_of_week') else x.dayofweek for x in self.orig_df[col_name]])
             counts_list = dow_list.value_counts()
             rare_dow = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_dow) == 0:
@@ -6973,9 +7020,11 @@ class DataConsistencyChecker:
     def __check_large_date_gap(self, test_id):
         for col_name_idx_1 in range(len(self.date_cols)-1):
             col_name_1 = self.date_cols[col_name_idx_1]
+            med_1 = self.orig_df[col_name_1].quantile(0.5, interpolation='midpoint')
             for col_name_idx_2 in range(col_name_idx_1 + 1, len(self.date_cols)):
                 col_name_2 = self.date_cols[col_name_idx_2]
-                if self.orig_df[col_name_1].median() > self.orig_df[col_name_2].median():
+                med_2 = self.orig_df[col_name_2].quantile(0.5, interpolation='midpoint')
+                if med_1 > med_2:
                     col_big = col_name_1
                     col_small = col_name_2
                 else:
@@ -10091,6 +10140,67 @@ class DataConsistencyChecker:
                 f'Columns "{col_name_1}" is consistently the same as the first characters of "{col_name_2}"'
             )
 
+    def __generate_a_suffix_of_b(self):
+        """
+        Patterns without exceptions: "a_suffix_b rand_a" is consistently the same as the last characters of
+            "a_suffix_b all"
+        Patterns with exception: "a_suffix_b rand_a" is consistently the same as the last characters of
+            "a_suffix_b most", with exceptions
+        """
+        self.__add_synthetic_column('a_suffix_b rand_a', [''.join(np.random.choice(list(string.ascii_lowercase), 10))
+                                                          for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('a_suffix_b all',
+                                    ''.join(np.random.choice(list(string.ascii_lowercase), 10)) +
+                                    self.synth_df['a_suffix_b rand_a'])
+        self.__add_synthetic_column('a_suffix_b most', self.synth_df['a_suffix_b all'])
+        self.synth_df.loc[999, 'a_suffix_b most'] = 'abcdef'
+
+    def __check_a_suffix_of_b(self, test_id):
+        for col_name_1, col_name_2 in self.__get_string_column_pairs():
+            # todo: test on a sample first
+            test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[-len(x):]))
+                           for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])]
+            test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+            self.__process_analysis_binary(
+                test_id,
+                self.get_col_set_name([col_name_1, col_name_2]),
+                [col_name_1, col_name_2],
+                np.array(test_series),
+                f'Columns "{col_name_1}" is consistently the same as the last characters of "{col_name_2}"'
+            )
+
+    def __generate_b_contains_a(self):
+        """
+        Patterns without exceptions: "a_suffix_b rand_a" is consistently the same as the last characters of
+            "a_suffix_b all"
+        Patterns with exception: "a_suffix_b rand_a" is consistently the same as the last characters of
+            "a_suffix_b most", with exceptions
+        """
+        self.__add_synthetic_column('b_contains_a rand_a', [''.join(np.random.choice(list(string.ascii_lowercase), 10))
+                                                          for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('b_contains_a all',
+                                    ''.join(np.random.choice(list(string.ascii_lowercase), 10)) +
+                                    self.synth_df['b_contains_a rand_a'] +
+                                    ''.join(np.random.choice(list(string.ascii_lowercase), 10)))
+        self.__add_synthetic_column('b_contains_a most', self.synth_df['b_contains_a all'])
+        self.synth_df.loc[999, 'b_contains_a most'] = 'abcdef'
+
+    def __check_b_contains_a(self, test_id):
+        for col_name_1, col_name_2 in self.__get_string_column_pairs():
+            # todo: test on a sample first
+            test_series = [True if (is_missing(x) or is_missing(y)) else
+                           ((len(x) < len(y)) and (x != y[:len(x)]) and (x != y[-len(x):]) and (x in y) )
+                           for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])]
+            test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+            self.__process_analysis_binary(
+                test_id,
+                self.get_col_set_name([col_name_1, col_name_2]),
+                [col_name_1, col_name_2],
+                np.array(test_series),
+                (f'Columns "{col_name_1}" is consistently contained within "{col_name_2}", but not the first or last '
+                 f'characters')
+            )
+
     def __generate_correlated_alpha(self):
         """
         Patterns without exceptions: "correlated_alpha rand_a" is consistently similar, with regards to percentile, to
@@ -10780,18 +10890,31 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('c_is_a_or_b_a', np.random.randint(0, 50, self.num_synth_rows))
         self.__add_synthetic_column('c_is_a_or_b_b', np.random.randint(0, 50, self.num_synth_rows))
         self.__add_synthetic_column('c_is_a_or_b_all', self.synth_df['c_is_a_or_b_a'][:500].tolist() +
-                                    self.synth_df['c_is_a_or_b_a'][500:].tolist())
+                                    self.synth_df['c_is_a_or_b_b'][500:].tolist())
         self.__add_synthetic_column('c_is_a_or_b_most', self.synth_df['c_is_a_or_b_a'][:500].tolist() +
                                     self.synth_df['c_is_a_or_b_b'][500:].tolist())
         self.synth_df.loc[999, 'c_is_a_or_b_most'] = -87
 
     def __check_c_is_a_or_b(self, test_id):
         """
-        Given a set of columns, referred to as Column A, Column B, and Column C, check if Column C is constistenly
+        Given a set of columns, referred to as Column A, Column B, and Column C, check if Column C is consistently
         the same value as in either Column A or Column B, but not consistently the same as Column A or as Column B.
         This is done for string, numeric, and date columns, but not binary.
         """
         def check_triple():
+            def check_pair_are_same(col1, col2):
+                pairs_tuple = tuple(sorted([col1, col2]))
+                if pairs_tuple in cols_diff_dict:
+                    return True
+                are_same_arr = [x == y or is_missing(x) or is_missing(y)
+                               for x, y in zip(self.orig_df[col1], self.orig_df[col2])]
+                if are_same_arr.count(True) > (self.num_rows - self.contamination_level):
+                    cols_same_dict[pairs_tuple] = True
+                    return True
+                else:
+                    cols_diff_dict[pairs_tuple] = True
+                    return False
+
             if (col_name_c == col_name_a) or (col_name_c == col_name_b):
                 return
 
@@ -10799,7 +10922,23 @@ class DataConsistencyChecker:
             if columns_tuple in reported_dict:
                 return
 
-            # todo: check col_c does not equal col_a or col_b most of the time
+            # Test if Column C is identical to either A or B, or if A and B are identical to themselves
+            pairs_tuple = tuple(sorted([col_name_a, col_name_b]))
+            if pairs_tuple in cols_same_dict:
+                return
+            pairs_tuple = tuple(sorted([col_name_a, col_name_c]))
+            if pairs_tuple in cols_same_dict:
+                return
+            pairs_tuple = tuple(sorted([col_name_b, col_name_c]))
+            if pairs_tuple in cols_same_dict:
+                return
+            if not check_pair_are_same(col_name_a, col_name_b):
+                return
+            if not check_pair_are_same(col_name_a, col_name_c):
+                return
+            if not check_pair_are_same(col_name_b, col_name_c):
+                return
+
             # todo: test on a sample first
             # todo: test with nulls
             # todo: test with all_cols=True
@@ -10821,24 +10960,35 @@ class DataConsistencyChecker:
                 )
                 reported_dict[columns_tuple] = True
 
-        reported_dict = {}
+        def calc_num_combos(num_cols):
+            return num_cols * (num_cols * (num_cols-1) / 2)
 
+        reported_dict = {}
+        cols_same_dict = {}
+        cols_diff_dict = {}
+
+        num_combos = calc_num_combos(len(self.numeric_cols))
+        if num_combos > self.max_combinations:
+            print(f"  Skipping numeric columns. There are {len(self.numeric_cols)} numeric columns, which leads to {num_combos} combinations. max_combinations is currently set to {self.max_combinations}")
         for col_name_c in self.numeric_cols:
             num_pairs, pairs_arr = self.__get_numeric_column_pairs_unique()
-            for pair_idx, pair in enumerate(pairs_arr):
-                col_name_a, col_name_b = pair
+            for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                 check_triple()
 
+        num_combos = calc_num_combos(len(self.string_cols))
+        if num_combos > self.max_combinations:
+            print(f"  Skipping string columns. There are {len(self.string_cols)} string columns, which leads to {num_combos} combinations. max_combinations is currently set to {self.max_combinations}")
         for col_name_c in self.string_cols:
             num_pairs, pairs_arr = self.__get_string_column_pairs_unique()
-            for pair_idx, pair in enumerate(pairs_arr):
-                col_name_a, col_name_b = pair
+            for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                 check_triple()
 
+        num_combos = calc_num_combos(len(self.date_cols))
+        if num_combos > self.max_combinations:
+            print(f"  Skipping date columns. There are {len(self.date_cols)} numeric columns, which leads to {num_combos} combinations. max_combinations is currently set to {self.max_combinations}")
         for col_name_c in self.date_cols:
             num_pairs, pairs_arr = self.__get_date_column_pairs_unique()
-            for pair_idx, pair in enumerate(pairs_arr):
-                col_name_a, col_name_b = pair
+            for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                 check_triple()
 
     ####################################################################################
