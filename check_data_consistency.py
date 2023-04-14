@@ -68,18 +68,10 @@ TEST_DEFN_FAST = 5          # Element 5 indicates if the test is reasonably fast
 #       inverted, etc values.
 
 # todo from testing:
-# RARE_VALUES – add column for count of each value
-# SAME_OR_CONSTANT – give examples where not Null in the left column (test with 90% null)
-# UNIQUE_SETS_VALUES – once sets get too big, stop printing – just say: skipping until small enough
-# Calling dc.display_detailed_results(test_id_list=['NEGATIVE']) gives no results – fails on the intersection of columns
-# SIMILAR_PREVIOUS  - doesn’t work with date columns
 # All pos or all neg – remove checks for is_missing(), handle where adding to existing pattern.
-# A_rounded_b – fails with NaN values
 # Error executing NUMBER_DECIMALS: index -1 is out of bounds for axis 0 with size 0, line number: 1080 -- 3510 -- 4104
 # most_common_num_digits = counts_series.sort_values().index[-1] – I think must be all NaN
-# NUMBER_DECIMALS – show # decimals in column. And display as a string to get all decimals
-# Support dates like: 2019-02-20 09:31:13.450
-# LARGE_GIVEN_VALUE – values too large with timestamps, and Q1, q3, wrong if nans
+# LARGE_GIVEN_VALUE – values too large with timestamps, and Q1, q3
 
 class DataConsistencyChecker:
     def __init__(self,
@@ -138,6 +130,7 @@ class DataConsistencyChecker:
         self.column_medians = {}
         self.column_trimmed_means = {}
         self.column_unique_vals = {}  # Stored only for binary columns. Excludes None and NaN values.
+        self.numeric_vals = {}  # An array of the truly numeric values in each numeric column
         self.binary_cols = []
         self.numeric_cols = []
         self.date_cols = []
@@ -893,16 +886,22 @@ class DataConsistencyChecker:
         self.pearson_corr = self.orig_df.corr(method='pearson')
         self.spearman_corr = self.orig_df.corr(method='spearman')
 
+        # For all numeric columns, get the set of truly numeric values
+        for col_name in self.numeric_cols:
+            self.numeric_vals[col_name] = pd.Series([x for x in self.orig_df[col_name] if isinstance(x, numbers.Number)])
+
         # Calculate and cache the median for each numeric column.
         self.column_medians = {}
         for col_name in self.numeric_cols:
-            self.column_medians[col_name] = self.orig_df[col_name].median()
+            # It may be that there is the odd non-numeric value in the column. We take only valid numbers to
+            # calculate the median.
+            self.column_medians[col_name] = self.numeric_vals[col_name].median()
 
         # Calculate the trimmed mean for each numeric column
         trimmed_orig_df = self.orig_df.copy()
         for col_name in self.numeric_cols:
-            lower_limit = self.orig_df[col_name].quantile(0.01)
-            upper_limit = self.orig_df[col_name].quantile(0.99)
+            lower_limit = self.numeric_vals[col_name].quantile(0.01)
+            upper_limit = self.numeric_vals[col_name].quantile(0.99)
             trimmed_orig_df = trimmed_orig_df[(trimmed_orig_df[col_name] > lower_limit) &
                                               (trimmed_orig_df[col_name] < upper_limit)]
         self.column_trimmed_means = {}
@@ -963,7 +962,7 @@ class DataConsistencyChecker:
         the values.
         If set to 'in-sync', this is similar, but all columns will have None set in the ame rows.
         """
-        assert add_nones in ['none', 'one-row', 'in-sync', 'random']
+        assert add_nones in ['none', 'one-row', 'in-sync', 'random', '80-percent']
 
         random.seed(seed)
         self.synth_df = pd.DataFrame()
@@ -988,6 +987,12 @@ class DataConsistencyChecker:
         elif add_nones == 'random':
             for col_name in self.synth_df.columns:
                 none_idxs = random.sample(range(self.num_synth_rows - 10), self.num_synth_rows // 2)
+                col_vals = self.synth_df[col_name].copy()
+                col_vals.iloc[none_idxs] = None
+                self.synth_df[col_name] = col_vals
+        elif add_nones == '80-percent':
+            none_idxs = random.sample(range(self.num_synth_rows - 10), int(self.num_synth_rows * 0.8))
+            for col_name in self.synth_df.columns:
                 col_vals = self.synth_df[col_name].copy()
                 col_vals.iloc[none_idxs] = None
                 self.synth_df[col_name] = col_vals
@@ -1551,9 +1556,11 @@ class DataConsistencyChecker:
             elif test_id in ['SAME_OR_CONSTANT']:
                 col_name_1, col_name_2 = cols
                 df_same = self.orig_df[cols][
-                    (self.orig_df[col_name_1] == self.orig_df[col_name_2])].head(n_examples // 2)
+                    (self.orig_df[col_name_1] == self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
+                ].head(n_examples // 2)
                 df_not_same = self.orig_df[cols][
-                    (self.orig_df[col_name_1] != self.orig_df[col_name_2])].head(n_examples // 2)
+                    (self.orig_df[col_name_1] != self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
+                ].head(n_examples // 2)
                 df = pd.concat([df_same, df_not_same])
             elif test_id in ['NEGATIVE']:
                 col_name_1 = cols[0]
@@ -1579,6 +1586,7 @@ class DataConsistencyChecker:
             if df is None:
                 # Test test_results_df does not have duplicate values in the index
                 assert len(self.test_results_df.index) == len(set(self.test_results_df.index))
+                cols = list(cols)  # Ensure cols is not in tuple format
                 df = self.orig_df[cols]
                 for col in cols:
                     sub_df = self.orig_df.loc[df.index]
@@ -1812,6 +1820,11 @@ class DataConsistencyChecker:
         df = df.copy()
         if test_id in ['LARGER_THAN_SUM', 'CONSTANT_SUM']:
             df['SUM'] = df[col_name_1] + df[col_name_2]
+        elif test_id in ['RARE_VALUES']:
+            df["Count of Value"] = [display_info['counts'][x] for x in df[col_name]]
+        elif test_id in ['NUMBER_DECIMALS']:
+            df['Number decimals'] = [-1 if is_missing(x) else get_num_digits(x) for x in df[col_name]]
+            df[col_name] = df[col_name].astype(str)
         elif test_id in ['SUM_OF_COLUMNS']:
             if display_info and display_info['operation'] == "plus":
                 df[f"SUM PLUS {display_info['amount']}"] = df[source_cols].sum(axis=1) + display_info['amount']
@@ -3014,7 +3027,8 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f"The column consistently contains a small set of common values: {common_vals}",
-                f"The rare values: {rare_vals}"
+                f"The rare values: {rare_vals}",
+                display_info={"counts": counts_series}
             )
 
     def __generate_unique_values(self):
@@ -3542,7 +3556,8 @@ class DataConsistencyChecker:
         """
         self.__add_synthetic_column('num decimals rand', [random.random() for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('num decimals all ', [round(random.random(), 2) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('num decimals most', [round(random.random(), 2) for _ in range(self.num_synth_rows-1)] + [0.5665])
+        self.__add_synthetic_column('num decimals most',
+                                    [round(random.random(), 2) for _ in range(self.num_synth_rows-2)] + [0.5665] + [0.00083838383334445])
 
     def __check_number_decimals(self, test_id):
         for col_name in self.numeric_cols:
@@ -3742,11 +3757,13 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].nunique(dropna=True) <= 2:
                 continue
             if col_name in self.numeric_cols:
-                diff_to_prev_arr = abs(self.orig_df[col_name].diff())
-                diff_to_median_arr = abs(self.orig_df[col_name] - self.orig_df[col_name].median())
+                num_vals = pd.Series([x if isinstance(x, numbers.Number) else np.NaN for x in self.orig_df[col_name]])
+                diff_to_prev_arr = abs(num_vals.diff())
+                diff_to_median_arr = abs(num_vals - self.column_medians[col_name])
             else:
-                diff_to_prev_arr = abs(self.orig_df[col_name].diff())
-                diff_to_median_arr = abs(self.orig_df[col_name] - self.orig_df[col_name].quantile(0.5, interpolation='midpoint'))
+                print(col_name)
+                diff_to_prev_arr = abs(pd.to_datetime(self.orig_df[col_name]).diff())
+                diff_to_median_arr = abs(pd.to_datetime(self.orig_df[col_name]) - pd.to_datetime(self.orig_df[col_name]).quantile(0.5, interpolation='midpoint'))
             test_series = diff_to_prev_arr < diff_to_median_arr
             test_series[0] = True  # Row 0 has no difference from the previous, so can not be tested
 
@@ -5035,8 +5052,8 @@ class DataConsistencyChecker:
                 test_series = [is_missing(x) or is_missing(y) or x == math.floor(y)
                                for x, y in zip(self.sample_df[col_name_1], sample_floor_dict[col_name_2])]
                 if test_series.count(False) <= 1:
-                    test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], floor_dict[col_name_2])]
-                    test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                    test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], floor_dict[col_name_2])]
+                    #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
@@ -5048,10 +5065,10 @@ class DataConsistencyChecker:
 
             # Test ceil function
             if number_decimals_dict[col_name_2].median() > 0:
-                test_series = [x == math.floor(y) for x, y in zip(self.sample_df[col_name_1], sample_ceil_dict[col_name_2])]
+                test_series = [is_missing(x) or is_missing(y) or x == math.floor(y) for x, y in zip(self.sample_df[col_name_1], sample_ceil_dict[col_name_2])]
                 if test_series.count(False) <= 1:
-                    test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], ceil_dict[col_name_2])]
-                    test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                    test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], ceil_dict[col_name_2])]
+                    #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
@@ -5062,10 +5079,10 @@ class DataConsistencyChecker:
                         continue
 
             # Test rounding to a single digit
-            test_series = [x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_dict[col_name_2])]
+            test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_dict[col_name_2])]
             if test_series.count(False) <= 1:
-                test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], round_dict[col_name_2])]
-                test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], round_dict[col_name_2])]
+                #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 if test_series.count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
@@ -5076,10 +5093,10 @@ class DataConsistencyChecker:
                     continue
 
             # Test rounding to 10's
-            test_series = [x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_10_dict[col_name_2])]
+            test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_10_dict[col_name_2])]
             if test_series.count(False) <= 1:
-                test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], round_10_dict[col_name_2])]
-                test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], round_10_dict[col_name_2])]
+                #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 if test_series.count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
@@ -5090,10 +5107,10 @@ class DataConsistencyChecker:
                     continue
 
             # Test rounding to 100's
-            test_series = [x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_100_dict[col_name_2])]
+            test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_100_dict[col_name_2])]
             if test_series.count(False) <= 1:
-                test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], round_100_dict[col_name_2])]
-                test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], round_100_dict[col_name_2])]
+                #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 if test_series.count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
@@ -5104,10 +5121,10 @@ class DataConsistencyChecker:
                     continue
 
             # Test rounding to 1000's
-            test_series = [x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_1000_dict[col_name_2])]
+            test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.sample_df[col_name_1], sample_round_1000_dict[col_name_2])]
             if test_series.count(False) <= 1:
-                test_series = [x == round(y) for x, y in zip(self.orig_df[col_name_1], round_1000_dict[col_name_2])]
-                test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                test_series = [is_missing(x) or is_missing(y) or x == round(y) for x, y in zip(self.orig_df[col_name_1], round_1000_dict[col_name_2])]
+                #test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 if test_series.count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
@@ -6728,9 +6745,10 @@ class DataConsistencyChecker:
         # dates. Test with the month in string format
         self.__add_synthetic_column('date_str_1',
                                     ['Jan 12 2021',
+                                     '2019-02-20 09:31:13.450',
                                      'Jan. 13 2022 ',
                                      '01/01/2003'] +
-                                    ['April 15, 2005'] * (self.num_synth_rows-3))
+                                    ['April 15, 2005'] * (self.num_synth_rows-4))
         # Test in YYYYMM format
         self.__add_synthetic_column('date_str_2',
                                     [202101,
@@ -6742,10 +6760,10 @@ class DataConsistencyChecker:
         for col_name in self.date_cols:
             # todo: may need to cast back to datetime: pd.to_datetime(self.orig_df[col_name]) -- do all these methods
             #   also add the interpolation all these methods
-            q1 = self.orig_df[col_name].quantile(0.25, interpolation='midpoint')
-            q3 = self.orig_df[col_name].quantile(0.75, interpolation='midpoint')
+            q1 = pd.to_datetime(self.orig_df[col_name]).quantile(0.25, interpolation='midpoint')
+            q3 = pd.to_datetime(self.orig_df[col_name]).quantile(0.75, interpolation='midpoint')
             lower_limit = q1 - (self.iqr_limit * (q3 - q1))
-            test_series = self.orig_df[col_name] > lower_limit
+            test_series = pd.to_datetime(self.orig_df[col_name]) > lower_limit
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
@@ -6768,10 +6786,10 @@ class DataConsistencyChecker:
 
     def __check_late_dates(self, test_id):
         for col_name in self.date_cols:
-            q1 = self.orig_df[col_name].quantile(0.25)
-            q3 = self.orig_df[col_name].quantile(0.75)
+            q1 = pd.to_datetime(self.orig_df[col_name]).quantile(0.25)
+            q3 = pd.to_datetime(self.orig_df[col_name]).quantile(0.75)
             upper_limit = q3 + (self.iqr_limit * (q3 - q1))  # Using a stricter threshold than the 2.2 normally used
-            test_series = self.orig_df[col_name] < upper_limit
+            test_series = pd.to_datetime(self.orig_df[col_name]) < upper_limit
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
@@ -6800,14 +6818,14 @@ class DataConsistencyChecker:
     def __check_unusual_dow(self, test_id):
         for col_name in self.date_cols:
             # Check the dates span enough weeks to check the dow in a meaningful way
-            min_date = self.orig_df[col_name].min()
-            max_date = self.orig_df[col_name].max()
+            min_date = pd.to_datetime(self.orig_df[col_name]).min()
+            max_date = pd.to_datetime(self.orig_df[col_name]).max()
             if (max_date - min_date).days < 100:
                 continue
 
             # datetime objects have day_of_week(); timestamps have dayofweek()
             # todo: test all methods with timestamps
-            dow_list = pd.Series([x.day_of_week if hasattr(x, 'day_of_week') else x.dayofweek for x in self.orig_df[col_name]])
+            dow_list = pd.Series([x.day_of_week if hasattr(x, 'day_of_week') else x.dayofweek for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = dow_list.value_counts()
             rare_dow = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_dow) == 0:
@@ -6841,7 +6859,7 @@ class DataConsistencyChecker:
             if (max_date - min_date).days < 300:
                 continue
 
-            dom_list = pd.Series([x.day for x in self.orig_df[col_name]])
+            dom_list = pd.Series([x.day for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = dom_list.value_counts()
             rare_dom = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_dom) == 0:
@@ -6877,7 +6895,7 @@ class DataConsistencyChecker:
             if (max_date - min_date).days < (365 * 3):
                 continue
 
-            month_list = pd.Series([x.month for x in self.orig_df[col_name]])
+            month_list = pd.Series([x.month for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = month_list.value_counts()
             rare_months = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_months) == 0:
@@ -6906,15 +6924,15 @@ class DataConsistencyChecker:
     def __check_unusual_hour(self, test_id):
         for col_name in self.date_cols:
             # Check the times span enough days to check the dom in a meaningful way
-            min_date = self.orig_df[col_name].min()
-            max_date = self.orig_df[col_name].max()
+            min_date = pd.to_datetime(self.orig_df[col_name]).min()
+            max_date = pd.to_datetime(self.orig_df[col_name]).max()
             if (max_date - min_date).days < 5:
                 continue
 
             # todo: don't check the hour is consistent if it's just consitently missing, which is common. check the
             #   minutes vary, or something.
 
-            hour_list = pd.Series([x.hour for x in self.orig_df[col_name]])
+            hour_list = pd.Series([x.hour for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = hour_list.value_counts()
             rare_hours = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_hours) == 0:
@@ -6943,8 +6961,8 @@ class DataConsistencyChecker:
     def __check_unusual_minutes(self, test_id):
         for col_name in self.date_cols:
             # Check the times span enough days to check the dom in a meaningful way
-            min_date = self.orig_df[col_name].min()
-            max_date = self.orig_df[col_name].max()
+            min_date = pd.to_datetime(self.orig_df[col_name]).min()
+            max_date = pd.to_datetime(self.orig_df[col_name]).max()
             # Ensure there is at least 100 hours of range
             if ((max_date - min_date) / pd.Timedelta(hours=1)) < 100:
                 continue
@@ -6952,7 +6970,7 @@ class DataConsistencyChecker:
             # todo: don't check the hour is consistent if it's just consitently missing, which is common. check the
             #   minutes vary, or something.
 
-            minutes_list = pd.Series([x.minute for x in self.orig_df[col_name]])
+            minutes_list = pd.Series([x.minute for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = minutes_list.value_counts()
             rare_minutes = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
             if len(rare_minutes) == 0:
@@ -6993,7 +7011,7 @@ class DataConsistencyChecker:
                 col_name_2 = self.date_cols[col_name_idx_2]
                 gap_array = pd.Series([0 if (is_missing(x) or is_missing(y))
                                        else (x-y).days
-                                       for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])])
+                                       for x, y in zip(pd.to_datetime(self.orig_df[col_name_1]), pd.to_datetime(self.orig_df[col_name_2]))])
                 gap_array = gap_array | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_counts(
                     test_id,
@@ -7020,10 +7038,10 @@ class DataConsistencyChecker:
     def __check_large_date_gap(self, test_id):
         for col_name_idx_1 in range(len(self.date_cols)-1):
             col_name_1 = self.date_cols[col_name_idx_1]
-            med_1 = self.orig_df[col_name_1].quantile(0.5, interpolation='midpoint')
+            med_1 = pd.to_datetime(self.orig_df[col_name_1]).quantile(0.5, interpolation='midpoint')
             for col_name_idx_2 in range(col_name_idx_1 + 1, len(self.date_cols)):
                 col_name_2 = self.date_cols[col_name_idx_2]
-                med_2 = self.orig_df[col_name_2].quantile(0.5, interpolation='midpoint')
+                med_2 = pd.to_datetime(self.orig_df[col_name_2]).quantile(0.5, interpolation='midpoint')
                 if med_1 > med_2:
                     col_big = col_name_1
                     col_small = col_name_2
@@ -7034,7 +7052,7 @@ class DataConsistencyChecker:
                                        else (x-y).days
                                        for x, y in zip(self.orig_df[col_big], self.orig_df[col_small])])
                 gap_array_no_null = pd.Series([(x-y).days
-                                               for x, y in zip(self.orig_df[col_big], self.orig_df[col_small])
+                                               for x, y in zip(pd.to_datetime(self.orig_df[col_big]), pd.to_datetime(self.orig_df[col_small]))
                                                if not is_missing(x) and not is_missing(y)])
                 q1 = gap_array_no_null.quantile(0.25)
                 q3 = gap_array_no_null.quantile(0.75)
@@ -10288,10 +10306,18 @@ class DataConsistencyChecker:
                 test_series = [True] * self.num_rows
                 for v in common_values:
                     sub_df = self.orig_df[[col_name_2]][self.orig_df[col_name_1] == v]
-                    q1 = sub_df[col_name_2].quantile(0.25)
-                    q3 = sub_df[col_name_2].quantile(0.75)
-                    upper_limit = q3 + (self.iqr_limit * (q3 - q1))
-                    res = sub_df[col_name_2] <= upper_limit
+                    if col_name_2 in self.numeric_cols:
+                        num_vals = pd.Series([x for x in self.orig_df[col_name_2] if isinstance(x, numbers.Number)])
+                        q1 = num_vals.quantile(0.25)
+                        q3 = num_vals.quantile(0.75)
+                        upper_limit = q3 + (self.iqr_limit * (q3 - q1))
+                        #res = sub_df[col_name_2].astype(float) <= upper_limit
+                        res = pd.Series([x <= upper_limit if isinstance(x, numbers.Number) else True for x in sub_df[col_name_2]])
+                    else:
+                        q1 = pd.to_datetime(sub_df[col_name_2]).quantile(0.25, interpolation='midpoint')
+                        q3 = pd.to_datetime(sub_df[col_name_2]).quantile(0.75, interpolation='midpoint')
+                        upper_limit = q3 + (self.iqr_limit * (q3 - q1))
+                        res = pd.to_datetime(sub_df[col_name_2]) <= upper_limit
                     if 0 < res.tolist().count(False) <= self.contamination_level:
                         index_of_large = [x for x, y in zip(sub_df.index, res) if y == False]
                         for i in index_of_large:
@@ -11104,7 +11130,7 @@ class DataConsistencyChecker:
         data_b = np.array(data_b).reshape(1, -1)[0]
 
         self.__add_synthetic_column('unique_sets rand', data_a)
-        self.__add_synthetic_column('unique_sets all_b', data_b)
+        self.__add_synthetic_column('unique_sets all', data_b)
         self.__add_synthetic_column('unique_sets most', data_b)
         self.synth_df.loc[999, 'unique_sets most'] = 98  # repeating a combination with 9 in column 'all_a'
 
@@ -11114,7 +11140,7 @@ class DataConsistencyChecker:
 
         # Get the set of columns that have not too many unique values. This is not strictly necessary, but a set of
         # columns with a unique combination of values is less meaningful if one or more of the columns have many
-        # unique values in themselves. Also get and cache the number of unique values per column.
+        # unique values in themselves. As well, get and cache the number of unique values per column.
         cols = []
         num_unique_vals_dict = {}
         for col_name in self.orig_df.columns:
@@ -11123,6 +11149,7 @@ class DataConsistencyChecker:
                 num_unique_vals_dict[col_name] = self.orig_df[col_name].nunique()
 
         found_any = False
+        printed_subset_size_msg = False
         for subset_size in range(len(cols), 1, -1):
             if found_any:
                 break
@@ -11130,9 +11157,10 @@ class DataConsistencyChecker:
             calc_size = math.comb(len(cols), subset_size)
             skip_subsets = calc_size > self.max_combinations
             if skip_subsets:
-                if self.verbose >= 2:
-                    print((f"    Skipping subsets of size {subset_size}. There are {calc_size:,} subsets. max_combinations is "
-                           f"currently set to {self.max_combinations:,}"))
+                if self.verbose >= 2 and not printed_subset_size_msg:
+                    print((f"    Skipping subsets of size {subset_size} and larger. There are {calc_size:,} subsets. "
+                           f"max_combinations is currently set to {self.max_combinations:,}"))
+                    printed_subset_size_msg = True
                 continue
 
             subsets = list(combinations(cols, subset_size))
