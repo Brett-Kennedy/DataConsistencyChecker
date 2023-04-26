@@ -214,6 +214,9 @@ class DataConsistencyChecker:
                                           'column'),
                                          self.__check_number_decimals, self.__generate_number_decimals,
                                          False, True, True),
+            'RARE_DECIMALS':            ('Check if there are any uncommon sets of digits after the decimal point',
+                                         self.__check_rare_decimals, self.__generate_rare_decimals,
+                                         True, True, True),
             'COLUMN_ORDERED_ASC':       ('Check if the column is monotonically increasing',
                                          self.__check_column_increasing, self.__generate_column_increasing,
                                          True, True, True),
@@ -892,9 +895,11 @@ class DataConsistencyChecker:
         for col_name in self.binary_cols:
             self.column_unique_vals[col_name] = sorted([x for x in self.orig_df[col_name].unique() if not is_missing(x)])
 
-        # For all numeric columns, get the set of truly numeric values. This may have less than self.numrows elements.
+        # For all numeric columns, get the set of truly numeric values. This may have less than self.num_rows elements.
         for col_name in self.numeric_cols:
-            self.numeric_vals[col_name] = pd.Series([float(x) for x in self.orig_df[col_name] if (isinstance(x, numbers.Number) or str(x).replace('-', '').replace('.', '').isdigit())])
+            self.numeric_vals[col_name] = pd.Series(
+                [float(x) for x in self.orig_df[col_name]
+                 if (isinstance(x, numbers.Number) or str(x).replace('-', '').replace('.', '').isdigit())])
 
         # Calculate and cache the median for each numeric column.
         self.column_medians = {}
@@ -3827,6 +3832,43 @@ class DataConsistencyChecker:
                 allow_patterns=((len(common_num_digits) > 1) or (common_num_digits[0] != 0))
             )
             # todo: we need to display the decimals better, likely converting to str; otherwise only a few decimals are shown.
+
+    def __generate_rare_decimals(self):
+        """
+        Patterns without exceptions: 'rare_decimals_all' consistently has values ending in a small set of values after
+            the decimal point.
+        Patterns with exception: 'most' consistently has values ending in a small set of values after
+            the decimal point, with 1 exception.
+        """
+        self.__add_synthetic_column('rare_decimals_rand',
+                                    [np.random.random() * 1000.0 for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('rare_decimals_all',
+                                    [np.random.randint(1, 100) + np.random.choice([0.49, 0.98, 0.99])
+                                     for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('rare_decimals_most',
+                                    [np.random.randint(1, 100) + np.random.choice([0.49, 0.98, 0.99])
+                                     for _ in range(self.num_synth_rows - 1)] + [5.74])
+
+    def __check_rare_decimals(self, test_id):
+        for col_name in self.numeric_cols:
+            vals_arr = self.numeric_vals[col_name]  # This has the non-numeric values removed, but may contain NaNs.
+            vals_arr = vals_arr.dropna()
+            vals_arr = pd.Series([x[1] for x in vals_arr.astype(str).str.split('.')])
+            vc = vals_arr.value_counts()
+            common_values = [x for x, y in zip(vc.index, vc.values) if y > (self.num_rows * 0.01)]
+            if len(common_values) > 10:
+                continue
+            if len(common_values) == 0:
+                continue
+            test_series = [True if y else x[1] in common_values
+                            for x, y in zip(self.numeric_vals_filled[col_name].astype(str).str.split('.'),
+                                            self.orig_df[col_name].isna())]
+            self.__process_analysis_binary(
+                test_id,
+                col_name,
+                [col_name],
+                test_series,
+                f"The column consistently contains values with one of {common_values} after the decimal point")
 
     def __generate_column_increasing(self):
         """
