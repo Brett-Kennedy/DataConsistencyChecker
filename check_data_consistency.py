@@ -138,6 +138,9 @@ class DataConsistencyChecker:
         self.date_cols = []
         self.string_cols = []
 
+        # Similar variables related to the sample df
+        self.sample_numeric_vals_filled = {}
+
         # The number of tests executed. This will be the full set unless an list of tests to perform / excluded
         # is provided.
         self.n_tests_executed = 0
@@ -711,7 +714,7 @@ class DataConsistencyChecker:
                                          True, True, False),
             'SMALL_GIVEN_VALUE':        (('Check if the value in the numeric column is very small given the value in '
                                           'the categorical column'),
-                                         self.__check_very_small_given, self.__generate_very_small_given,
+                                         self.__check_small_given, self.__generate_small_given,
                                          True, True, False),
             'LARGE_GIVEN_PREFIX':       (('Check if the value in the numeric column is very large given the first '
                                           'word in the categorical column'),
@@ -914,9 +917,9 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols:
             self.numeric_vals_filled[col_name] = convert_to_numeric(self.orig_df[col_name], self.column_medians[col_name])
 
-        # Calculate and cache the pairwise correlations between each numeric column
         trimmed_orig_df = self.orig_df.copy()
         if len(self.numeric_cols) > 0:
+            # Calculate and cache the pairwise correlations between each numeric column
             numeric_df = None
             for col_name in self.numeric_cols:
                 if numeric_df is None:
@@ -924,15 +927,19 @@ class DataConsistencyChecker:
                 else:
                     numeric_df = pd.concat([numeric_df, convert_to_numeric(self.orig_df[col_name], self.column_medians[col_name])], axis=1)
             numeric_df.columns = self.numeric_cols
-            self.pearson_corr = numeric_df.corr(method='pearson')
-            self.spearman_corr = numeric_df.corr(method='spearman')
+
+            # Calculate the correlations between the numeric columns
+            if len(self.numeric_cols) >= 2:
+                self.pearson_corr = numeric_df.corr(method='pearson')
+                self.spearman_corr = numeric_df.corr(method='spearman')
 
             # Calculate the trimmed mean for each numeric column
             for col_name in self.numeric_cols:
                 lower_limit = self.numeric_vals[col_name].quantile(0.01)
                 upper_limit = self.numeric_vals[col_name].quantile(0.99)
-                trimmed_orig_df = trimmed_orig_df[(trimmed_orig_df[col_name] > lower_limit) &
-                                                  (trimmed_orig_df[col_name] < upper_limit)]
+                reduced_numeric_vals_filled = self.numeric_vals_filled[col_name].loc[trimmed_orig_df.index]
+                trimmed_orig_df = trimmed_orig_df[(reduced_numeric_vals_filled > lower_limit) &
+                                                  (reduced_numeric_vals_filled < upper_limit)]
             self.column_trimmed_means = {}
             for col_name in self.numeric_cols:
                 self.column_trimmed_means[col_name] = trimmed_orig_df[col_name].mean()
@@ -945,6 +952,10 @@ class DataConsistencyChecker:
             self.sample_df = self.orig_df.dropna().sample(n=50)
         else:
             self.sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50))
+
+        # Similar to numeric_vals_filled, fill in this for the sample_df
+        for col_name in self.numeric_cols:
+            self.sample_numeric_vals_filled[col_name] = convert_to_numeric(self.sample_df[col_name], self.column_medians[col_name])
 
         # todo: can probably remove these
         # Calculate the contamination rate on the sample. This is the maximum number of rows in the sample which may be
@@ -1828,14 +1839,50 @@ class DataConsistencyChecker:
     def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
         col_name_1, col_name_2 = cols
         fig, ax = plt.subplots(figsize=(4, 4))
-        s = sns.scatterplot(data=self.orig_df, x=col_name_1, y=col_name_2, color='blue', alpha=0.2, label='Not Flagged')
+
+        if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
+            df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
+                               col_name_2: self.numeric_vals_filled[col_name_2]})
+        else:
+            df = self.orig_df[[col_name_1, col_name_2]].copy()
+        if show_exceptions:
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            df['Flagged'] = results_col
+            color_dict = {0: 'blue', False: 'blue', 1: 'red', True: 'red'}
+            s = sns.scatterplot(data=df, x=col_name_1, y=col_name_2, hue='Flagged', palette=color_dict, alpha=0.8)
+            s.set_title(f'Distribution of "{col_name_1}" and "{col_name_2}" (Flagged values in red)')
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        else:
+            s = sns.scatterplot(data=self.orig_df,
+                                x=col_name_1,
+                                y=col_name_2,
+                                color='blue',
+                                alpha=0.2,
+                                label='Not Flagged')
+            s.set_title(f'Distribution of "{col_name_1}" and "{col_name_2}"')
+
+        if col_name_1 in self.date_cols:
+            fig.autofmt_xdate()
+
+        # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
+        if test_id in ['RARE_COMBINATION']:
+            for v in display_info['bins_1']:
+                if v not in [-np.inf, np.inf]:
+                    ax.axvline(v, color='green')
+            for v in display_info['bins_2']:
+                if v not in [-np.inf, np.inf]:
+                    ax.axhline(v, color='green')
+
+        plt.show()
+        '''
+        df = pd.DataFrame({col_name_1: self.numeric_vals[col_name_1], col_name_2: self.numeric_vals[col_name_2]})
+        s = sns.scatterplot(data=df, x=col_name_1, y=col_name_2, color='blue', alpha=0.2, label='Not Flagged')
         if show_exceptions:
             s.set_title(f'Distribution of "{col_name_1}" and "{col_name_2}" (Flagged values in red)')
         else:
             s.set_title(f'Distribution of "{col_name_1}" and "{col_name_2}"')
 
-        the grid lines look off -- figure that out! we're missing one each dimension
-        also check we don't have the x & y switched. maybe put the synth data on 2 different scales.
         if test_id in ['RARE_COMBINATION']:
             for v in display_info['bins_1']:
                 if v not in [-np.inf, np.inf]:
@@ -1849,7 +1896,7 @@ class DataConsistencyChecker:
             results_col_name = self.get_results_col_name(test_id, columns_set)
             results_col = self.test_results_df[results_col_name]
             flagged_idxs = np.where(results_col)
-            s = sns.scatterplot(data=self.orig_df.loc[flagged_idxs], x=col_name_1, y=col_name_2, color='red', label='Flagged')
+            s = sns.scatterplot(data=self.orig_df.loc[flagged_idxs], x=col_name_1, y=col_name_2, color='red', label='Flagged',ax=ax)
 
         ax.tick_params(axis='x', labelrotation=45)
         if show_exceptions:
@@ -1857,6 +1904,7 @@ class DataConsistencyChecker:
         else:
             plt.legend().remove()
         plt.show()
+        '''
 
     def __plot_count_plot(self, column_name):
         plt.subplots(figsize=(4, 4))
@@ -2186,6 +2234,13 @@ class DataConsistencyChecker:
         if test_id in ['SMALL_GIVEN_VALUE', 'LARGE_GIVEN_VALUE', 'BINARY_MATCHES_VALUE']:
             self.__draw_box_plots(test_id, cols, columns_set)
 
+        if test_id in ['BINARY_MATCHES_SUM']:
+            df2 = self.orig_df[cols].copy()
+            df2['SUM'] = self.numeric_vals_filled[cols[0]] + self.numeric_vals_filled[cols[1]]
+            s = sns.boxplot(data=df2, orient='h', y=cols[2], x='SUM')
+            s.set_title(f"{cols[2]} vs the SUM of {cols[0]} and {cols[1]}")
+            plt.show()
+
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
             sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
             plt.show()
@@ -2309,6 +2364,17 @@ class DataConsistencyChecker:
                             df3 = df2.loc[flagged_idx]
                             s = sns.scatterplot(data=df3, x=cols[0], y=cols[1], color='red')
                 plt.show()
+
+        elif test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
+            df2 = pd.DataFrame({cols[0]: self.numeric_vals_filled[cols[0]], cols[1]: self.orig_df[cols[1]]})
+            if show_exceptions:
+                results_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
+                df2['Flagged'] = results_col
+                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], hue='Flagged')
+            else:
+                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
+            plt.show()
 
     def display_detailed_results(
             self,
@@ -3576,6 +3642,7 @@ class DataConsistencyChecker:
         """
         self.__add_synthetic_column('same null_a', [None] * self.num_synth_rows)
         self.synth_df.loc[0, 'same null_a'] = 1.0
+        self.synth_df.loc[1, 'same null_a'] = 1.0
 
         self.__add_synthetic_column('same null_b', [None] * self.num_synth_rows)
         self.synth_df.loc[1, 'same null_b'] = 2.0
@@ -4175,7 +4242,7 @@ class DataConsistencyChecker:
         """
         self.__add_synthetic_column('few in range rand', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column(
-            'few in range all ',
+            'few in range all',
             [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000)
                                                                                     for _ in range(100)])
         self.__add_synthetic_column(
@@ -4572,12 +4639,12 @@ class DataConsistencyChecker:
             if self.verbose >= 2 and cols_idx > 0 and cols_idx % 10_000 == 0:
                 print(f"  Examining pair {cols_idx:,} of {len(col_pairs):,} pairs of numeric columns")
 
-            if self.column_medians[col_name_1] < (self.column_medians[col_name_2] * 5.0):
+            if self.column_medians[col_name_1] < (self.column_medians[col_name_2]):
                 continue
 
             # Test on a sample
-            vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
             sample_series = np.where(
                 self.sample_df[col_name_2] != 0,
                 (vals_arr_1 / vals_arr_2) > 10.0,
@@ -4588,8 +4655,8 @@ class DataConsistencyChecker:
                 continue
 
             # Test on the full column
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series = np.where(
                 self.orig_df[col_name_2] != 0,
                 (vals_arr_1 / vals_arr_2) > 10.0,
@@ -4602,7 +4669,7 @@ class DataConsistencyChecker:
                 f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
-                f'"{col_name_1}" is consistently much larger than "{col_name_2}"',
+                f'"{col_name_1}" is consistently an order of magnitude or more larger than "{col_name_2}"',
                 '(where values may still be larger, but not by the normal extent)')
 
     def __generate_similar_wrt_ratio(self):
@@ -5050,10 +5117,10 @@ class DataConsistencyChecker:
         """
         common_vals = []
         for i in range(8):
-            for j in range(8):
-                if i == 0 or i == 7 or j == 0 or j == 7:
+            for j in range(80):
+                if i == 0 or i == 7 or j == 0 or j == 70:
                     common_vals.append([i, j])
-        rare_vals = [[2, 2]]
+        rare_vals = [[3, 30]]
         data = np.array([common_vals[np.random.choice(len(common_vals))] for _ in range(self.num_synth_rows - 1)])
         data = np.vstack([data, rare_vals])
         self.__add_synthetic_column('rare_combo all_a', data[:, 0])
@@ -5070,17 +5137,19 @@ class DataConsistencyChecker:
         """
         def get_bins(col_name, num_bins):
             if self.orig_df[col_name].dropna().nunique() < num_bins:
-                return None
-            bins = [-np.inf]
+                return None, []
+            bins = []
             min_val = self.numeric_vals[col_name].min()
             max_val = self.numeric_vals[col_name].max()
             col_range = max_val - min_val
             bin_width = col_range / num_bins
-            for i in range(num_bins-1):
+            for i in range(num_bins+1):
                 bins.append(min_val + (i * bin_width))
-            bins.append(np.inf)
+            bins[0] = bins[0] - (bin_width / 10.0)
+            bins[-1] = bins[-1] + (bin_width / 10.0)
             bin_labels = [int(x) for x in range(len(bins)-1)]
-            vals_arr = convert_to_numeric(self.orig_df[col_name], self.column_medians[col_name])
+            #vals_arr = convert_to_numeric(self.orig_df[col_name], self.column_medians[col_name])
+            vals_arr = self.numeric_vals_filled[col_name]
             binned_values = pd.cut(vals_arr, bins, labels=bin_labels)
             return binned_values, bins
 
@@ -5102,7 +5171,7 @@ class DataConsistencyChecker:
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 5_000 == 0:
-                print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns.")
+                print(f"  Examining pair {pair_idx:,} of {num_pairs:,} pairs of numeric columns.")
 
             bins_1 = column_bins[col_name_1]
             bins_2 = column_bins[col_name_2]
@@ -5134,7 +5203,7 @@ class DataConsistencyChecker:
             # Identify the internal cells with low counts.
             low_count_cells = []
             for i in range(1, num_bins-1):
-                for j in range(2, num_bins-1):
+                for j in range(1, num_bins-1):
                     if cell_counts[i][j] <= cell_limit:
                         if counts_col_1[i] > self.contamination_level and counts_col_2[j] > self.contamination_level:
                             low_count_cells.append((i, j))
@@ -5557,8 +5626,10 @@ class DataConsistencyChecker:
 
     def __generate_matched_zero_missing(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'matched zero miss rand_a' and 'matched zero miss all' are matched such that when
+             'matched zero miss rand_a' has 0, 'matched zero miss all' has NaN.
+        Patterns with exception: 'matched zero miss rand_a' and 'matched zero miss most' are matched such that when
+             'matched zero miss rand_a' has 0, 'matched zero miss most' has NaN, with 1 exception.
         """
         self.__add_synthetic_column('matched zero miss rand_a', [random.randint(0, 10) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('matched zero miss rand_b', [random.randint(0, 10) for _ in range(self.num_synth_rows)])
@@ -5577,26 +5648,44 @@ class DataConsistencyChecker:
         "Age First Child". If there are zero children, we expect Null in the other column.
         """
         # todo: when list non-flagged, give examples all 4 combos
+
+        # Calculate and cache the col_missing_arr for every column
+        sample_col_missing_dict = {}
+        col_missing_dict = {}
+        count_missing_dict = {}
+        for col_name in self.orig_df.columns:
+            sample_col_missing_dict[col_name] = [is_missing(x) for x in self.orig_df.head(50)[col_name]]
+            col_missing_dict[col_name] = [is_missing(x) for x in self.orig_df[col_name]]
+            count_missing_dict[col_name] = col_missing_dict[col_name].count(True)
+
         for col_idx, col_name_1 in enumerate(self.numeric_cols):
-            if self.verbose >= 2:
-                if col_idx > 0 and col_idx % 50 == 0:
+            if self.verbose >= 2 and col_idx > 0 and col_idx % 50 == 0:
                     print(f"  Processing column: {col_idx} of {len(self.numeric_cols)} numeric columns)")
+            # We use the first 50 rows of orig_df instead of sample_df, as it has few Null values.
+            sample_col_1_zero_arr = [x == 0 for x in self.orig_df.head(50)[col_name_1]]
             col_1_zero_arr = [x == 0 for x in self.orig_df[col_name_1]]
             num_zero_1 = col_1_zero_arr.count(True)
-            if num_zero_1 == 0:
+            if num_zero_1 < (self.num_rows / 100.0):
                 continue
             for col_name_2 in self.orig_df.columns:
                 if col_name_1 == col_name_2:
                     continue
-                col_2_missing_arr = [is_missing(x) for x in self.orig_df[col_name_2]]
-                num_missing_2 = col_2_missing_arr.count(True)
-                if num_missing_2 == 0:
+                sample_col_2_missing_arr = sample_col_missing_dict[col_name_2]
+                col_2_missing_arr = col_missing_dict[col_name_2]
+                num_missing_2 = count_missing_dict[col_name_2]
+                if num_missing_2 < (self.num_rows / 100.0):
                     continue
 
                 # If the difference between the number of missing values is too large, there is not a pattern
                 if abs(num_zero_1 - num_missing_2) > (self.contamination_level * 2.0):
                     continue
 
+                # Test first on a sample
+                test_series = np.array([x == y for x, y in zip(sample_col_1_zero_arr, sample_col_2_missing_arr)])
+                if test_series.tolist().count(False) > 1:
+                    continue
+
+                # Test of the full columns
                 test_series = np.array([x == y for x, y in zip(col_1_zero_arr, col_2_missing_arr)])
                 self.__process_analysis_binary(
                     test_id,
@@ -6444,7 +6533,7 @@ class DataConsistencyChecker:
         """
         This test loops through each numeric column and determines if that column is the mean of some subset of the
         other numeric columns. Doing this, it is able to cache information from the first few columns checked,
-        so subsequent columns tend to execute much faster.
+        and consequently, subsequent columns tend to execute much faster.
         """
 
         # Track which columns are mostly positive. We execute this test only on those columns.
@@ -6461,23 +6550,24 @@ class DataConsistencyChecker:
         for col_idx, col_name in enumerate(pos_cols_list):
             if self.verbose >= 2:
                 print((f'  Processing column: {col_idx} of {len(pos_cols_list)} positive numeric columns (and all '
-                       f'numeric columns of similar ranges'))
+                       f'numeric columns of similar ranges)'))
 
             # Identify the columns with similar values, based on the medians
             printed_subset_size_msg = False
             similar_cols = [col_name]
             for c in pos_cols_list:
-                # We provide for a large range, which can be found with, for example, tax values and so on, which may
-                # be only 1 to 15% of the total column
                 if c == col_name:
                     continue
+                # We provide for a large range, which can be found with, for example, tax values and so on, which may
+                # be only 1 to 15% of the total column
                 if (self.column_medians[col_name] / 5.0) < self.column_medians[c] < (self.column_medians[col_name] * 5.0):
                     # Ensure the columns are correlated with col_name. Any columns related to  col_name should be
                     # correlated.
                     corr = self.pearson_corr.loc[col_name, c]
                     if corr > 0.4:
                         similar_cols.append(c)
-            if len(similar_cols) == 1:
+            # We require at least 3 columns, such that one is the mean of the other 2 or mor
+            if len(similar_cols) <= 2:
                 continue
 
             # Check if we've evaluated the same set, or a superset of this
@@ -6493,6 +6583,7 @@ class DataConsistencyChecker:
 
             if self.verbose >= 2:
                 print(f"    There are {len(similar_cols_set)} columns with similar ranges of values.")
+                print("     the set:", similar_cols_set)
             found_any = False
             for subset_size in range(len(similar_cols), 2, -1):
                 if found_any:
@@ -7638,6 +7729,7 @@ class DataConsistencyChecker:
         Patterns without exceptions: This method identifies exceptions, but not patterns.
         Patterns with exception: 'large_given_date all' is well correlated with the date and has no exceptions.
             'large_given_date most' has one value in the last date bin which is very large, even for that bin.
+        # todo: should test with a largish value in one of the early rows.
         """
         test_date1 = datetime.datetime.strptime("01-7-2022", "%d-%m-%Y")
         self.__add_synthetic_column('large_given_date rand', pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
@@ -7658,19 +7750,24 @@ class DataConsistencyChecker:
                 bin_labels.append(-1)
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
             bin_row_idxs = {}
+            sub_dfs_arr_dict = {}
             for bin_id in bin_labels:
                 bin_row_idxs[bin_id] = np.where(bin_assignments == bin_id)
+                sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
                 test_series = pd.Series()
                 for bin_id in bin_labels:
-                    sub_df = self.orig_df.loc[bin_row_idxs[bin_id]]
+                    sub_df = sub_dfs_arr_dict[bin_id]
                     num_vals = pd.Series([float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
                     q1 = num_vals.quantile(0.25)
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
                     threshold = q3 + (iqr * self.iqr_limit)
+
+                    # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
+                    # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
                     sub_test_series = pd.Series(num_vals_all > threshold)
                     sub_test_series.index = list(bin_row_idxs[bin_id])
@@ -7692,7 +7789,8 @@ class DataConsistencyChecker:
         Patterns with exception:
         """
         test_date1 = datetime.datetime.strptime("01-7-2022", "%d-%m-%Y")
-        self.__add_synthetic_column('small_given_date rand', pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
+        self.__add_synthetic_column('small_given_date rand',
+                                    pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
         self.__add_synthetic_column('small_given_date all ', [x for x in range(self.num_synth_rows)])
         self.__add_synthetic_column('small_given_date most', [x for x in range(self.num_synth_rows - 1)] + [2])
 
@@ -7710,19 +7808,24 @@ class DataConsistencyChecker:
                 bin_labels.append(-1)
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
             bin_row_idxs = {}
+            sub_dfs_arr_dict = {}
             for bin_id in bin_labels:
                 bin_row_idxs[bin_id] = np.where(bin_assignments == bin_id)
+                sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
                 test_series = pd.Series()
                 for bin_id in bin_labels:
-                    sub_df = self.orig_df.loc[bin_row_idxs[bin_id]]
+                    sub_df = sub_dfs_arr_dict[bin_id]
                     num_vals = pd.Series([float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
                     q1 = num_vals.quantile(0.25)
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
                     threshold = q1 - (iqr * self.iqr_limit)
+
+                    # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
+                    # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
                     sub_test_series = pd.Series(num_vals_all < threshold)
                     sub_test_series.index = list(bin_row_idxs[bin_id])
@@ -8027,8 +8130,8 @@ class DataConsistencyChecker:
                             return
 
         for col_idx, col_name in enumerate(self.binary_cols):
-            if self.verbose >= 2:
-                print(f"  Processing column: {col_name} ({col_idx + 1} of {len(self.binary_cols)} binary columns)")
+            if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
+                print(f"  Examining column: {col_idx} of {len(self.binary_cols)} binary columns)")
             col_vals = self.column_unique_vals[col_name]
             if self.orig_df[col_name].tolist().count(col_vals[0]) < (self.num_rows * 0.1) or \
                     self.orig_df[col_name].tolist().count(col_vals[1]) < (self.num_rows * 0.1):
@@ -8505,12 +8608,23 @@ class DataConsistencyChecker:
     def __check_binary_two_others_match(self, test_id):
 
         def test_set(bin_col, col_name_2, col_name_3):
+            nonlocal sub_df_0, sub_df_1
 
             # When checking pairs of binary columns, one may be the same as the bin_col
             if bin_col == col_name_2 or bin_col == col_name_3:
                 return
 
-            # Test first on a sample of the columns
+            # Test if the columns appear to be equal at least some of the time
+            if (col_name_2, col_name_3) not in cols_equal_dict:
+                equal_array = (self.sample_df[col_name_2] == self.sample_df[col_name_3]) | \
+                              (self.sample_df[col_name_2].isna() & self.sample_df[col_name_3].isna())
+                num_equal = equal_array.tolist().count(True)
+                cols_equal_dict[(col_name_2, col_name_3)] = num_equal
+            num_equal = cols_equal_dict[(col_name_2, col_name_3)]
+            if num_equal == 0:
+                return
+
+            # Test first on a sample of the rows where the bin_col has value 0
             if sample_sub_df_0[col_name_2].dtype.name == 'category' or \
                     sample_sub_df_0[col_name_3].dtype.name == 'category':
                 test_series_0 = sample_sub_df_0[col_name_2].astype(str) == sample_sub_df_0[col_name_3].astype(str)
@@ -8522,7 +8636,7 @@ class DataConsistencyChecker:
             if (test_series_0.tolist().count(True) > 2) and (test_series_0.tolist().count(False) > 2):
                 return
 
-            # Test first on a sample of the columns
+            # Test on a sample of the rows where bin_col has value 1
             if sample_sub_df_0[col_name_2].dtype.name == 'category' or \
                     sample_sub_df_0[col_name_3].dtype.name == 'category':
                 test_series_1 = sample_sub_df_1[col_name_2].astype(str) == sample_sub_df_1[col_name_3].astype(str)
@@ -8543,6 +8657,10 @@ class DataConsistencyChecker:
                 return
 
             # Test on the full columns
+            if sub_df_0 is None:
+                sub_df_0 = self.orig_df[self.orig_df[bin_col] == val0]
+                sub_df_1 = self.orig_df[self.orig_df[bin_col] == val1]
+
             # Todo: this handles when the dtype is 'category', but it may be faster to treat as category
             if sub_df_0[col_name_2].dtype.name == 'category' or sub_df_0[col_name_3].dtype.name == 'category':
                 test_series_0 = sub_df_0[col_name_2].astype(str) == sub_df_0[col_name_3].astype(str)
@@ -8594,9 +8712,10 @@ class DataConsistencyChecker:
                  f"{col_name_3} match values, and value {value_when_dont} when they do not match")
             )
 
+        cols_equal_dict = {}
         for bin_idx, bin_col in enumerate(self.binary_cols):
-            if self.verbose >= 2:
-                print(f"  Examining binary column {bin_idx} of {len(self.binary_cols)}")
+            if self.verbose >= 2 and bin_idx > 0 and bin_idx % 10 == 0:
+                print(f"  Examining column {bin_idx} of {len(self.binary_cols)} binary columns")
 
             # Test the binary column contains both values a reasonable amount.
             val0, val1 = self.column_unique_vals[bin_col]
@@ -8609,8 +8728,8 @@ class DataConsistencyChecker:
             # dataframe as well.
             sample_sub_df_0 = self.sample_df[self.sample_df[bin_col] == val0]
             sample_sub_df_1 = self.sample_df[self.sample_df[bin_col] == val1]
-            sub_df_0 = self.orig_df[self.orig_df[bin_col] == val0]
-            sub_df_1 = self.orig_df[self.orig_df[bin_col] == val1]
+            sub_df_0 = None
+            sub_df_1 = None
 
             # Test for each pair columns, where the pair are of the same type.
             _, pairs = self.__get_numeric_column_pairs_unique()
@@ -8652,8 +8771,10 @@ class DataConsistencyChecker:
     #########################################################################
     def __generate_binary_matches_sum(self):
         """
-        Patterns without exceptions:
-        Patterns with exception: The test for the threshold is approximate, so rows near the threshold may be flogged.
+        Patterns without exceptions: 'bin_match_sum all' is consistently False when the sum of 'bin_match_sum rand_a'
+            and 'bin_match_sum rand_b' is below 1000 and True when the sum is above
+        Patterns with exception: 'bin_match_sum most' is consistently False when the sum of 'bin_match_sum rand_a'
+            and 'bin_match_sum rand_b' is below 1000 and True when the sum is above, with 1 exception in row 999.
         """
         self.__add_synthetic_column('bin_match_sum rand_a', np.random.randint(1, 1000, self.num_synth_rows))
         self.__add_synthetic_column('bin_match_sum rand_b', np.random.randint(1, 1000, self.num_synth_rows))
@@ -8663,8 +8784,111 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'bin_match_sum most'] = not self.synth_df.loc[999, 'bin_match_sum most']
 
     def __check_binary_matches_sum(self, test_id):
-        """
-        """
+        _, pairs = self.__get_numeric_column_pairs_unique()
+
+        # Calculate and cache the sums of each pair of numeric columns
+        sums_arr_dict = {}
+        sorted_sums_arr_dict = {}
+        for num_col_1, num_col_2 in pairs:
+            if not self.check_columns_same_scale_2(num_col_1, num_col_2):
+                continue
+            sum_arr = pd.Series(self.numeric_vals_filled[num_col_1] + self.numeric_vals_filled[num_col_2])
+            sum_arr = sum_arr.fillna(self.column_medians[num_col_1] + self.column_medians[num_col_2])
+            sums_arr_dict[(num_col_1, num_col_2)] = sum_arr
+            sorted_sums_arr_dict[(num_col_1, num_col_2)] = pd.Series(sorted(sum_arr))
+
+        for bin_idx, bin_col in enumerate(self.binary_cols):
+            if self.verbose >= 2 and bin_idx > 0 and bin_idx % 1 == 0:
+                print(f"  Examining column {bin_idx} of {len(self.binary_cols)} binary columns")
+
+            val0, val1 = self.column_unique_vals[bin_col]
+            num_val_0 = self.orig_df[bin_col].tolist().count(val0)
+            num_val_1 = self.orig_df[bin_col].tolist().count(val1)
+            if num_val_0 < (self.num_rows * 0.1):
+                continue
+            if num_val_1 < (self.num_rows * 0.1):
+                continue
+
+            for num_col_1, num_col_2 in pairs:
+                if not self.check_columns_same_scale_2(num_col_1, num_col_2):
+                    continue
+
+                sum_arr = sums_arr_dict[(num_col_1, num_col_2)]
+                sorted_sum_arr = sorted_sums_arr_dict[(num_col_1, num_col_2)]
+
+                # We check if it appears the binary column has val_0 for smaller sums, or val_1 for smaller sums.
+                # If either is True, we set a flag and do not check the other.
+                val_0_for_smaller = False
+                val_1_for_smaller = False
+
+                # Test if the binary column is consistently val_0 for the larger values in the numeric column
+                # If bin_col is val_0 for smaller values, then the threshold will be at the point in the sorted
+                # array corresponding to the number of instances of val_0
+                val_at_frac_0 = sorted_sum_arr[num_val_0]
+                idxs_below_threshold_0 = np.where(sum_arr[:50] < val_at_frac_0)
+                sub_df_0 = self.orig_df[bin_col].loc[idxs_below_threshold_0]
+                if sub_df_0.tolist().count(val1) < self.contamination_level:
+                    val_0_for_smaller = True
+
+                if not val_0_for_smaller:
+                    val_at_frac_1 = sorted_sum_arr[num_val_1]
+                    idxs_below_threshold_1 = np.where(sum_arr[:50] < val_at_frac_1)
+                    sub_df_1 = self.orig_df[bin_col].loc[idxs_below_threshold_1]
+                    if sub_df_1.tolist().count(val0) < self.contamination_level:
+                        val_1_for_smaller = True
+
+                if not val_0_for_smaller and not val_1_for_smaller:
+                    continue
+
+                # Test if the binary column is consistently val_0 for the smaller values in the numeric column
+                if val_0_for_smaller:
+                    threshold = val_at_frac_0
+
+                    # Test on a sample of rows
+                    test_series = [True if (x == val0 and y <= threshold) or (x == val1 and y >= threshold) else False
+                                   for x, y in zip(self.orig_df[bin_col].head(50), sum_arr.head(50))]
+                    test_series = test_series | self.orig_df[bin_col].head(50).isna() | self.orig_df[num_col_1].head(50).isna() | self.orig_df[num_col_2].head(50).isna()
+                    if test_series.tolist().count(False) > 1:
+                        continue
+
+                    # Test on the full columns
+                    test_series = [True if (x == val0 and y <= threshold) or (x == val1 and y >= threshold) else False
+                                   for x, y in zip(self.orig_df[bin_col], sum_arr)]
+                    test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col_1].isna() | self.orig_df[num_col_2].isna()
+                    self.__process_analysis_binary(
+                        test_id,
+                        self.get_col_set_name([num_col_1, num_col_2, bin_col]),
+                        [num_col_1, num_col_2, bin_col],
+                        test_series,
+                        (f'Column "{bin_col}" is consistently {val0} when the sum of columns "{num_col_1}" and '
+                         f'"{num_col_2}" is under {threshold} and {val1} when the sum is over.'),
+                    )
+
+                # Test if the binary column is consistently val_0 for the larger values in the numeric column
+                else:
+                    threshold = val_at_frac_1
+
+                    # Test on a sample of rows
+                    test_series = [True if (x == val1 and y > threshold) or (x == val0 and y <= threshold) else False
+                                   for x, y in zip(self.orig_df[bin_col].head(50), sum_arr.head(50))]
+                    test_series = test_series | self.orig_df[bin_col].head(50).isna() | self.orig_df[num_col_1].head(50).isna() | self.orig_df[num_col_2].head(50).isna()
+                    if test_series.tolist().count(False) > 1:
+                        continue
+
+                    # Test on the full columns
+                    test_series = [True if (x == val1 and y > threshold) or (x == val0 and y <= threshold) else False
+                                   for x, y in zip(self.orig_df[bin_col], sum_arr)]
+                    test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col_1].isna() | self.orig_df[num_col_2].isna()
+                    self.__process_analysis_binary(
+                        test_id,
+                        self.get_col_set_name([num_col_1, num_col_2, bin_col]),
+                        [num_col_1, num_col_2, bin_col],
+                        test_series,
+                        (f'Column "{bin_col}" is consistently {val1} when the sum of columns "{num_col_1}" and '
+                         f'"{num_col_2}" is over {threshold} and {val0} when the sum is under'),
+                    )
+
+        '''        
         _, pairs = self.__get_numeric_column_pairs_unique()
 
         # Calculate and cache the sums of each pair of numeric columns
@@ -8746,6 +8970,7 @@ class DataConsistencyChecker:
                         (f'Column "{bin_col}" is consistently {val1} when the sum of columns "{num_col_1}" and '
                          f'"{num_col_2}" is over {threshold}'),
                     )
+        '''
 
     #########################################################################
     # Data consistency checks for single non-numeric columns
@@ -9852,7 +10077,7 @@ class DataConsistencyChecker:
                                                         ['bbb'] * group_b_len +
                                                         ['ccc'] * (group_c_len - 1) + ['aaa'])
 
-    def __check_grouped_stings_column(self, test_id, col_name, col_values):
+    def __check_grouped_stings_column(self, test_id, sort_col, col_name, col_values):
         """
         This does not currently work well with many Null values.
         """
@@ -9863,12 +10088,11 @@ class DataConsistencyChecker:
         num_same = col_df['Same'].tolist().count(True)
         # There will always be rows not like the next: where the list moves from one value to the next. So ideally,
         # the number of rows that are the same as the next is the total number of rows - (number values -1). As well,
-        # the lastrow is always unlike the next, as the next is undefined.
+        # the last row is always unlike the next, as the next is undefined.
         ideal_same = self.num_valid_rows[col_name] - self.orig_df[col_name].nunique()
         if (ideal_same - num_same) > self.contamination_level:
             return
 
-        # todo: as with ascending & descending, in the detailed description, show the rows above & below
         test_series = np.array([1]*self.num_rows)
         if num_same != ideal_same:
             # Loop through each unique value and find the indexes where it occurs.
@@ -9892,10 +10116,21 @@ class DataConsistencyChecker:
                         for j in range(int(group_starts[i]), int(group_ends[i]+1)):
                             test_series[j] = False
 
+        pattern_cols = [col_name]
+        if sort_col:
+            pattern_cols = [sort_col, col_name]
+
+            # Get the index in the original (unsorted) dataframe of the flagged rows.
+            if test_series.tolist().count(False) < self.contamination_level:
+                idxs = list(np.where(test_series == False)[0])
+                test_series = [True] * self.num_rows
+                for idx in idxs:
+                    test_series[self.orig_df.sort_values(sort_col).index[idx]] = False
+
         self.__process_analysis_binary(
             test_id,
-            col_name,
-            [col_name],
+            self.get_col_set_name(pattern_cols),
+            pattern_cols,
             test_series,
             f"The values in {col_name} are consistently grouped together"
         )
@@ -9909,7 +10144,7 @@ class DataConsistencyChecker:
                 continue
             df = self.orig_df.copy()
             col_series = df[col_name]
-            self.__check_grouped_stings_column(test_id, col_name, col_series)
+            self.__check_grouped_stings_column(test_id, None, col_name, col_series)
 
     ####################################################################################
     # Data consistency checks for pairs of non-numeric columns
@@ -9993,7 +10228,7 @@ class DataConsistencyChecker:
 
     def __generate_rare_pair_first_char(self):
         """
-        Patterns without exceptions:
+        Patterns without exceptions: None
         Patterns with exception: The first column starts with characters a, e, i, and the 2nd with b,d,f,h,j,l. a is
             frequently matched with b and d, but in only once with j
         """
@@ -10012,36 +10247,63 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('rare_pair_first_char all_b', data[:, 1])
 
     def __check_rare_pair_first_char(self, test_id):
-        # todo: skip where columns are long with multiple words
+        """
+        This skips columns where the strings tend to be longer, as this is concerned with values that resemble ids
+        or codes.
+        """
         # todo: give stats about how frequent each first char is, and how many first chars there are
 
+        # The minimum number of times a first character must appear
+        freq_limit = math.pow(self.contamination_level, 2)
+
+        # The maximum number of unique values in a column to consider the column
+        unique_vals_limit = math.sqrt(self.num_rows)
+
         first_chars_dict = {}
+        value_counts_dict = {}
+        char_count_dict = {}
         for col_name in self.string_cols:
             first_chars_dict[col_name] = pd.Series(self.orig_df[col_name].astype(str).str[:1])
+            value_counts_dict[col_name] = first_chars_dict[col_name].value_counts()
+            val_lens = self.orig_df[col_name].astype(str).str.len()
+            median_len = val_lens.quantile(0.5)
+            char_count_dict[col_name] = median_len
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        pairs = self.__get_string_column_pairs_unique()
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+            if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
+                print(f"  Examining pair: {pair_idx:,} of {len(pairs):,} pairs of binary columns)")
+
+            vc_1 = value_counts_dict[col_name_1]
+            vc_2 = value_counts_dict[col_name_2]
+
             # Skip columns that have many unique values, as all combinations will be somewhat rare.
-            if first_chars_dict[col_name_1].nunique() > math.sqrt(self.num_rows) or \
-                    first_chars_dict[col_name_1].nunique() > math.sqrt(self.num_rows):
+            if (len(vc_1) > unique_vals_limit) or (len(vc_2) > unique_vals_limit):
                 continue
-            vc_1 = first_chars_dict[col_name_1].value_counts()
-            vc_2 = first_chars_dict[col_name_2].value_counts()
+
+            # Skip columns that have values that tend to be long
+            if (char_count_dict[col_name_1] > 10) or (char_count_dict[col_name_2] > 10):
+                continue
+
             rare_pairs_arr = []
             test_series = np.array([True] * self.num_rows)
             for v1 in vc_1.index:
                 # Skip values that are themselves rare enough that rare combinations including it would be expected
-                if vc_1[v1] < math.pow(self.contamination_level, 2):
+                if vc_1[v1] < freq_limit:
                     continue
                 for v2 in vc_2.index:
-                    if vc_2[v2] < math.pow(self.contamination_level, 2):
+                    if vc_2[v2] < freq_limit:
                         continue
                     sub_df = self.orig_df[(first_chars_dict[col_name_1] == v1) &
                                           (first_chars_dict[col_name_2] == v2)]
                     count_pair = len(sub_df)
                     if count_pair == 0:
                         continue
+
                     # The expected_count is the number we would expect given the marginal frequencies of the two values
-                    expected_count = ((vc_1[v1] / self.num_rows) * (vc_2[v2] / self.num_rows)) * self.num_rows
+                    # This is ((vc_1[v1] / self.num_rows) * (vc_2[v2] / self.num_rows)) * self.num_rows, but simplified
+                    # here for efficiency.
+                    expected_count = (vc_1[v1] / self.num_rows) * vc_2[v2]
 
                     # Check the count is both low and lower than expected.
                     if count_pair < self.contamination_level and count_pair < (expected_count * 0.5):
@@ -10895,14 +11157,16 @@ class DataConsistencyChecker:
                 continue
             vc = self.orig_df[col_name_1].value_counts()
             common_values = []
+            sub_dfs_dict = {}
             for v in vc.index:
                 if vc[v] > math.sqrt(self.num_rows):
                     common_values.append(v)
+                    sub_dfs_dict[v] = self.orig_df[self.orig_df[col_name_1] == v]
 
             for col_name_2 in self.numeric_cols + self.date_cols:
                 test_series = [True] * self.num_rows
                 for v in common_values:
-                    sub_df = self.orig_df[[col_name_2]][self.orig_df[col_name_1] == v]
+                    sub_df = sub_dfs_dict[v]
                     if col_name_2 in self.numeric_cols:
                         # Get the iqr given the full column
                         upper_limit = upper_limits_dict[col_name_2]
@@ -10963,7 +11227,7 @@ class DataConsistencyChecker:
                     allow_patterns=False  # todo: ones that set allow_patterns=False may get ,. in string. check for that. maybe just do a replace()
                 )
 
-    def __generate_very_small_given(self):
+    def __generate_small_given(self):
         """
         Patterns without exceptions: None. This test does not generate patterns.
         Patterns with exception: 'small_given most' has one row with value 5, which is not small generally, but is
@@ -10978,7 +11242,7 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('small_given most', self.synth_df['small_given all'])
         self.synth_df.loc[999, 'small_given most'] = 5
 
-    def __check_very_small_given(self, test_id):
+    def __check_small_given(self, test_id):
         # Calculate and cache the lower limit based on q1 and q3 of each full numeric & date column
         lower_limits_dict = self.get_columns_iqr_lower_limit()
 
@@ -10993,14 +11257,16 @@ class DataConsistencyChecker:
                 continue
             vc = self.orig_df[col_name_1].value_counts()
             common_values = []
+            sub_dfs_dict = {}
             for v in vc.index:
                 if vc[v] > math.sqrt(self.num_rows):
                     common_values.append(v)
+                    sub_dfs_dict[v] = self.orig_df[self.orig_df[col_name_1] == v]
 
             for col_name_2 in self.numeric_cols + self.date_cols:
                 test_series = [True] * self.num_rows
                 for v in common_values:
-                    sub_df = self.orig_df[[col_name_2]][self.orig_df[col_name_1] == v]
+                    sub_df = sub_dfs_dict[v]
                     if col_name_2 in self.numeric_cols:
                         # Get the iqr given the full column
                         lower_limit = lower_limits_dict[col_name_2]
@@ -11283,8 +11549,9 @@ class DataConsistencyChecker:
 
     def __generate_grouped_strings_by_numeric(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: The values in 'num_grp_str all' are grouped (all the 'a' values, then all the 'b',
+            and so on), when sorting by 'num_grp_str rand_i'
+        Patterns with exception: Similar for columns  'num_grp_str most' and 'num_grp_str rand_i', with 1 exception.
         """
         group_a_len = group_b_len = self.num_synth_rows // 3
         group_c_len = self.num_synth_rows - (group_a_len + group_b_len)
@@ -11316,7 +11583,7 @@ class DataConsistencyChecker:
                 df = self.orig_df.copy()
                 df = df.sort_values(col_name_1)
                 col_series = df[col_name_2]
-                self.__check_grouped_stings_column(test_id, col_name_2, col_series)
+                self.__check_grouped_stings_column(test_id, col_name_1, col_name_2, col_series)
 
     ####################################################################################
     # Data consistency checks for two string and one numeric column
@@ -12038,7 +12305,7 @@ class DataConsistencyChecker:
 
         for col_idx_1 in range(len(self.orig_df.columns)-3):
             col_name_1 = self.orig_df.columns[col_idx_1]
-            if self.verbose >= 2:
+            if self.verbose >= 2 and col_idx_1 > 0 and col_idx_1 % 25 == 0:
                 print(f"  Processing column {col_idx_1} of {len(self.orig_df.columns)} columns")
             for col_idx_2 in range(col_idx_1+1, len(self.orig_df.columns)):
                 col_name_2 = self.orig_df.columns[col_idx_2]
@@ -12387,12 +12654,24 @@ class DataConsistencyChecker:
 # General Methods outside the class
 #########################################################################
 
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except:
+        return False
 
 def convert_to_numeric(arr, filler):
     """
     Ensure an array has all numeric values. Any non-numeric values are replaced by the specified filler value.
+    Null values as well as variables with non-numeric characters will be removed.
     """
-    return pd.Series([float(x) if str(x).replace('-', '').replace('.', '').isdigit() else filler for x in arr])
+    #arr = [filler if y else x for x, y in zip(arr, pd.Series(arr).isna())]
+    # return pd.Series([float(x)
+    #                   if str(np.format_float_positional(x)).replace('-', '').replace('.', '').isdigit()
+    #                   else filler
+    #                   for x in arr])
+    return pd.Series([float(x) if is_number(x) else filler for x in arr])
 
 
 def get_num_digits(num):
