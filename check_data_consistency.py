@@ -35,7 +35,7 @@ import warnings
 from sklearn.exceptions import ConvergenceWarning
 warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 
-# Set True to debug any warnings.
+# Uncomment to debug any warnings.
 # warnings.filterwarnings("error")
 
 # Display options. There are relevant only when running this in a debugger or notebook.
@@ -54,24 +54,9 @@ TEST_DEFN_DESC = 0          # Element 0 provides a description of the test
 TEST_DEFN_FUNC = 1          # Element 1 specifies the function used to execute the test
 TEST_DEFN_GEN_FUNC = 2      # Element 2 specifies the function used to generate demo data for the test
 TEST_DEFN_SHORTLIST = 3     # Element 3 indicates if the test is in the shortlist of tests, which are the tests returned
-                            #   by default when listing patterns found without exceptions.
+#                             by default when listing patterns found without exceptions.
 TEST_DEFN_IMPLEMENTED = 4   # Element 4 specifies if the test is implemented
 TEST_DEFN_FAST = 5          # Element 5 indicates if the test is reasonably fast even with thousands of columns.
-
-# todo:
-#   test all methods with Nones (Test_DC_Synthetic has a cell to test this)
-#   we may want to add the comcept of minimum_valid_rows -- any test needs to have this many rows have non-missing values
-#       in all columns. For example, if there are 1000 rows and min_valid_rows is 800, then when running LARGER, we
-#       can only run this test on pairs of columns whwere at least 800 rows have non-missing values in both columns
-#   many tests should check correlation before declaring a patern. eg sum of columns, mean of columsn, larger than sum
-#   many tests flag exceptions just over some limit. eg much larger, which checks most values in a are 10x the values
-#       in b, but it may flag things that are 9.99x.
-#   test the large / small values tests with lognormal, exponantial, and other distributions. Can do in a notebook - just
-#       generate diff synth data and see what it finds. Or mangle real data from OpenML with very small / large / negative
-#       inverted, etc values.
-
-# todo from testing:
-# when display tests as execute (if verbos >= 1), ensure each is 1 line, not 2+. cut off if necessary.
 
 
 class DataConsistencyChecker:
@@ -85,8 +70,8 @@ class DataConsistencyChecker:
         """
         execute_list: a list of test ids. If specified, only these tests will be executed.
         exclude_list: a list of test ids. If specified, these tests will not be executed; all others will be.
-        iqr_limit: Inter-quartile range is used in several tests to find unusually small or large values. For example, to
-                    identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
+        iqr_limit: Inter-quartile range is used in several tests to find unusually small or large values. For example,
+                    to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
                     inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
                     is used here.
         idr_limit: Inter-decile range is used in several tests, particularly to identify very small values, as IQR
@@ -191,12 +176,16 @@ class DataConsistencyChecker:
                                          True, True, True),
             'PREV_VALUES_DT':           (('Check if the values in a column can be predicted from previous values in '
                                          'that column'),
-                                        self.__check_prev_values_dt, self.__generate_prev_values_dt,
-                                        True, True, True),
+                                         self.__check_prev_values_dt, self.__generate_prev_values_dt,
+                                         True, True, True),
 
             # Tests on pairs of columns of any type
             'MATCHED_MISSING':          ('Check if two columns have missing values consistently in the same rows',
                                          self.__check_matched_missing, self.__generate_matched_missing,
+                                         True, True, False),
+            'UNMATCHED_MISSING':        (('Check if two columns frequently have null values, but consistently not in '
+                                          'the same rows'),
+                                         self.__check_unmatched_missing, self.__generate_unmatched_missing,
                                          True, True, False),
             'SAME_VALUES':              ('Check one column consistently has the same value as another column',
                                          self.__check_same, self.__generate_same,
@@ -271,6 +260,11 @@ class DataConsistencyChecker:
                                          True, True, True),
             'GREATER_THAN_ONE':         ('Check if all values are less than -1.0 or greater than 1.0, inclusive',
                                          self.__check_greater_than_one, self.__generate_greater_than_one,
+                                         False, True, True),
+            'INVALID_NUMBERS':          (('Check for values that are not valid numbers, including values that include '
+                                          'parenthesis, brackets, percent signs and other values, if unusual for the '
+                                          'column'),
+                                         self.__check_invalid_numbers, self.__generate_invalid_numbers,
                                          False, True, True),
 
             # Tests on pairs of numeric columns
@@ -576,16 +570,16 @@ class DataConsistencyChecker:
                                           'in the column'),
                                          self.__check_number_numeric_chars, self.__generate_number_numeric_chars,
                                          True, True, True),
-            'NUMBER_ALPHANUMERIC_CHARS':(('Check if there is a consistent number of alphanumeric characters in  '
-                                          'each value in the column '),
-                                         self.__check_number_alphanumeric_chars,
-                                         self.__generate_number_alphanumeric_chars,
-                                         True, True, True),
+            'NUMBER_ALPHANUMERIC_CHARS':     (('Check if there is a consistent number of alphanumeric characters in  '
+                                               'each value in the column '),
+                                               self.__check_number_alphanumeric_chars,
+                                               self.__generate_number_alphanumeric_chars,
+                                               True, True, True),
             'NUMBER_NON-ALPHANUMERIC_CHARS': (('Check if there is a consistent number of non-alphanumeric characters '
-                                              'in each value in the column '),
-                                              self.__check_number_non_alphanumeric_chars,
-                                              self.__generate_number_non_alphanumeric_chars,
-                                              True, True, True),
+                                               'in each value in the column '),
+                                               self.__check_number_non_alphanumeric_chars,
+                                               self.__generate_number_non_alphanumeric_chars,
+                                               True, True, True),
             'NUMBER_CHARS':             (('Check if there is a consistent number of characters in each value in the '
                                           'column'),
                                          self.__check_number_chars, self.__generate_number_chars,
@@ -599,6 +593,10 @@ class DataConsistencyChecker:
             'POSITION_NON-ALPHANUMERIC':('Check if the positions of the non-alphanumeric characters is consistent',
                                          self.__check_position_non_alphanumeric,
                                          self.__generate_position_non_alphanumeric,
+                                         True, True, True),
+            'CHARS_PATTERN':            (('Check if there is a consistent pattern of alphabetic, numeric and '
+                                          'special characters in each value in a column.'),
+                                         self.__check_chars_pattern, self.__generate_chars_pattern,
                                          True, True, True),
             'UPPERCASE':                ('Check if all characters are consistently upper case ',
                                          self.__check_uppercase, self.__generate_uppercase,
@@ -675,10 +673,10 @@ class DataConsistencyChecker:
                                           'characters.'),
                                          self.__check_same_first_chars, self.__generate_same_first_chars,
                                          True, True, False),
-            'SAME_FIRST_WORD':         ('Check if two string columns consistently start with the same word.',
+            'SAME_FIRST_WORD':          ('Check if two string columns consistently start with the same word.',
                                          self.__check_same_first_word, self.__generate_same_first_word,
                                          True, True, False),
-            'SAME_LAST_WORD':          ('Check if two string columns consistently end with the same word.',
+            'SAME_LAST_WORD':           ('Check if two string columns consistently end with the same word.',
                                          self.__check_same_last_word, self.__generate_same_last_word,
                                          True, True, False),
             'SAME_ALPHA_CHARS':         (('Check if two string columns consistently contain the same set of  '
@@ -689,7 +687,7 @@ class DataConsistencyChecker:
                                           'numeric characters.'),
                                          self.__check_same_numeric_chars, self.__generate_same_numeric_chars,
                                          True, True, False),
-            'SAME_SPECIAL_CHARS':       (('Check if two string columns consistently contain the same set of  '
+            'SAME_SPECIAL_CHARS':       (('Check if two string columns consistently contain the same set of '
                                           'special characters.'),
                                          self.__check_same_special_chars, self.__generate_same_special_chars,
                                          True, True, False),
@@ -721,9 +719,9 @@ class DataConsistencyChecker:
                                           self.__check_large_given_prefix, self.__generate_large_given_prefix,
                                           True, True, False),
             'SMALL_GIVEN_PREFIX':       (('Check if the value in the numeric column is very small given the first '
-                                          'word in the categorical column'),
-                                          self.__check_small_given_prefix, self.__generate_small_given_prefix,
-                                          True, True, False),
+                                         'word in the categorical column'),
+                                         self.__check_small_given_prefix, self.__generate_small_given_prefix,
+                                         True, True, False),
             'GROUPED_STRINGS_BY_NUMERIC':(('Check if a string or binary column is sorted into groups when the table is'
                                            'ordered by a numeric or date column'),
                                           self.__check_grouped_strings_by_numeric,
@@ -841,7 +839,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].nunique() == 2:
                 self.binary_cols.append(col_name)
             elif pandas_types.is_numeric_dtype(self.orig_df[col_name]) or \
-                    self.orig_df[col_name].astype(str).str.isdigit().tolist().count(False) < self.contamination_level:
+                    self.orig_df[col_name].astype(str).str.replace('-', '', regex=False).str.\
+                            replace('.', '', regex=False).str.isdigit().tolist().count(False) < self.contamination_level:
                 self.numeric_cols.append(col_name)
             elif self.orig_df[col_name].dtype in [np.datetime64, 'datetime64[ns]']:
                 self.date_cols.append(col_name)
@@ -942,7 +941,8 @@ class DataConsistencyChecker:
                                                   (reduced_numeric_vals_filled < upper_limit)]
             self.column_trimmed_means = {}
             for col_name in self.numeric_cols:
-                self.column_trimmed_means[col_name] = trimmed_orig_df[col_name].mean()
+                self.column_trimmed_means[col_name] = \
+                    convert_to_numeric(trimmed_orig_df[col_name], self.column_medians[col_name]).mean()
 
         # Create a sample of the full data, which may be used for early stopping for expensive tests.
         # The sample_df will tend to not contain Null values.
@@ -1134,7 +1134,7 @@ class DataConsistencyChecker:
         self.execution_times = {}
 
         # Get the test index of each test
-        test_idx_dict = {x:y for x, y in
+        test_idx_dict = {x: y for x, y in
                          zip(self.test_dict.keys(), range(len(self.test_dict.keys())))
                          if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
 
@@ -1144,8 +1144,8 @@ class DataConsistencyChecker:
                 for test_id in self.execution_test_list:
                     if self.verbose:
                         self.__output_current_test(test_idx_dict[test_id], test_id)
-                    #f = executor.submit(self.test_dict[test_id][TEST_DEFN_FUNC], test_id)
-                    #func = self.test_dict[test_id][TEST_DEFN_FUNC]
+                    # f = executor.submit(self.test_dict[test_id][TEST_DEFN_FUNC], test_id)
+                    # func = self.test_dict[test_id][TEST_DEFN_FUNC]
                     f = executor.submit(call_test, self, test_id)
                     process_arr.append(f)
                     self.n_tests_executed += 1
@@ -1190,11 +1190,15 @@ class DataConsistencyChecker:
 
         return self.get_exceptions_summary()
 
+    ##################################################################################################################
+    # Public methods to output information about the tool, unrelated to any specific dataset or test execution
+    ##################################################################################################################
     def get_test_list(self):
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]]
 
     def get_test_descriptions(self):
-        return {x: self.test_dict[x][TEST_DEFN_DESC] for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
+        return {x: self.test_dict[x][TEST_DEFN_DESC]
+                for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
 
     def print_test_descriptions(self, long_desc=False):
         for test_id in self.test_dict.keys():
@@ -1210,11 +1214,20 @@ class DataConsistencyChecker:
             for line in multiline_test_desc[1:]:
                 print(f'{filler} {line}')
 
-    #########################################################################
-    # Output the results of the analysis in various ways
-    #########################################################################
+    def get_patterns_shortlist(self):
+        """
+        Returns an array with the IDs of the tests in the short list. These are the tests that will be presented by
+        default when calling get_patterns() to list the patterns discovered.
+        """
+        # The 3rd element for each item in test_dict indicates if that test is in the short-list for reporting
+        # discovered patterns
+        return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_SHORTLIST]]
 
-    def display_columns_types(self):
+    ##################################################################################################################
+    # Public methods to output statistics about the dataset, unrelated to any tests executed.
+    ##################################################################################################################
+
+    def display_columns_types_list(self):
         """
         Displays, for each of the four column types identified by the tool, which columns in the data are of those
         types. This may be called to check the column types were identified correctly. This will skip columns removed
@@ -1233,14 +1246,33 @@ class DataConsistencyChecker:
         print(f"Date/Time Columns:")
         print(self.date_cols)
 
-    def get_patterns_shortlist(self):
-        """
-        Returns an array with the IDs of the tests in the short list. These are the tests that will be presented by
-        default when calling get_patterns() to list the patterns discovered.
-        """
-        # The 3rd element for each item in test_dict indicates if that test is in the short-list for reporting
-        # discovered patterns
-        return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_SHORTLIST]]
+    def display_columns_types_table(self):
+        var_types = []
+        for col_name in self.orig_df.columns:
+            if col_name in self.string_cols:
+                var_types.append('String')
+            elif col_name in self.binary_cols:
+                var_types.append('Binary')
+            elif col_name in self.date_cols:
+                var_types.append('Date')
+            elif col_name in self.numeric_cols:
+                var_types.append('Numeric')
+            else:
+                var_types.append("Unused")
+        df1 = pd.DataFrame([var_types], columns=self.orig_df.columns)
+        df2 = self.orig_df.head(5).copy()
+        display_df = pd.concat([df1, df2])
+
+        print()
+        print("Assigned column types and example rows:")
+        if is_notebook():
+            display(display_df)
+        else:
+            print(display_df)
+
+    ##################################################################################################################
+    # Public methods to output the results of the analysis in various ways
+    ##################################################################################################################
 
     def get_patterns_summary(self, test_exclude_list=None, column_exclude_list=None, short_list=True):
         """
@@ -1440,66 +1472,288 @@ class DataConsistencyChecker:
 
     # todo: also have a method to summarize by feature, but first finalize how we save features for tests based on 2/3 features
 
-    def summarize_patterns_and_exceptions(self, heatmap=False):
+    def summarize_patterns_and_exceptions(self, all_tests=False, heatmap=False):
         """
-        This indicates which tests found a pattern on which columns, regardless if there were exceptions.
-        """
-        # todo: use white for no pattern, blue for pattern with no exceptions, yellow for pattern with exceptions.
-        pass
+        Returns a dataframe with a row per test, indicating the number of patterns with and without exceptions that
+        were found for each test. This may be used to quickly determine which pattens exist within the data, and
+        to help focus specific calls to display_detailed_results() to return detailed information for specific tests.
 
-    def __display_rows_with_tests(self, sorted_df, nrows, check_score=False):
-        """
-        Display a set of dataframes, one per row in the original data, up to nrows rows, each including the original row
-        and the issues found in it, across all tests on all features.
+        Parameters:
+        all_tests: If True, a row will be included for all tests that executed. This will include tests where no
+            patterns were found. If False, a row will be included for all tests that found at least one pattern, with
+            or without exceptions.
 
-        sorted_df: a sorted version of self.test_results_df
-        nrows: the maximum number of rows from the original data to display
-        check_score: if True, only rows with scores above zero will be displayed
+        heatmap: If True, a heatmap of form of the table will be displayed.
         """
+        # todo: respect the all_tests parameter
+        # todo: draw a heatmap use white for no pattern, blue for pattern with no exceptions, yellow for pattern with exceptions.
+        vals = []
+        for test_id in self.get_test_list():
+            if self.execute_list and test_id not in self.execute_list:
+                continue
+            if self.exclude_list and test_id in self.exclude_list:
+                continue
+            sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
+            sub_results_summary_test = self.results_summary_df[self.results_summary_df['Test ID'] == test_id]
+            vals.append([test_id, len(sub_patterns_test), len(sub_results_summary_test)])
+        df = pd.DataFrame(vals, columns=['Test ID',
+                                         'Number Patterns without Exceptions',
+                                         'Number Patterns with Exceptions'])
 
-        # todo: this misses where a test checks 2 or 3 columns. -- need to flag all columns
-        flagged_idx_arr = sorted_df.index[:10]
-        for row_idx in flagged_idx_arr[:nrows]:
-            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
-                print(f"The remaining rows have no flagged issues: cannot display {nrows} flagged rows.")
+        if heatmap:
+            pass  # todo: fill in
+
+        return df
+
+    def display_detailed_results(
+            self,
+            test_id_list=None,
+            col_name_list=None,
+            show_patterns=True,
+            short_list=True,
+            plot_results=True):
+        """
+        Go through each test, and each feature, and present a detailed description of each.
+        """
+        # todo: for each column, give the number of missing values
+        # todo: where possible, show a plot. Can do for very large, very small, few neighbors, unusual combinations, etc
+
+        def print_test_header(test_id):
+            nonlocal printed_test_header
+            nonlocal test_id_list
+
+            if printed_test_header:
+                return
+            if len(test_id_list) == 1 or (self.execute_list is not None and len(self.execute_list) == 1):
+                return
+            print()
+            print(stars)
+            print(test_id)
+            print(stars)
+            printed_test_header = True
+
+        def print_column_header(col_name):
+            print()
+            print(hyphens)
+            print(f"Column(s): {col_name}")
+
+        if (self.orig_df is None) or (len(self.orig_df) == 0):
+            print("Empty dataset")
+            return
+
+        if ((self.patterns_df is None) or (len(self.patterns_df) == 0)) and \
+                ((self.results_summary_df is None) or (len(self.results_summary_df) == 0)):
+            return
+
+        if (test_id_list is None) and (col_name_list is None):
+            if len(self.results_summary_df) > 200:
+                print()
+                print((f"{len(self.results_summary_df)} issues were identified. This is beyond the limit to display "
+                       "all at once. Try specifying tests and/or columns to be displayed here."))
+                return
+            if show_patterns and ((len(self.results_summary_df) + len(self.patterns_df)) > 200):
+                print()
+                print((f"{len(self.results_summary_df) + len(self.patterns_df)} patterns and issues were identified. "
+                       "This is beyond the limit to display all at once. Try specifying tests and/or columns to be "
+                       "displayed here."))
                 return
 
-            # Get the row as it appears in the original data
-            orig_row = self.orig_df.loc[row_idx:row_idx]
+        if test_id_list:
+            print()
+            print(f"Displaying results for tests: {test_id_list}")
+        if col_name_list:
+            print()
+            print(f"Displaying results for columns: {col_name_list}")
 
-            # Insert a column to indicate the IDs of the tests that have flagged this row
-            orig_row.insert(0, 'Test ID', '')
+        if test_id_list is None:
+            test_id_list = self.get_test_list()
+        if col_name_list is None:
+            col_name_list = self.orig_df.columns
 
-            colour_cells = [False] * len(self.orig_df.columns)
+        stars = "******************************************************************************"
+        hyphens = '----------------------------------------------------------------------------'
+        for test_id in test_id_list:
+            if self.execute_list and test_id not in self.execute_list:
+                continue
+            if self.exclude_list and test_id in self.exclude_list:
+                continue
 
-            # Loop through all tests, and add a row to the output for any that have flagged this row
-            for test_id in self.get_test_list():
-                test_row = [test_id] + [""] * len(self.orig_df.columns)
+            printed_test_header = False
 
-                # There may be multiple columns / column sets which have flagged this row.
-                for column_set in self.results_summary_df['Column(s)'].unique():
-                    result_col_name = self.get_results_col_name(test_id, column_set)
-                    if result_col_name not in self.test_results_df.columns:
+            sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
+            sub_results_summary_test = self.results_summary_df[self.results_summary_df['Test ID'] == test_id]
+
+            # Display patterns that have no exception
+            if show_patterns and not (short_list and test_id not in self.get_patterns_shortlist()):
+                for columns_set in sub_patterns_test['Column(s)'].values:
+                    sub_patterns = self.patterns_df[(self.patterns_df['Test ID'] == test_id) &
+                                                    (self.patterns_df['Column(s)'] == columns_set)]
+                    # if len(set(col_name_list).intersection(set(columns_set))) == 0:
+                    #     continue
+                    pattern_columns_arr = self.col_to_original_cols_dict[columns_set]
+                    if len(set(col_name_list).intersection(set(pattern_columns_arr))) == 0:
                         continue
-                    for column_name in self.col_to_original_cols_dict[result_col_name]:
-                        if self.test_results_df[result_col_name][row_idx]:
-                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
-                            test_row[column_idx+1] = "Flagged"
-                            colour_cells[column_idx] = True
-                if test_row.count("Flagged"):
-                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
-            orig_row = orig_row.reset_index()
-            orig_row = orig_row.drop(columns=['index'])
+                    if len(sub_patterns) > 0:
+                        print_test_header(test_id)
+                        print_column_header(columns_set)
+                        print("Pattern found (without exceptions)")
+                        print(sub_patterns.iloc[0]['Description of Pattern'])
+                        cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
+                        self.display_examples(
+                            test_id,
+                            cols,
+                            columns_set,
+                            is_patterns=True,
+                            display_info=sub_patterns.iloc[0]['Display Information'])
+                        if plot_results:
+                            self.draw_results_plots(
+                                test_id,
+                                cols,
+                                columns_set,
+                                show_exceptions=False,
+                                display_info=sub_patterns.iloc[0]['Display Information'])
 
-            # Display the dataframe representing this row from the original data
-            print()
-            if is_notebook():
-                display(Markdown(f"**Row: {row_idx}  --  Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
-                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
-            else:
-                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
-                print(orig_row.to_string(index=False))
-            print()
+            # Display patterns with exceptions
+            for columns_set in sub_results_summary_test['Column(s)'].values:
+                # If columns_set_arr is specified, only report issues with some overlap of columns with columns_set_arr.
+                # The columns_set in the issues dataframe may be a single string. If so, convert to array.
+                issue_columns_arr = self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)]
+                if len(set(col_name_list).intersection(set(issue_columns_arr))) == 0:
+                    continue
+
+                sub_summary = self.results_summary_df[(self.results_summary_df['Test ID'] == test_id) &
+                                                      (self.results_summary_df['Column(s)'] == columns_set)]
+                if len(sub_summary) == 0:
+                    continue
+
+                print_test_header(test_id)
+                print_column_header(columns_set)
+                print("Issue index: ", sub_summary.index[0])
+                print("A strong pattern, and exceptions to the pattern, were found.")
+                if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER']:
+                    # These display a decision tree, so the formatting must be preserved.
+                    print(sub_summary.iloc[0]['Description of Pattern'])
+                else:
+                    multiline_desc = wrap(sub_summary.iloc[0]['Description of Pattern'], 100)
+                    print('\n'.join(multiline_desc))
+                num_exceptions = sub_summary.iloc[0]['Number of Exceptions']
+                print((f"Number of exceptions: {num_exceptions} "
+                       f"({num_exceptions * 100.0 / self.num_rows:.4f}% of rows)"))
+
+                # Display examples not flagged
+                result_col_name = self.get_results_col_name(test_id, columns_set)
+                cols = self.col_to_original_cols_dict[result_col_name]
+                self.display_examples(
+                    test_id,
+                    cols,
+                    columns_set,
+                    is_patterns=False,
+                    display_info=sub_summary.iloc[0]['Display Information'])
+
+                print()
+                print("Examples of flagged values:")
+                display_cols = list(self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)])
+                flagged_df = self.get_rows_flagged(test_id, columns_set).head(10)
+                if flagged_df is None:
+                    continue
+                self.__draw_sample_dataframe(
+                    flagged_df[display_cols],
+                    test_id,
+                    cols,
+                    display_info=sub_summary.iloc[0]['Display Information'],
+                    is_patterns=False)
+
+                # For some tests, we display the rows before and after the flagged rows as well, to provide context
+                if test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC', 'COLUMN_TENDS_ASC',
+                               'COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM', 'GROUPED_STRINGS',
+                               'GROUPED_STRINGS_BY_NUMERIC']:
+                    print()
+                    print("Showing the first flagged example with the 5 rows before and 5 rows after:")
+                    self.__draw_sample_set_rows(flagged_df[display_cols])
+
+                # For some tests, we display one or more plots to make the exceptions more clear
+                if plot_results:
+                    result_col_name = self.get_results_col_name(test_id, columns_set)
+                    cols = self.col_to_original_cols_dict[result_col_name]
+                    self.draw_results_plots(
+                        test_id,
+                        cols,
+                        columns_set,
+                        show_exceptions=True,
+                        display_info=sub_summary.iloc[0]['Display Information'])
+
+
+    def get_results_by_row_id(self, row_num):
+        """
+        Returns a list of tuples, with each tuple containing a test ID, and column name, for all issues flagged in the
+        specified row.
+        """
+
+        if self.test_results_df is None:
+            return []
+
+        if row_num > len(self.test_results_df):
+            print(f"Cannot display results for row {row_num}. {len(self.test_results_df)} rows available.")
+            return []
+
+        row = self.test_results_df.iloc[row_num]
+        issues_list = []
+        for c in row.index:
+            if " -- " not in c:
+                continue
+            if row[c] == 0:
+                continue
+            test_id, col_name = c.split(" -- ")
+            test_id = test_id.replace("TEST ", "")
+            col_name = col_name.replace(" RESULT", "")
+            issues_list.append((test_id, col_name))
+        return issues_list
+
+    def plot_final_scores_distribution_by_row(self):
+        """
+        Display a probability plot and histogram representing the distribution of final scores by row.
+        """
+        final_scores_df = self.test_results_df.copy()
+        final_scores_df = final_scores_df.sort_values('FINAL SCORE', ascending=True)
+        final_scores_df['Rank'] = range(self.num_rows)
+        plt.subplots(figsize=(5, 3))
+        s = sns.scatterplot(data=final_scores_df, x='Rank', y='FINAL SCORE')
+        s.set_title("Distribution of Scores by Row, ordered lowest to highest scores")
+        plt.show()
+
+        plt.subplots(figsize=(5, 3))
+        s = sns.histplot(data=final_scores_df, x='FINAL SCORE')
+        s.set_title("Distribution of Scores per Row")
+        plt.show()
+
+        plt.subplots(figsize=(5, 3))
+        s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
+        s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
+        plt.show()
+
+    def plot_final_scores_distribution_by_feature(self):
+        """
+        Display a bar plot representing the distribution of final scores by feature.
+        """
+        final_scores_series = pd.Series(self.test_results_by_column_np.sum(axis=0)).sort_values(ascending=True).values
+        final_scores_df = pd.DataFrame({'Feature': self.orig_df.columns,
+                                        'Total Scores': final_scores_series})
+        plt.subplots(figsize=(5, len(final_scores_df)*0.25))
+        s = sns.barplot(data=final_scores_df, orient='h', y='Feature', x='Total Scores')
+        s.set_title("Distribution of Total Scores per Column")
+        plt.show()
+
+    def plot_final_scores_distribution_by_test(self):
+        """
+        Display a bar plot representing the distribution of final scores by test.
+        """
+        scores_by_test = pd.DataFrame(self.results_summary_df.groupby('Test ID')['Number of Exceptions'].sum().sort_values())
+        scores_by_test['Test ID'] = scores_by_test.index
+
+        plt.subplots(figsize=(5, len(scores_by_test) * 0.25))
+        s = sns.barplot(data=scores_by_test, orient='h', y='Test ID', x='Number of Exceptions')
+        s.set_title("Distribution of Scores per Test")
+        plt.show()
 
     def display_least_flagged_rows(self, with_results=True, nrows=10):
         """
@@ -1604,7 +1858,8 @@ class DataConsistencyChecker:
                         (self.orig_df[cols[0]] == v0_1) &
                         (self.orig_df[cols[1]] == v1_1)].head(n_examples // 4)
                     df = pd.concat([df_v00, df_v01, df_v10, df_v11])
-                elif len(cols) == 3 and cols[0] in self.binary_cols and cols[1] in self.binary_cols and cols[2] in self.binary_cols:
+                elif len(cols) == 3 and cols[0] in self.binary_cols and \
+                        cols[1] in self.binary_cols and cols[2] in self.binary_cols:
                     v0_0, v0_1 = self.orig_df[cols[0]].dropna().unique()
                     v1_0, v1_1 = self.orig_df[cols[1]].dropna().unique()
                     v2_0, v2_1 = self.orig_df[cols[2]].dropna().unique()
@@ -1648,7 +1903,7 @@ class DataConsistencyChecker:
                     df_v1 = self.orig_df[
                         (self.orig_df[cols[2]] == v1)].head(n_examples // 2)
                     df = pd.concat([df_v0, df_v1])[cols]  # todo: probably the cases above should also filter the columns returned to [cols]
-            elif test_id in ['MATCHED_MISSING']:
+            elif test_id in ['MATCHED_MISSING', 'UNMATCHED_MISSING']:
                 col_name_1, col_name_2 = cols[0], cols[1]
                 df_v_null = self.orig_df[cols][
                     (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
@@ -1666,10 +1921,10 @@ class DataConsistencyChecker:
                 col_name_1, col_name_2 = cols
                 df_same = self.orig_df[cols][
                     (self.orig_df[col_name_1] == self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
-                ].head(n_examples // 2)
+                    ].head(n_examples // 2)
                 df_not_same = self.orig_df[cols][
                     (self.orig_df[col_name_1] != self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
-                ].head(n_examples // 2)
+                    ].head(n_examples // 2)
                 df = pd.concat([df_same, df_not_same])
             elif test_id in ['NEGATIVE']:
                 col_name_1 = cols[0]
@@ -1735,77 +1990,63 @@ class DataConsistencyChecker:
                     good_indexes = good_indexes & (self.test_results_df[results_col_name] == 0)
             return self.orig_df.loc[good_indexes][col_name].sample(n=n_examples)
 
-    def get_results_by_row_id(self, row_num):
+    ##################################################################################################################
+    # Private helper methods to support outputting the results of the analysis in various ways
+    ##################################################################################################################
+
+    def __display_rows_with_tests(self, sorted_df, nrows, check_score=False):
         """
-        Returns a list of tuples, with each tuple containing a test ID, and column name, for all issues flagged in the
-        specified row.
+        Display a set of dataframes, one per row in the original data, up to nrows rows, each including the original row
+        and the issues found in it, across all tests on all features.
+
+        sorted_df: a sorted version of self.test_results_df
+        nrows: the maximum number of rows from the original data to display
+        check_score: if True, only rows with scores above zero will be displayed
         """
 
-        if self.test_results_df is None:
-            return []
+        # todo: this misses where a test checks 2 or 3 columns. -- need to flag all columns
+        flagged_idx_arr = sorted_df.index[:10]
+        for row_idx in flagged_idx_arr[:nrows]:
+            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
+                print(f"The remaining rows have no flagged issues: cannot display {nrows} flagged rows.")
+                return
 
-        if row_num > len(self.test_results_df):
-            print(f"Cannot display results for row {row_num}. {len(self.test_results_df)} rows available.")
-            return []
+            # Get the row as it appears in the original data
+            orig_row = self.orig_df.loc[row_idx:row_idx]
 
-        row = self.test_results_df.iloc[row_num]
-        issues_list = []
-        for c in row.index:
-            if " -- " not in c:
-                continue
-            if row[c] == 0:
-                continue
-            test_id, col_name = c.split(" -- ")
-            test_id = test_id.replace("TEST ", "")
-            col_name = col_name.replace(" RESULT", "")
-            issues_list.append((test_id, col_name))
-        return issues_list
+            # Insert a column to indicate the IDs of the tests that have flagged this row
+            orig_row.insert(0, 'Test ID', '')
 
-    def plot_final_scores_distribution_by_row(self):
-        """
-        Display a probability plot and histogram representing the distribution of final scores by row.
-        """
-        final_scores_df = self.test_results_df.copy()
-        final_scores_df = final_scores_df.sort_values('FINAL SCORE', ascending=True)
-        final_scores_df['Rank'] = range(self.num_rows)
-        plt.subplots(figsize=(5, 3))
-        s = sns.scatterplot(data=final_scores_df, x='Rank', y='FINAL SCORE')
-        s.set_title("Distribution of Scores by Row, ordered lowest to highest scores")
-        plt.show()
+            colour_cells = [False] * len(self.orig_df.columns)
 
-        plt.subplots(figsize=(5, 3))
-        s = sns.histplot(data=final_scores_df, x='FINAL SCORE')
-        s.set_title("Distribution of Scores per Row")
-        plt.show()
+            # Loop through all tests, and add a row to the output for any that have flagged this row
+            for test_id in self.get_test_list():
+                test_row = [test_id] + [""] * len(self.orig_df.columns)
 
-        plt.subplots(figsize=(5, 3))
-        s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
-        s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
-        plt.show()
+                # There may be multiple columns / column sets which have flagged this row.
+                for column_set in self.results_summary_df['Column(s)'].unique():
+                    result_col_name = self.get_results_col_name(test_id, column_set)
+                    if result_col_name not in self.test_results_df.columns:
+                        continue
+                    for column_name in self.col_to_original_cols_dict[result_col_name]:
+                        if self.test_results_df[result_col_name][row_idx]:
+                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
+                            test_row[column_idx+1] = "Flagged"
+                            colour_cells[column_idx] = True
+                if test_row.count("Flagged"):
+                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
+            orig_row = orig_row.reset_index()
+            orig_row = orig_row.drop(columns=['index'])
 
-    def plot_final_scores_distribution_by_feature(self):
-        """
-        Display a bar plot representing the distribution of final scores by feature.
-        """
-        final_scores_series = pd.Series(self.test_results_by_column_np.sum(axis=0)).sort_values(ascending=True).values
-        final_scores_df = pd.DataFrame({'Feature': self.orig_df.columns,
-                                        'Total Scores': final_scores_series})
-        plt.subplots(figsize=(5, len(final_scores_df)*0.25))
-        s = sns.barplot(data=final_scores_df, orient='h', y='Feature', x='Total Scores')
-        s.set_title("Distribution of Total Scores per Column")
-        plt.show()
-
-    def plot_final_scores_distribution_by_test(self):
-        """
-        Display a bar plot representing the distribution of final scores by test.
-        """
-        scores_by_test = pd.DataFrame(self.results_summary_df.groupby('Test ID')['Number of Exceptions'].sum().sort_values())
-        scores_by_test['Test ID'] = scores_by_test.index
-
-        plt.subplots(figsize=(5, len(scores_by_test) * 0.25))
-        s = sns.barplot(data=scores_by_test, orient='h', y='Test ID', x='Number of Exceptions')
-        s.set_title("Distribution of Scores per Test")
-        plt.show()
+            # Display the dataframe representing this row from the original data
+            print()
+            if is_notebook():
+                display(Markdown(f"**Row: {row_idx}  --  Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
+                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
+            else:
+                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
+                print(orig_row.to_string(index=False))
+            print()
 
     def __plot_distribution(self, test_id, col_name, show_exceptions):
         fig, ax = plt.subplots(figsize=(5, 3))
@@ -1981,6 +2222,8 @@ class DataConsistencyChecker:
         plt.show()
 
     def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
+        col_name, col_name_1, col_name_2, col_set = "", "", "", ""
+
         if len(cols) == 1:
             col_name = cols[0]
         if len(cols) == 2:
@@ -2297,14 +2540,14 @@ class DataConsistencyChecker:
                 results_col_name = self.get_results_col_name(test_id, columns_set)
                 results_col = self.test_results_df[results_col_name]
                 flagged_idxs = np.where(results_col)
-                s = sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
+                sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
             plt.show()
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
             col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
             df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            s = sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
+            sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
 
             # Also draw a histogram of the relevant classes.
             results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -2376,186 +2619,9 @@ class DataConsistencyChecker:
                 s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
             plt.show()
 
-    def display_detailed_results(
-            self,
-            test_id_list=None,
-            col_name_list=None,
-            show_patterns=True,
-            short_list=True,
-            plot_results=True):
-        """
-        Go through each test, and each feature, and present a detailed description of each.
-        """
-        # todo: for each column, give the number of missing values
-        # todo: where possible, show a plot. Can do for very large, very small, few neighbors, unusual combinations, etc
-
-        def print_test_header(test_id):
-            nonlocal printed_test_header
-            nonlocal test_id_list
-
-            if printed_test_header:
-                return
-            if len(test_id_list) == 1 or (self.execute_list is not None and len(self.execute_list) == 1):
-                return
-            print()
-            print(stars)
-            print(test_id)
-            print(stars)
-            printed_test_header = True
-
-        def print_column_header(col_name):
-            print()
-            print(hyphens)
-            print(f"Column(s): {col_name}")
-
-        if (self.orig_df is None) or (len(self.orig_df) == 0):
-            print("Empty dataset")
-            return
-
-        if ((self.patterns_df is None) or (len(self.patterns_df) == 0)) and \
-            ((self.results_summary_df is None) or (len(self.results_summary_df) == 0)):
-            return
-
-        if (test_id_list is None) and (col_name_list is None):
-            if (len(self.results_summary_df) > 200):
-                print()
-                print((f"{len(self.results_summary_df)} issues were identified. This is beyond the limit to display "
-                    "all at once. Try specifying tests and/or columns to be displayed here."))
-                return
-            if (show_patterns and ((len(self.results_summary_df) + len(self.patterns_df)) > 200)):
-                print()
-                print((f"{len(self.results_summary_df) + len(self.patterns_df)} patterns and issues were identified. " 
-                        "This is beyond the limit to display all at once. Try specifying tests and/or columns to be "
-                       "displayed here."))
-                return
-
-        if test_id_list:
-            print()
-            print(f"Displaying results for tests: {test_id_list}")
-        if col_name_list:
-            print()
-            print(f"Displaying results for columns: {col_name_list}")
-
-        if test_id_list is None:
-            test_id_list = self.get_test_list()
-        if col_name_list is None:
-            col_name_list = self.orig_df.columns
-
-        stars = "******************************************************************************"
-        hyphens = '----------------------------------------------------------------------------'
-        for test_id in test_id_list:
-            if self.execute_list and test_id not in self.execute_list:
-                continue
-            if self.exclude_list and test_id in self.exclude_list:
-                continue
-
-            printed_test_header = False
-
-            sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
-            sub_results_summary_test = self.results_summary_df[self.results_summary_df['Test ID'] == test_id]
-
-            # Display patterns that have no exception
-            if show_patterns and not (short_list and test_id not in self.get_patterns_shortlist()):
-                for columns_set in sub_patterns_test['Column(s)'].values:
-                    sub_patterns = self.patterns_df[(self.patterns_df['Test ID'] == test_id) &
-                                                    (self.patterns_df['Column(s)'] == columns_set)]
-                    # if len(set(col_name_list).intersection(set(columns_set))) == 0:
-                    #     continue
-                    pattern_columns_arr = self.col_to_original_cols_dict[columns_set]
-                    if len(set(col_name_list).intersection(set(pattern_columns_arr))) == 0:
-                        continue
-                    if len(sub_patterns) > 0:
-                        print_test_header(test_id)
-                        print_column_header(columns_set)
-                        print("Pattern found (without exceptions)")
-                        print(sub_patterns.iloc[0]['Description of Pattern'])
-                        cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
-                        self.display_examples(
-                            test_id,
-                            cols,
-                            columns_set,
-                            is_patterns=True,
-                            display_info=sub_patterns.iloc[0]['Display Information'])
-                        if plot_results:
-                            self.draw_results_plots(
-                                test_id,
-                                cols,
-                                columns_set,
-                                show_exceptions=False,
-                                display_info=sub_patterns.iloc[0]['Display Information'])
-
-            # Display patterns with exceptions
-            for columns_set in sub_results_summary_test['Column(s)'].values:
-                # If columns_set_arr is specified, only report issues with some overlap of columns with columns_set_arr.
-                # The columns_set in the issues dataframe may be a single string. If so, convert to array.
-                issue_columns_arr = self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)]
-                if len(set(col_name_list).intersection(set(issue_columns_arr))) == 0:
-                    continue
-
-                sub_summary = self.results_summary_df[(self.results_summary_df['Test ID'] == test_id) &
-                                                      (self.results_summary_df['Column(s)'] == columns_set)]
-                if len(sub_summary) == 0:
-                    continue
-
-                print_test_header(test_id)
-                print_column_header(columns_set)
-                print("Issue index: ", sub_summary.index[0])
-                print("A strong pattern, and exceptions to the pattern, were found.")
-                if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER']:
-                    # These display a decision tree, so the formatting must be preserved.
-                    print(sub_summary.iloc[0]['Description of Pattern'])
-                else:
-                    multiline_desc = wrap(sub_summary.iloc[0]['Description of Pattern'], 100)
-                    print('\n'.join(multiline_desc))
-                num_exceptions = sub_summary.iloc[0]['Number of Exceptions']
-                print((f"Number of exceptions: {num_exceptions} "
-                      f"({num_exceptions * 100.0 / self.num_rows:.4f}% of rows)"))
-
-                # Display examples not flagged
-                result_col_name = self.get_results_col_name(test_id, columns_set)
-                cols = self.col_to_original_cols_dict[result_col_name]
-                self.display_examples(
-                    test_id,
-                    cols,
-                    columns_set,
-                    is_patterns=False,
-                    display_info=sub_summary.iloc[0]['Display Information'])
-
-                print()
-                print("Examples of flagged values:")
-                display_cols = list(self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)])
-                flagged_df = self.get_rows_flagged(test_id, columns_set).head(10)
-                if flagged_df is None:
-                    continue
-                self.__draw_sample_dataframe(
-                    flagged_df[display_cols],
-                    test_id,
-                    cols,
-                    display_info=sub_summary.iloc[0]['Display Information'],
-                    is_patterns=False)
-
-                # For some tests, we display the rows before and after the flagged rows as well, to provide context
-                if test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC', 'COLUMN_TENDS_ASC',
-                               'COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM', 'GROUPED_STRINGS',
-                               'GROUPED_STRINGS_BY_NUMERIC']:
-                    print()
-                    print("Showing the first flagged example with the 5 rows before and 5 rows after:")
-                    self.__draw_sample_set_rows(flagged_df[display_cols])
-
-                # For some tests, we display one or more plots to make the exceptions more clear
-                if plot_results:
-                    result_col_name = self.get_results_col_name(test_id, columns_set)
-                    cols = self.col_to_original_cols_dict[result_col_name]
-                    self.draw_results_plots(
-                        test_id,
-                        cols,
-                        columns_set,
-                        show_exceptions=True,
-                        display_info=sub_summary.iloc[0]['Display Information'])
-
-    #########################################################################
+    ##################################################################################################################
     # HTML Export
-    #########################################################################
+    ##################################################################################################################
 
     # todo: provide a parameter to name the export
     # todo: improve the font
@@ -2643,9 +2709,9 @@ class DataConsistencyChecker:
             f.write("</body>")
             f.write("</html>")
 
-    #########################################################################
+    ##################################################################################################################
     # Methods to find relationships between the data and the numbers of issues found.
-    #########################################################################
+    ##################################################################################################################
 
     def plot_columns_vs_final_scores(self):
 
@@ -2734,9 +2800,9 @@ class DataConsistencyChecker:
             plt.subplots_adjust(top=0.90)
             plt.show()
 
-    #########################################################################
-    # Internal methods to aid in analysing the data
-    #########################################################################
+    ##################################################################################################################
+    # Internal methods to aid in analysing the data and executing tests
+    ##################################################################################################################
 
     def get_results_col_name(self, test_id, col_name):
         """
@@ -2891,7 +2957,10 @@ class DataConsistencyChecker:
         test_series = pd.Series(test_series)
 
         if test_series.nunique() == 1:
-            self.patterns_arr.append([test_id, col_name, f'{pattern_string_1} {test_series[0]} {pattern_string_2}', None])
+            self.patterns_arr.append([test_id,
+                                      col_name,
+                                      f'{pattern_string_1} {test_series[0]} {pattern_string_2}',
+                                      None])
             self.col_to_original_cols_dict[col_name] = original_cols
         elif test_series.nunique() <= 5:
             counts_series = test_series.value_counts(normalize=False)
@@ -2920,10 +2989,10 @@ class DataConsistencyChecker:
         """
         Executed as tests run to allow monitoring progress.
         """
-        #multiline_test_desc = wrap(self.test_dict[test_id][TEST_DEFN_DESC], 70)
-        #print(f"Executing test {test_num:3}: {test_id+':':<30} {multiline_test_desc[0]}")
-        #filler = ''.join([" "]*52)
-        #for line in multiline_test_desc[1:]:
+        # multiline_test_desc = wrap(self.test_dict[test_id][TEST_DEFN_DESC], 70)
+        # print(f"Executing test {test_num:3}: {test_id+':':<30} {multiline_test_desc[0]}")
+        # filler = ''.join([" "]*52)
+        # for line in multiline_test_desc[1:]:
         #    print(f'{filler} {line}')
         print(f"Executing test {test_num:3}: {test_id+':':<30} {self.test_dict[test_id][TEST_DEFN_DESC]}")
 
@@ -3024,9 +3093,9 @@ class DataConsistencyChecker:
             lower_limits_dict[col_name] = lower_limit
         return lower_limits_dict
 
-    #########################################################################
+    ##################################################################################################################
     # Internal methods to get columns or sets of columns
-    #########################################################################
+    ##################################################################################################################
 
     def __get_column_pairs_unique(self):
         """
@@ -3167,9 +3236,9 @@ class DataConsistencyChecker:
                 pairs_arr.append((col_name_1, col_name_2))
         return pairs_arr
 
-    #########################################################################
+    ##################################################################################################################
     # Clear issues
-    #########################################################################
+    ##################################################################################################################
     def clear_issues(self, row_number=None, test_id=None, col_name=None):
         """
         This may be used to iteratively clean the results until all issues are acknowledged or understood.
@@ -3193,9 +3262,9 @@ class DataConsistencyChecker:
         self.test_results_df = self.safe_test_results_df.copy()
         self.test_results_by_column_np = self.safe_test_results_by_column_np.copy()
 
-    #########################################################################
+    ##################################################################################################################
     # Tune the contamination rate
-    #########################################################################
+    ##################################################################################################################
     def test_contamination_level(self, contamination_levels_arr=None):
         """
         This may be used to help determine an appropriate contamination rate to set for the process. Patterns in the
@@ -3213,9 +3282,9 @@ class DataConsistencyChecker:
             contamination_levels_arr = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05]
         pass
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for single columns of any type
-    #########################################################################
+    ##################################################################################################################
     def __generate_missing(self):
         """
         Patterns without exceptions: 'missing vals all' has consistently non-missing values.
@@ -3226,7 +3295,8 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('missing vals all ',
                                     [random.choice(['a', 'b', 'c']) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('missing vals most',
-                                    [random.choice(['a', 'b', 'c']) for _ in range(self.num_synth_rows-2)] + [None] + [np.NaN])
+                                    [random.choice(['a', 'b', 'c']) for _ in range(self.num_synth_rows-2)] +
+                                    [None] + [np.NaN])
         self.__add_synthetic_column('missing vals most null',
                                     [None] * (self.num_synth_rows-1) + ['a'])
 
@@ -3275,7 +3345,8 @@ class DataConsistencyChecker:
                 continue
 
             counts_series = self.orig_df[col_name].astype(str).value_counts(normalize=False, dropna=False)
-            all_rare_vals = [str(x) for x, y in zip(counts_series.index, counts_series.values) if y < self.contamination_level]
+            all_rare_vals = [str(x) for x, y in zip(counts_series.index, counts_series.values)
+                             if y < self.contamination_level]
             non_null_rare_vals = [str(x) for x in all_rare_vals if not is_missing(x)]
             # It is not possible to sort None or NaN values
             rare_vals = sorted(non_null_rare_vals)
@@ -3438,7 +3509,8 @@ class DataConsistencyChecker:
                 clf.fit(x_train, y_train_numeric)
                 # todo: predict on a sample first
                 y_pred = clf.predict(x_train)
-                f1 = f1_score(y_train_numeric, y_pred, average='micro') # We do not use macro, as some rare classes may have poor f1 scores even for good trees.
+                # We do not use macro, as some rare classes may have poor f1 scores even for good trees.
+                f1 = f1_score(y_train_numeric, y_pred, average='micro')
                 if f1 < 0.9:
                     continue
 
@@ -3449,7 +3521,8 @@ class DataConsistencyChecker:
 
                 # Test simply predicting the previous value
                 y_prev = y_train_numeric.shift(1)
-                f1_naive = f1_score(y_train_numeric[1:], y_prev[1:], average='macro') # Elment 0 will have NaN, so can not be evaluated.
+                # Element 0 will have NaN, so can not be evaluated.
+                f1_naive = f1_score(y_train_numeric[1:], y_prev[1:], average='macro')
                 if f1_naive >= (f1 - 0.05):
                     continue
 
@@ -3487,7 +3560,8 @@ class DataConsistencyChecker:
                     continue
 
                 # Get the normalized MAE when simply predicting the median
-                naive_mae = metrics.median_absolute_error(y_train.astype(float), [y_train.astype(float).quantile(0.5)] * len(y_train))
+                naive_mae = metrics.median_absolute_error(y_train.astype(float),
+                                                          [y_train.astype(float).quantile(0.5)] * len(y_train))
                 if mae > (naive_mae * 0.5):
                     continue
 
@@ -3551,9 +3625,9 @@ class DataConsistencyChecker:
                  f"with a decision tree using the following rules: \n\n{rules}"),
                 "")
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for pairs of columns of any type
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_matched_missing(self):
         """
@@ -3593,7 +3667,10 @@ class DataConsistencyChecker:
                 if num_missing_2 > (self.num_rows - self.contamination_level):
                     continue
 
-                # If the difference between the number of missing values is too large, there is not a pattern
+                # If the difference between the number of missing values is too large, there is not a pattern.
+                # For example, if col 1 has 400 missing and col 2 has 300, the difference is 100. So, there are at
+                # least 100 rows where col 1 has Null and col 2 does not. Assuming this is greater than the
+                # contamination level (probably set to between 1 and 50), there can not be a match.
                 if abs(num_missing_1 - num_missing_2) > self.contamination_level:
                     continue
 
@@ -3631,6 +3708,61 @@ class DataConsistencyChecker:
                     test_series,
                     (f'The columns "{col_name_1}" (with {num_missing_1} Null values) and "{col_name_2}" (with '
                      f'{num_missing_2} Null values) consistently have missing values in the same rows.')
+                )
+
+    def __generate_unmatched_missing(self):
+        """
+        Patterns without exceptions: 'unmatched_missing_vals rand_a' and 'unmatched_missing_vals all' have Null values
+            strictly different rows.
+        Patterns with exception: 'unmatched_missing_vals rand_a' and 'unmatched_missing_vals most' have Null values in
+            consistently different rows, with 1 exception.
+        """
+        self.__add_synthetic_column('unmatched_missing_vals rand_a',
+                                    ['a'] * 500 + [None] * (self.num_synth_rows - 500))
+        self.__add_synthetic_column('unmatched_missing_vals rand_b',
+                                    [random.choice(['a', 'b', 'c', None]) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('unmatched_missing_vals all', [None] * (self.num_synth_rows - 500) + ['a'] * 500)
+        self.__add_synthetic_column('unmatched_missing_vals most', self.synth_df['unmatched_missing_vals all'])
+        if self.synth_df.loc[999, 'unmatched_missing_vals most'] is None:
+            self.synth_df.loc[999, 'unmatched_missing_vals most'] = 'a'
+        else:
+            self.synth_df.loc[999, 'unmatched_missing_vals most'] = None
+
+    def __check_unmatched_missing(self, test_id):
+        for col_idx_1 in range(len(self.orig_df.columns)-1):
+            col_name_1 = self.orig_df.columns[col_idx_1]
+            col_1_missing_arr = [is_missing(x) for x in self.orig_df[col_name_1]]
+            num_missing_1 = col_1_missing_arr.count(True)
+            if self.verbose >= 2 and col_idx_1 > 0 and col_idx_1 % 100 == 0:
+                print(f"  Examining column {col_idx_1} of {len(self.orig_df.columns)} columns")
+            if num_missing_1 < (self.num_rows * 0.1):
+                continue
+            if num_missing_1 > (self.num_rows * 0.9):
+                continue
+            for col_idx_2 in range(col_idx_1 + 1, len(self.orig_df.columns)):
+                col_name_2 = self.orig_df.columns[col_idx_2]
+                col_2_missing_arr = [is_missing(x) for x in self.orig_df[col_name_2]]
+                num_missing_2 = col_2_missing_arr.count(True)
+                if num_missing_2 < (self.num_rows * 0.1):
+                    continue
+                if num_missing_2 > (self.num_rows * 0.9):
+                    continue
+
+                # If the sum of the number of missing values is too large, there is not a pattern. For example, if
+                # the dataset has 1000 rows and column 1 has 600 missing and column 2 has 700 missing, then there must
+                # be many rows where they both have Null values.
+                if abs(num_missing_1 + num_missing_2) > (self.num_rows + self.contamination_level):
+                    continue
+
+                test_series = [x != y for x, y in zip(col_1_missing_arr, col_2_missing_arr)]
+
+                self.__process_analysis_binary(
+                    test_id,
+                    f"{col_name_1} AND {col_name_2}",
+                    [col_name_1, col_name_2],
+                    test_series,
+                    (f'The columns "{col_name_1}" (with {num_missing_1} Null values) and "{col_name_2}" (with '
+                     f'{num_missing_2} Null values) consistently have missing values in different rows.')
                 )
 
     def __generate_same(self):
@@ -3807,9 +3939,9 @@ class DataConsistencyChecker:
                 continue
             test_arrs(self.orig_df[col_name_1], self.orig_df[col_name_2], is_sample=False)
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for single numeric columns
-    #########################################################################
+    ##################################################################################################################
 
     # All __generate_xxx methods follow the pattern of generating three columns: one with no pattern, one with a pattern
     # but no exceptions, and one with a pattern but 1 exception, in the final row.
@@ -4032,7 +4164,7 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].nunique(dropna=True) < 3:
                 continue
             if col_name in self.numeric_cols:
-                spearman_corr = abs(self.orig_df[col_name].corr(pd.Series(row_numbers), method='spearman'))
+                spearman_corr = abs(self.numeric_vals[col_name].corr(pd.Series(row_numbers), method='spearman'))
             else:
                 col_vals = [x.timestamp() for x, y in zip(pd.to_datetime(self.orig_df[col_name]), self.orig_df[col_name].isna()) if not y]
                 spearman_corr = abs(pd.Series(col_vals).corr(pd.Series(list(range(len(col_vals)))), method='spearman'))
@@ -4068,11 +4200,11 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].nunique(dropna=True) < 3:
                 continue
             if col_name in self.numeric_cols:
-                spearancorr = abs(self.orig_df[col_name].corr(pd.Series(row_numbers), method='spearman'))
+                spearan_corr = abs(self.numeric_vals[col_name].corr(pd.Series(row_numbers), method='spearman'))
             else:
                 col_vals = [x.timestamp() for x, y in zip(pd.to_datetime(self.orig_df[col_name]), self.orig_df[col_name].isna()) if not y]
                 spearman_corr = abs(pd.Series(col_vals).corr(pd.Series(list(range(len(col_vals)))), method='spearman'))
-            if spearancorr >= 0.95:
+            if spearan_corr >= 0.95:
                 col_percentiles = self.orig_df[col_name].rank(pct=True)
 
                 # Test for negative correlation
@@ -4560,9 +4692,35 @@ class DataConsistencyChecker:
                 test_series,
                 "The column consistently contains absolute values greater than or equal to 1.0")
 
-    #########################################################################
+    def __generate_invalid_numbers(self):
+        """
+        Patterns without exceptions: None
+        Patterns with exception: 'invalid_number most' contains consistently valid numbers, with one exception.
+        Not Flagged: 'invalid_number rand' has many non-valid numeric value, and would not be considered a numeric
+            column
+        """
+        self.__add_synthetic_column('invalid_number rand',
+                                    [random.choice(list(digits) + ['a']) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('invalid_number most',
+                                    [random.random() + 2.0 for _ in range(self.num_synth_rows-1)] + ['0.6%'])
+
+    def __check_invalid_numbers(self, test_id):
+        for col_name in self.numeric_cols:
+            test_series = [True if z else (x == y) for x, y, z in zip(self.orig_df[col_name],
+                                                                      self.numeric_vals_filled[col_name],
+                                                                      self.orig_df[col_name].isna())]
+            self.__process_analysis_binary(
+                test_id,
+                col_name,
+                [col_name],
+                test_series,
+                "The column consistently contains values that are valid numbers",
+                allow_patterns=False
+            )
+
+    ##################################################################################################################
     # Data consistency checks for pairs of numeric columns
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_larger(self):
         """
@@ -4852,26 +5010,26 @@ class DataConsistencyChecker:
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if not self.check_columns_same_scale_2(col_name_1, col_name_2, order=10):
                 continue
-            vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
-            sample_series = vals_arr_1 + vals_arr_2
-            nmad = np.nanmedian(np.absolute(sample_series - np.nanmedian(sample_series))) / np.nanmedian(sample_series) \
-                if np.nanmedian(sample_series) != 0 \
+            vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
+            sample_sums = vals_arr_1 + vals_arr_2
+            nmad = np.nanmedian(np.absolute(sample_sums - np.nanmedian(sample_sums))) / np.nanmedian(sample_sums) \
+                if np.nanmedian(sample_sums) != 0 \
                 else 0.0
             if nmad > 0.01:
                 continue
 
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
-            test_series_a = vals_arr_1 + vals_arr_2
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
+            sums_series = vals_arr_1 + vals_arr_2
             # Get the median absolute deviation of the differences, normalized by the median. Note, the scipy
             # implementation does not handle Null values.
-            nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
-                if np.nanmedian(test_series_a) != 0 \
+            nmad = np.nanmedian(np.absolute(sums_series - np.nanmedian(sums_series))) / np.nanmedian(sums_series) \
+                if np.nanmedian(sums_series) != 0 \
                 else 0.0
             if nmad < 0.01:
-                test_series = abs(test_series_a - np.nanmedian(test_series_a)) < \
-                              abs(0.01 * np.nanmedian(test_series_a))
+                test_series = abs(sums_series - np.nanmedian(sums_series)) < \
+                              abs(0.01 * np.nanmedian(sums_series))
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
@@ -4879,7 +5037,7 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The sum of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{np.nanmedian(test_series_a)}')
+                     f'{np.nanmedian(sums_series)}')
                 )
 
     def __generate_constant_diff(self):
@@ -4906,25 +5064,25 @@ class DataConsistencyChecker:
                 continue
 
             # Test on a sample
-            vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
-            sample_series = vals_arr_1 - vals_arr_2
-            nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
-                if statistics.median(sample_series) != 0 \
+            vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
+            diffs_series = vals_arr_1 - vals_arr_2
+            nmad = scipy.stats.median_abs_deviation(diffs_series) / statistics.median(diffs_series) \
+                if statistics.median(diffs_series) != 0 \
                 else 0.0
             if nmad > 0.01:
                 continue
 
             # Get the median absolute deviation of the differences, normalized by the median
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
-            test_series_a = abs(vals_arr_1 - vals_arr_2)
-            test_series_a = test_series_a.replace([np.inf, -np.inf, np.NaN], test_series_a.median())
-            nmad = scipy.stats.median_abs_deviation(test_series_a) / statistics.median(test_series_a)\
-                if statistics.median(test_series_a) != 0 \
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
+            diffs_series = abs(vals_arr_1 - vals_arr_2)
+            diffs_series = diffs_series.replace([np.inf, -np.inf, np.NaN], diffs_series.median())
+            nmad = scipy.stats.median_abs_deviation(diffs_series) / statistics.median(diffs_series)\
+                if statistics.median(diffs_series) != 0 \
                 else 0.0
             if nmad < 0.01:
-                test_series = abs(test_series_a - statistics.median(test_series_a)) < abs(0.01 * statistics.median(test_series_a))
+                test_series = abs(diffs_series - statistics.median(diffs_series)) <= abs(0.01 * statistics.median(diffs_series))
                 # todo: for all check_constant_* tests, check it wouldn't work as well to just use one column. Is the other just zero?
                 # here, checking the same scale should work but doesn't seem to.
 
@@ -4933,7 +5091,8 @@ class DataConsistencyChecker:
                     self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
-                    f'The difference of "{col_name_1}" and "{col_name_2}" is consistently close to {statistics.median(test_series_a)}'
+                    (f'The difference of "{col_name_1}" and "{col_name_2}" is consistently close to '
+                     f'{statistics.median(diffs_series)}')
                 )
 
     def __generate_constant_product(self):
@@ -4956,8 +5115,10 @@ class DataConsistencyChecker:
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             # Test on a sample
-            vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
+            # vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
+            # vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
             sample_series = vals_arr_1 * vals_arr_2
             nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
                 if statistics.median(sample_series) != 0 \
@@ -4965,8 +5126,10 @@ class DataConsistencyChecker:
             if nmad > 0.01:
                 continue
 
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            # vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
+            # vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = abs(vals_arr_1 * vals_arr_2)
             # Get the median absolute deviation of the products, normalized by the median
             nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
@@ -5020,8 +5183,10 @@ class DataConsistencyChecker:
                 col_name_2 = temp
 
             # Test first on a sample
-            vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
+            # vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
+            # vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
             sample_series = vals_arr_1 / vals_arr_2
             nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
                 if statistics.median(sample_series) != 0 \
@@ -5035,8 +5200,10 @@ class DataConsistencyChecker:
             if statistics.median(sample_series) in [1.0, -1.0, 0.0]:
                 continue
 
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            # vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
+            # vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = abs(vals_arr_1 / vals_arr_2)
             # Get the median absolute deviation of the ratios, normalized by the median
             nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
@@ -5620,9 +5787,9 @@ class DataConsistencyChecker:
                         f'Column "{col_name_1}" is consistently the same as rounding "{col_name_2} to the 1000s"',)
                     continue
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for pairs of columns, where one must be numeric
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_matched_zero_missing(self):
         """
@@ -5695,9 +5862,9 @@ class DataConsistencyChecker:
                     f'Where "{col_name_1}" is 0, "{col_name_2}" is consistently Null and not Null otherwise'
                 )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of 3 numeric columns
-    #########################################################################
+    ##################################################################################################################
 
     def __check_sum_exact(self, test_id):
         # todo: we can maybe combine this with checking for similar above, and adjust the threhold so there is a
@@ -6094,9 +6261,9 @@ class DataConsistencyChecker:
                 if test_larger(col_name_1, col_name_2, col_name_3):
                     continue
 
-    ###############################################################################
+    ##################################################################################################################
     # Data consistency checks for numeric column in relation to all other numeric columns.
-    ###############################################################################
+    ##################################################################################################################
 
     def __generate_sum_of_columns(self):
         """
@@ -7270,9 +7437,9 @@ class DataConsistencyChecker:
                     display_info={"cluster": cluster}
                 )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for single date columns
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_early_dates(self):
         """
@@ -7536,9 +7703,9 @@ class DataConsistencyChecker:
                 f"on the {rare_minutes}th minutes of the hour"
             )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks pairs of date columns
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_constant_date_gap(self):
         """
@@ -7720,9 +7887,9 @@ class DataConsistencyChecker:
                     allow_patterns=False
                 )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for two columns, where one is date and the other is numeric
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_large_given_date(self):
         """
@@ -7841,9 +8008,9 @@ class DataConsistencyChecker:
                     allow_patterns=False
                 )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for pairs of binary columns
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_binary_same(self):
         """
@@ -8045,9 +8212,9 @@ class DataConsistencyChecker:
                     test_series,
                     pattern_str, "")
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of binary columns
-    #########################################################################
+    ##################################################################################################################
     def __generate_binary_and(self):
         """
         Patterns without exceptions: 'bin_and all' is consistently the AND of 'bin_and rand_1' and 'bin_and rand_2'
@@ -8516,9 +8683,9 @@ class DataConsistencyChecker:
                                 f'For columns {subset}, the combination of values is rare'
                             )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for pairs of columns where one is binary and one is numeric
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_binary_matches_values(self):
         """
@@ -8589,9 +8756,9 @@ class DataConsistencyChecker:
                          f'{threshold} and "{val1}" when values are over {threshold}',)
                     )
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of three columns, where one must be binary
-    #########################################################################
+    ##################################################################################################################
 
     def __generate_binary_two_others_match(self):
         """
@@ -8745,9 +8912,9 @@ class DataConsistencyChecker:
             for col_name_2, col_name_3 in self.__get_binary_column_pairs_unique():
                 test_set(bin_col, col_name_2, col_name_3)
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of three columns, where one is binary and the other two string
-    #########################################################################
+    ##################################################################################################################
     def __generate_binary_two_str_match(self):
         """
         Patterns without exceptions:
@@ -8766,9 +8933,9 @@ class DataConsistencyChecker:
         """
         pass
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency sets of multiple columns, where one is binary and the others are numeric
-    #########################################################################
+    ##################################################################################################################
     def __generate_binary_matches_sum(self):
         """
         Patterns without exceptions: 'bin_match_sum all' is consistently False when the sum of 'bin_match_sum rand_a'
@@ -8972,9 +9139,9 @@ class DataConsistencyChecker:
                     )
         '''
 
-    #########################################################################
+    ##################################################################################################################
     # Data consistency checks for single non-numeric columns
-    #########################################################################
+    ##################################################################################################################
     def __generate_blank(self):
         """
         Patterns without exceptions: None
@@ -9653,10 +9820,6 @@ class DataConsistencyChecker:
         The test COMMON_SPECIAL_CHARS checks if there are any special characters present in most values. This test
         checks, for any special characters that are in all values, if they are in the same position.
         """
-        def get_non_alphanumeric(x):
-            if x.isalnum():
-                return []
-            return [c for c in x if not str(c).isalnum()]
 
         for col_name in self.string_cols:
             # todo: Skip columns that have only one character for all values
@@ -9725,6 +9888,78 @@ class DataConsistencyChecker:
                         pattern_str
                     )
                     break
+
+    def __generate_chars_pattern(self):
+        """
+        Patterns without exceptions: 'chars_pattern all' consistently contains values of the pattern: A@9.9-A
+        Patterns with exception: 'chars_pattern most' consistently contains values of the pattern: A@9.9-A, with 1
+            exception.
+        Not flagged: 'chars_pattern rand' contains values with no pattern.
+        """
+
+        self.__add_synthetic_column(
+            'chars_pattern rand',
+            [[''.join(random.choice(list(letters) + ['-']) for _ in range(random.randint(1, 10)))][0]
+             for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'chars_pattern all',
+            [''.join([random.choice(list(letters)), '@', '5', '.', '44','-',random.choice(list(letters))])
+             for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('chars_pattern most', self.synth_df['chars_pattern all'])
+        self.synth_df.loc[999, 'chars_pattern most'] = 'g@-8-.42'
+
+    def __check_chars_pattern(self, test_id):
+
+        def get_str_format(x):
+            if x is None:
+                return ""
+            new_str = ' '  # Add a space just to simplify tests for the previous character. Removed later.
+            for c in x:
+                if c.isdigit():
+                    if new_str[-1] != '9':
+                        new_str += '9'
+                elif c.isalpha():
+                    if new_str[-1] != 'A':
+                        new_str += 'A'
+                else:
+                    new_str += c
+            new_str = new_str[1:]  # strip the space added at the start
+            return new_str
+
+        for col_name in self.string_cols:
+            # Skip columns that have only one character for all values
+            avg_num_chars = statistics.median(self.orig_df[col_name].astype(str).str.len())
+            if avg_num_chars <= 1:
+                continue
+
+            # Skip columns that are almost entirely Null. If there are even a small number of non-null values, though,
+            # and they consistently follow a pattern, we flag that pattern.
+            if self.orig_df[col_name].isna().sum() > (self.num_rows - self.contamination_level):
+                continue
+
+            # Skip columns which contain only alphanumeric characters
+            if self.orig_df[col_name].astype(str).str.isalnum().tolist().count(False) == 0:
+                continue
+
+            # First test on a sample
+            patterns_arr = self.sample_df[col_name].apply(get_str_format)
+            if patterns_arr.nunique() > 1:
+                continue
+
+            patterns_arr = self.orig_df[col_name].apply(get_str_format)
+            vc = patterns_arr.value_counts()
+            if len(vc) > self.contamination_level:
+                continue
+
+            test_series = [y or (x == vc.index[0]) for x, y in zip(patterns_arr, self.orig_df[col_name].isna())]
+            self.__process_analysis_binary(
+                test_id,
+                col_name,
+                [col_name],
+                test_series,
+                (f'Column "{col_name}" consistently contains values with the pattern {vc.index[0]} where "A" '
+                 f'represents alphabetic characters and "9" represents digits'),
+            )
 
     def __generate_uppercase(self):
         """
@@ -10146,9 +10381,9 @@ class DataConsistencyChecker:
             col_series = df[col_name]
             self.__check_grouped_stings_column(test_id, None, col_name, col_series)
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for pairs of non-numeric columns
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_a_implies_b(self):
         """
@@ -11122,9 +11357,9 @@ class DataConsistencyChecker:
                     test_series,
                     f'"{col_name_1}" is consistently inversely similar in percentile to "{col_name_2}"')
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for one non-numeric column and one numeric column
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_large_given(self):
         """
@@ -11585,9 +11820,9 @@ class DataConsistencyChecker:
                 col_series = df[col_name_2]
                 self.__check_grouped_stings_column(test_id, col_name_1, col_name_2, col_series)
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for two string and one numeric column
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_large_given_pair(self):
         """
@@ -11848,9 +12083,9 @@ class DataConsistencyChecker:
                     allow_patterns=False
                 )
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for one string/binary column and two numeric
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_corr_given_val(self):
         """
@@ -12014,9 +12249,9 @@ class DataConsistencyChecker:
                         (f'"{col_name_1}" is consistently correlated with "{col_name_2}" when conditioning on '
                          f'"{col_cond}"'))
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for non-numeric columns in relation to all other columns
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_dt_classifier(self):
         """
@@ -12106,9 +12341,9 @@ class DataConsistencyChecker:
                     f'following rules: \n{rules}'
                 )
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of three columns of any type
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_c_is_a_or_b(self):
         """
@@ -12253,9 +12488,9 @@ class DataConsistencyChecker:
                 for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                     check_triple()
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of four columns of any type
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_two_pairs(self):
         """
@@ -12382,9 +12617,9 @@ class DataConsistencyChecker:
                         ) # todo: give stats about how often 1==2, and 3==4 and 1!=2.
                         # todo: when list exaples, give examples where match & where don't
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for sets of columns of any type
-    ####################################################################################
+    ##################################################################################################################
     def __generate_unique_sets_values(self):
         """
         Patterns without exceptions:
@@ -12462,9 +12697,9 @@ class DataConsistencyChecker:
                         found_any = True
                         break
 
-    ####################################################################################
+    ##################################################################################################################
     # Data consistency checks for complete rows of values
-    ####################################################################################
+    ##################################################################################################################
 
     def __generate_missing_values_per_row(self):
         """
@@ -12650,9 +12885,10 @@ class DataConsistencyChecker:
                           "flagged_vals": flagged_vals}
         )
 
-#########################################################################
+
+##################################################################################################################
 # General Methods outside the class
-#########################################################################
+##################################################################################################################
 
 def is_number(s):
     try:
@@ -12660,6 +12896,7 @@ def is_number(s):
         return True
     except:
         return False
+
 
 def convert_to_numeric(arr, filler):
     """
@@ -12686,6 +12923,12 @@ def get_num_digits(num):
     if digits_val == 0:
         return 0
     return len_digits_str
+
+
+def get_non_alphanumeric(x):
+    if x.isalnum():
+        return []
+    return [c for c in x if not str(c).isalnum()]
 
 
 def styling_orig_row(x, row_idx, flagged_arr):
