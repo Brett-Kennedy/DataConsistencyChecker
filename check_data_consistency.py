@@ -893,7 +893,7 @@ class DataConsistencyChecker:
 
         # For any columns flagged as string columns, the dtype may be category.  Convert the columns to string to
         # ensure the code can compare values and perform other string operations
-        for col_name in self.string_cols:
+        for col_name in self.string_cols + self.binary_cols:
             self.orig_df[col_name] = self.orig_df[col_name].astype(str)
 
         # todo: for columns with mostly numeric values, but some non-alphanumeric (eg $, %), strip and do the numeric tests
@@ -2202,6 +2202,7 @@ class DataConsistencyChecker:
         # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is kludgy.
         # results_col_name = self.get_results_col_name(test_id, columns_set)
         # col_names = self.col_to_original_cols_dict[results_col_name]
+        fig, ax = plt.subplots(figsize=(4, 4))
         s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
         plt.show()
 
@@ -2224,7 +2225,8 @@ class DataConsistencyChecker:
             flagged_vals = sub_flagged_df[cols[1]].values
             for fv in flagged_vals:
                 s.axvline(fv, color='red')
-            s.set_title(f"Distribution of {cols[1]} where {cols[0]} is {v} (Flagged values in red)")
+            s.set_title(f"Distribution of {cols[1]} where {cols[0]} is {v} \n(Flagged values in red)")
+        plt.tight_layout()
         plt.show()
 
     def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
@@ -2366,6 +2368,8 @@ class DataConsistencyChecker:
             df['Number Uniuqe'] = df.apply(lambda x: len(set(x)), axis=1)
         elif test_id in ['NEGATIVE_VALUES_PER_ROW']:
             df['Number Negative'] = df.applymap(lambda x: isinstance(x, numbers.Number) and x < 0).sum(axis=1)
+        elif test_id in ['DECISION_TREE_CLASSIFIER', 'DECISION_TREE_REGRESSOR', 'PREV_VALUES_DT', 'LINEAR_REGRESSION']:
+            df["PREDICTION"] = display_info['Pred'].loc[df.index]
 
         df = df.sort_index()
         if is_notebook():
@@ -2422,9 +2426,14 @@ class DataConsistencyChecker:
 
         if test_id in ['LARGER', 'MUCH_LARGER', 'SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE',
                        'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
-                       'CORRELATED_FEATURES', 'RARE_COMBINATION', 'SAME_VALUES', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
-            # todo: also provide the spearman correlation for these cases
+                       'CORRELATED_FEATURES', 'RARE_COMBINATION', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
             self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+
+        if test_id in ['SAME_VALUES']:
+            if self.orig_df[cols[0]].nunique() > 5:
+                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+            else:
+                self.__plot_heatmap(test_id, cols)
 
         if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
                        'SIMILAR_TO_RATIO']:
@@ -3424,12 +3433,12 @@ class DataConsistencyChecker:
             'pattern_history_df_num all_a' has a repeating pattern.
         Patterns with exception:
             'pattern_history_df_str most_a' has a repeating pattern, with exceptions (a new value).
-            'pattern_history_df_str most_b' has a repeating pattern, with exceptions (an existing value in the wrong spot).
+            'pattern_history_df_str most_b' has a repeating pattern, with exceptions (an existing value in the wrong
+                spot).
             'pattern_history_df_num most_a' has a repeating pattern, with one exception
-            'pattern_history_df_num most_b'  has a trend, with one exception
         Columns not flagged:
-            'pattern_history_df_num all_b' has a trend, but it is no stronger than predicting the previous value
-            'pattern_history_df_num most_b' has a trend, but it is no stronger than predicting the previous value
+            'pattern_history_df_num not_1' has a trend, but it is no stronger than predicting the previous value
+            'pattern_history_df_num not_2' has a trend, but it is no stronger than predicting the previous value
         """
         # Categorical test cases - repeating values
         self.__add_synthetic_column('pattern_history_df_str all_a', ['a', 'b', 'c', 'd'] * (self.num_synth_rows // 4))
@@ -3445,9 +3454,9 @@ class DataConsistencyChecker:
 
         # Numeric test cases - trend
         # todo: the DT can't beat just predicting the previous value
-        self.__add_synthetic_column('pattern_history_df_num all_b', np.arange(self.num_synth_rows))
-        self.__add_synthetic_column('pattern_history_df_num most_b', np.arange(self.num_synth_rows))
-        self.synth_df.loc[999, 'pattern_history_df_num most_b'] = 10
+        self.__add_synthetic_column('pattern_history_df_num not_1', np.arange(self.num_synth_rows))
+        self.__add_synthetic_column('pattern_history_df_num not_2', np.arange(self.num_synth_rows))
+        self.synth_df.loc[999, 'pattern_history_df_num not_2'] = 10
 
     def __check_prev_values_dt(self, test_id):
         """
@@ -3459,66 +3468,55 @@ class DataConsistencyChecker:
         for col_name in self.orig_df.columns:
             df = pd.DataFrame()
             df[col_name] = self.orig_df[col_name]
+            if col_name in self.numeric_cols:
+                df[col_name] = df[col_name].fillna(sys.maxsize)
+
             # todo: if we can create a good DT with 10 lags, see if can with less. Loop until use as few lags as possible.
+
+            # Create the lag features
             for i in range(1, look_back_range):
                 df[f"Lag_{i}"] = df[col_name].shift(i)
-            # For any simple DTs, we should be able to train on a fairly small set of rows
-            df = df.sample(n=min(len(df), 1000))
+
+            # For any simple DTs, we should be able to train on a fairly small set of rows. This is done to ensure
+            # the pattern is simple and for speed. We skip the first set of rows, as they do not have the lag values.
+            # The sample is set smaller than the synthetic data size to provide increased testing.
+            df_sample = df.iloc[look_back_range:].copy()
+            df_sample = df_sample.sample(n=min(len(df_sample), 900))
 
             n_unique_vals = self.orig_df[col_name].nunique()
 
-            x_train = df.drop(columns=[col_name])
-            x_train = x_train[look_back_range:]
-            y_train = df[col_name][look_back_range:]
+            x_train = df_sample.drop(columns=[col_name])
+            #x_train = x_train.iloc[look_back_range:]
+            y_train = df_sample[col_name]
 
             x_train = x_train.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
             y_train = y_train.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
 
             if col_name in self.string_cols or col_name in self.binary_cols or n_unique_vals <= look_back_range:
-                # todo: skip the first 10 rows, as they have no history to predict based on
                 if self.orig_df[col_name].nunique() > look_back_range:
                     continue
 
                 # Do not flag rare values, as there is another test for that.
-                # Determine the number of non-rare unique values, so we can set the capacity of the decision tree to
-                # a reasonable size.
                 rare_values = []
                 for v in self.orig_df[col_name].unique():
                     if self.orig_df[col_name].tolist().count(v) < self.contamination_level:
                         rare_values.append(v)
 
-                # Allow the DT to create a rule for each non-rare value. Each rule may include multiple features in
-                # the decision path.
-                clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()))
-
-                # I think can leave out -- we fill NaN above.
-                # for c in x_train.columns:
-                #     if c in self.numeric_cols:
-                #         x_train[c] = x_train[c].replace([np.inf, -np.inf], x_train[c].median())
-                #         x_train[c] = x_train[c].fillna(x_train[c].median())
-                #     else:
-                #         try:
-                #             x_train[c] = x_train[c].replace([np.inf, -np.inf], x_train[c].mode()[0])
-                #         except:
-                #             p = 7
-                #         x_train[c] = x_train[c].fillna(x_train[c].mode()[0])
+                # Create a binary (one-hot) column for each value for each lag. Sklearn decision trees can not work
+                # with non-numeric values.
                 x_train = pd.get_dummies(x_train, columns=x_train.columns)
 
-                # commented out, but we may wish to put the mode() back. though it did give warnings
-                #
-                # try:
-                #     print()
-                #     print(col_name)
-                #     print(y_train.mode()[0])
-                #     y_train = y_train.fillna(y_train.mode()[0])
-                # except:
-                #     p = 9
-
                 # Ensure the Y column is in a consistent format, using ordinal values
-                y_train_numeric = y_train.map({x: y for x, y in zip(y_train.unique(), range(y_train.nunique()))})
-                y_train_reverse = {y: x for x, y in zip(y_train.unique(), range(y_train.nunique()))}
+                encode_dict = {x: y for x, y in zip(y_train.unique(), range(y_train.nunique()))}
+                decode_dict = {y: x for x, y in zip(y_train.unique(), range(y_train.nunique()))}
+                y_train_numeric = y_train.map(encode_dict)
+
+                # Allow the DT to create a rule for each value. Each rule may include multiple features in
+                # the decision path.
+                clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()))
                 clf.fit(x_train, y_train_numeric)
-                # todo: predict on a sample first
+
+                # todo: predict on a smaller sample first
                 y_pred = clf.predict(x_train)
                 # We do not use macro, as some rare classes may have poor f1 scores even for good trees.
                 f1 = f1_score(y_train_numeric, y_pred, average='micro')
@@ -3526,18 +3524,31 @@ class DataConsistencyChecker:
                     continue
 
                 # Test simply predicting the most common value
-                f1_naive = f1_score(y_train_numeric, [y_train_numeric.mode()[0]] * len(y_pred), average='macro')
+                f1_naive = f1_score(y_train_numeric, [y_train_numeric.mode()[0]] * len(y_pred), average='micro')
                 if f1_naive >= (f1 - 0.05):
                     continue
 
                 # Test simply predicting the previous value
                 y_prev = y_train_numeric.shift(1)
                 # Element 0 will have NaN, so can not be evaluated.
-                f1_naive = f1_score(y_train_numeric[1:], y_prev[1:], average='macro')
+                f1_naive = f1_score(y_train_numeric[1:], y_prev[1:], average='micro')
                 if f1_naive >= (f1 - 0.05):
                     continue
 
-                test_series = [x == y or x in rare_values for x, y in zip(y_train_numeric, y_pred)]
+                # Once we establish the accuracy on roughly 1000 rows, predict for the full column
+                test_df = df.iloc[look_back_range:]
+                x_test = test_df.drop(columns=[col_name])
+                y_test = test_df[col_name]
+
+                x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+                y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+
+                x_test = pd.get_dummies(x_test, columns=x_test.columns)
+                y_test_numeric = y_test.map(encode_dict)
+
+                y_pred = clf.predict(x_test)
+
+                test_series = [x == y or x in rare_values for x, y in zip(y_test_numeric, y_pred)]
                 test_series = [True]*look_back_range + test_series
                 rules = tree.export_text(clf)
             elif col_name in self.numeric_cols:  # todo: try to do date columns here too
@@ -3556,11 +3567,13 @@ class DataConsistencyChecker:
                     if (q1 == med) or (q3 == med):
                         continue
 
-                y_train_reverse = None
+                # We do not encode/decode values with a numeric column.
+                decode_dict = None
+
                 # Get the normalized MAE when using a decision tree
                 regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range)
                 regr.fit(x_train, y_train)
-                # todo: predict on a sample first
+                # todo: predict on a smaller sample first
                 y_pred = regr.predict(x_train)
                 mae = metrics.median_absolute_error(y_train, y_pred)
                 if self.column_medians[col_name] != 0:
@@ -3583,7 +3596,20 @@ class DataConsistencyChecker:
                 if mae > (naive_mae * 0.5):
                     continue
 
-                test_series = [True if y == 0 else (x/y) < (y / 10.0) for x, y in zip(y_train, y_pred)]
+                # Once we establish the accuracy on roughly 1000 rows, predict for the full column
+                test_df = df.iloc[look_back_range:]
+                x_test = test_df.drop(columns=[col_name])
+                y_test = test_df[col_name]
+
+                # x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+                # y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+
+                y_pred = regr.predict(x_test)
+
+                test_series = [True if y == 0 else (x/y) < (y / 10.0) for x, y in zip(y_test, y_pred)]
+                test_series = [True]*look_back_range + test_series
+
+                # test_series = [True if y == 0 else (x/y) < (y / 10.0) for x, y in zip(y_train, y_pred)]
                 test_series = [True]*look_back_range + test_series
                 rules = tree.export_text(regr)
             else:
@@ -3599,18 +3625,18 @@ class DataConsistencyChecker:
                     rules = rules.replace(rule_col_name, c_name + ' ')
 
             # We map the numeric values in the target column back to their original values
-            if y_train_reverse:
-                for v in y_train_reverse.keys():
-                    rules = rules.replace(f"class: {v}", f"value: {y_train_reverse[v]}")
+            if decode_dict:
+                for v in decode_dict.keys():
+                    rules = rules.replace(f"class: {v}", f"value: {decode_dict[v]}")
 
             # We map the split points (in the form of Lag_1_[value] <= 0.50) to a more readable format
-            if y_train_reverse is None:  # Regression
+            if decode_dict is None:  # Regression
                 for i in range(look_back_range):
                     rules = rules.replace(f"Lag_{i}", f"The value {i} rows previously")
             else:  # Classification
                 for i in range(look_back_range):
-                    for v in y_train_reverse.keys():
-                        val = y_train_reverse[v]
+                    for v in decode_dict.keys():
+                        val = decode_dict[v]
                         rules = rules.replace(f"Lag_{i}_{val} <= 0.50", f"The value {i} rows previously was not '{val}'")
                         rules = rules.replace(f"Lag_{i}_{val} >  0.50", f"The value {i} rows previously was '{val}'")
                         # In some cases, '.0' is added to the end of the vals
@@ -3627,6 +3653,9 @@ class DataConsistencyChecker:
             if len(tree_preds) == 1:
                 continue
 
+            pred_series = pd.Series(self.orig_df[col_name].iloc[:10].tolist() + y_pred.tolist())
+            if decode_dict:
+                pred_series = pred_series.map(decode_dict)
             self.__process_analysis_binary(
                 test_id,
                 col_name,
@@ -3634,7 +3663,8 @@ class DataConsistencyChecker:
                 np.array(test_series),
                 (f"The values in {col_name} can consistently be predicted from the previous values in the column "
                  f"with a decision tree using the following rules: \n\n{rules}"),
-                "")
+                display_info={'Pred': pred_series}
+                )
 
     ##################################################################################################################
     # Data consistency checks for pairs of columns of any type
@@ -4617,15 +4647,25 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('rounding 2', [int(random.randint(1, 100) * (math.pow(10, random.randint(1, 4))))
                                                    for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('rounding 3', [int(random.randint(1, 100) * (math.pow(10, random.randint(1, 4))))
-                                                   for _ in range(self.num_synth_rows-1)] + [10_000_000])
+                                                   for _ in range(self.num_synth_rows-1)] + [100_000_000])
         self.__add_synthetic_column('rounding 4', [(random.randint(1, 100) * 0.25 * (math.pow(10, random.randint(1, 4))))
-                                                   for _ in range(self.num_synth_rows-1)] + [10_000_000])
+                                                   for _ in range(self.num_synth_rows-1)] + [100_000_000])
 
     def __check_rounding(self, test_id):
+        """
+        For each numeric column, we get the number of trailing zeros in each value. This test applies only to integer
+        columns. We take the normal range of number of zeros. For example, 1 to 4, meaning most values have 1, 2, 3,
+        or 4 trailing zeros. We flag any values with less, or more than 2 more zeros. In this example, anything with
+        0 or 7 or more zeros. Patterns without exceptions will be reported only if the normal numbers of zeros is
+        at least 1 (not zero).
+        """
+
         for col_name in self.numeric_cols:
 
-            # This test applies only to integer columns. Skip any columns than have more than a few non-integer values.
-            if (self.orig_df[col_name] == self.orig_df[col_name].astype(int)).tolist().count(False) > \
+            # Skip any columns than have more than a few non-integer values. We do not use self.numeric_vals_filled
+            # as the median values may have decimals or not.
+            numeric_vals = convert_to_numeric(self.orig_df[col_name], 0)
+            if (self.orig_df[col_name] == numeric_vals).tolist().count(False) > \
                     self.contamination_level:
                 continue
 
@@ -4637,23 +4677,26 @@ class DataConsistencyChecker:
 
             num_zeros_arr = vals.str.replace('.0', '', regex=False).str.len() - \
                             vals.str.replace('.0', '', regex=False).str.strip('0').str.len()
-            counts_series = num_zeros_arr.value_counts(normalize=True)
-            last_normal = np.where(counts_series.sort_index().cumsum() > 0.995)[0][0]
-            results_col = num_zeros_arr < (last_normal + 2)
+            counts_series = num_zeros_arr.value_counts()
+            last_normal_index = np.where(counts_series.sort_values(ascending=False).cumsum() > (self.num_rows - self.contamination_level))[0][0]
+            normal_vals = counts_series.index[:last_normal_index + 1]
+            min_normal = min(normal_vals)
+            max_normal = max(normal_vals)
+            test_series = (num_zeros_arr >= min_normal) & (num_zeros_arr <= max_normal + 2)
 
-            Get the set of normal numbers of zeros.
-            Take the min and max of that set, and consider anything between also last_normal
-            allow a pattern if the min is at least 1.
-            flag anything with more or with less zeros. Count each separately, so can have up to contamination level with
-            less & as many with more.
+            if min_normal > 0:
+                exception_str = f"with {max_normal + 3} or more trailing zeros"
+            else:
+                exception_str = f"with less than {min_normal} or with more than {max_normal + 2} trailing zeros"
 
             self.__process_analysis_binary(
                 test_id,
                 col_name,
                 [col_name],
-                results_col,
-                f'The column has consistently values with {last_normal} or less trailing zeros',
-                f'with significantly more trailing zeros.',
+                test_series,
+                f'The column has consistently values with between {min_normal} and {max_normal} trailing zeros.',
+                exception_str,
+                allow_patterns=(min_normal > 0)
             )
 
     def __generate_non_zero(self):
@@ -7199,11 +7242,12 @@ class DataConsistencyChecker:
                 test_series = normalized_errors_arr < 0.1
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(cols),
-                    cols,
+                    self.get_col_set_name(cols + [col_name]),
+                    cols + [col_name],
                     test_series,
-                    f'All values in the column are consistently predictable based using a decision tree with the '
-                    f'following rules: \n{rules}'
+                    f'The values in column "{col_name}" are consistently predictable from {cols} based using a decision '
+                    f'tree with the following rules: \n{rules}',
+                    display_info={'Pred': pd.Series(y_pred)}
                 )
 
     def __generate_lin_regressor(self):
@@ -7341,11 +7385,12 @@ class DataConsistencyChecker:
                 test_series = normalized_errors_arr < 0.5
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(features_used),
-                    features_used,
+                    self.get_col_set_name(features_used + [col_name]),
+                    features_used + [col_name],
                     test_series,
                     (f'The column "{col_name}" contains values that are consistently predictable based on a linear '
-                     f'regression\nformula: {regression_formula}')
+                     f'regression\nformula: {regression_formula}'),
+                    display_info={'Pred': pd.Series(y_pred)}
                 )
                 # todo: also save the results of the linear regresion and plot this against the actual values
 
@@ -11390,10 +11435,7 @@ class DataConsistencyChecker:
                 continue
 
             # The class variable, self.spearman_corr, covers only numeric columns, so we calculate the correlation here.
-            try:
-                spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
-            except:
-                x = 9
+            spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
 
             if spearancorr >= 0.95:
                 col_1_percentiles = self.orig_df[col_name_1].rank(pct=True)
@@ -11465,10 +11507,10 @@ class DataConsistencyChecker:
                 for v in common_values:
                     sub_df = sub_dfs_dict[v]
                     if col_name_2 in self.numeric_cols:
-                        # Get the iqr given the full column
+                        # Get the upper limit (based on IQR), given the full column
                         upper_limit = upper_limits_dict[col_name_2]
 
-                        # Get the iqr given the current subset
+                        # Get the numeric values of the current subset
                         num_vals_no_null = pd.Series(
                             [float(x) for x in sub_df[col_name_2]
                              if str(x).replace('-', '').replace('.', '').isdigit()], dtype=float)
@@ -11476,6 +11518,7 @@ class DataConsistencyChecker:
                             continue
                         subset_med = num_vals_no_null.median()
                         num_vals = convert_to_numeric(sub_df[col_name_2], subset_med)
+                        num_vals = num_vals.fillna(subset_med)
 
                         # We are only concerned in this test with subsets that tend to have smaller values in the
                         # numeric column, and flag large values in this case. We do not flag values in subsets that
@@ -11484,6 +11527,7 @@ class DataConsistencyChecker:
                         if res_1.tolist().count(True) > 0:
                             continue
 
+                        # Get the upper limit given the current subset
                         q1 = num_vals.quantile(0.25)
                         q3 = num_vals.quantile(0.75)
                         upper_limit_subset = q3 + (self.iqr_limit * (q3 - q1))
@@ -11576,6 +11620,7 @@ class DataConsistencyChecker:
                             continue
                         subset_med = num_vals_no_null.median()
                         num_vals = convert_to_numeric(sub_df[col_name_2], subset_med)
+                        num_vals = num_vals.fillna(subset_med)
 
                         # We are only concerned in this test with subsets that tend to have larger values in the
                         # numeric column, and flag small values in this case. We do not flag values in subsets that
@@ -11684,6 +11729,7 @@ class DataConsistencyChecker:
                             continue
                         subset_med = num_vals_no_null.median()
                         num_vals = convert_to_numeric(sub_df[col_name_2], subset_med)
+                        num_vals = num_vals.fillna(subset_med)
 
                         # Check if this subset has values that would be flagged even in not separating by string values.
                         res_1 = num_vals > upper_limit
@@ -11794,6 +11840,7 @@ class DataConsistencyChecker:
                             continue
                         subset_med = num_vals_no_null.median()
                         num_vals = convert_to_numeric(sub_df[col_name_2], subset_med)
+                        num_vals = num_vals.fillna(subset_med)
 
                         # We are only concerned in this test with subsets that tend to have larger values in the
                         # numeric column, and flag small values in this case. We do not flag values in subsets that
@@ -12399,11 +12446,12 @@ class DataConsistencyChecker:
                 test_series = y == y_pred
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(cols),
-                    cols,
+                    self.get_col_set_name(cols + [col_name]),
+                    cols + [col_name],
                     test_series,
-                    f'All values in the column are consistently predictable based using a decision tree with the '
-                    f'following rules: \n{rules}'
+                    f'The values in column "{col_name}" are consistently predictable from {cols} based using a decision '
+                    f'tree with the following rules: \n{rules}',
+                    display_info={'Pred': pd.Series(y_pred)}
                 )
 
     ##################################################################################################################
@@ -13040,8 +13088,8 @@ def is_missing(x):
         return math.isnan(x)
     if x != x:
         return True
-    if type(x) == str:
-        return x == ""
+    if type(x) in [str, np.str_]:
+        return (x == "") or (x == 'nan') or (x == 'None') or (len(x) == 0)
     if type(x) == list:
         return len(x) == 0
     return False
