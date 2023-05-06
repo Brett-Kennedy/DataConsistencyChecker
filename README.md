@@ -56,7 +56,7 @@ dc.display_detailed_results()
 The tool typically runs in under a minute for small files, and under 30 minutes even for very large files, with many thousands of rows and/or columns. However, it is
 often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
 
-- Excluding some tests. Some may be of less interest to your project or may be slower to execute.  
+- Exclude some tests. Some may be of less interest to your project or may be slower to execute.  
 - Set the max_combinations parameter to a lower value, which will skip a significant amount of processing in some cases. The default is 1,000,000. 
 - Run on a sample of the rows. Doing this, you will not be able to properly identify exceptions to the patterns, but will be able to identify the patterns themselves. 
 - Columns may be removed from the dataframe before running the tool to remove checks on these columns. 
