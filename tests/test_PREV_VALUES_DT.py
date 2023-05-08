@@ -5,7 +5,7 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'PREV_VALUES_DT'
 random.seed(0)
@@ -15,11 +15,18 @@ synth_exceptions_cols = ['pattern_history_df_str most_a', 'pattern_history_df_st
                          'pattern_history_df_num most_a']
 
 
+def test_real():
+	res = build_default_results()
+	res['nursery'] = (
+		['finance', 'social', 'health'],  # the values cycle in this column
+	    [])
+	real_test(test_id, res)
+
+
 def test_synthetic_no_nulls():
 	synth_test(
 		test_id,
-		'none',
-		synth_patterns_cols,
+		'none',		synth_patterns_cols,
 		synth_exceptions_cols)
 
 
@@ -93,11 +100,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		[],
 		[])
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

@@ -5,13 +5,18 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'MEAN_OF_COLUMNS'
 random.seed(0)
 
 synth_patterns_cols = []
 synth_exceptions_cols = ['"mean_of_cols rand_b" AND "mean_of_cols rand_a" AND "mean_of_cols rand_c" AND "mean_of_cols all" AND "mean_of_cols most"']
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +97,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

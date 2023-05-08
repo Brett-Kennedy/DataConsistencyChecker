@@ -5,25 +5,32 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'SAME_FIRST_WORD'
 random.seed(0)
 
-synth_patterns_cols = ['"same_start_word rand_a" AND "same_start_word all_a"',
-                       '"same_start_word all_a" AND "same_start_word rand_a"',
-                       '"same_start_word rand_b" AND "same_start_word all_b"',
-                       '"same_start_word all_b" AND "same_start_word rand_b"',
-                       ]
-synth_exceptions_cols = ['"same_start_word rand_a" AND "same_start_word most_a"',
-                         '"same_start_word all_a" AND "same_start_word most_a"',
-                         '"same_start_word most_a" AND "same_start_word rand_a"',
-                         '"same_start_word most_a" AND "same_start_word all_a"',
-                         '"same_start_word rand_b" AND "same_start_word most_b"',
-                         '"same_start_word all_b" AND "same_start_word most_b"',
-                         '"same_start_word most_b" AND "same_start_word rand_b"',
-                         '"same_start_word most_b" AND "same_start_word all_b"',
-                         ]
+synth_patterns_cols = [
+	'"same_start_word rand_a" AND "same_start_word all_a"',
+	'"same_start_word all_a" AND "same_start_word rand_a"',
+	'"same_start_word rand_b" AND "same_start_word all_b"',
+	'"same_start_word all_b" AND "same_start_word rand_b"',
+	]
+synth_exceptions_cols = [
+	'"same_start_word rand_a" AND "same_start_word most_a"',
+	'"same_start_word all_a" AND "same_start_word most_a"',
+	'"same_start_word most_a" AND "same_start_word rand_a"',
+	'"same_start_word most_a" AND "same_start_word all_a"',
+	'"same_start_word rand_b" AND "same_start_word most_b"',
+	'"same_start_word all_b" AND "same_start_word most_b"',
+	'"same_start_word most_b" AND "same_start_word rand_b"',
+	'"same_start_word most_b" AND "same_start_word all_b"',
+	]
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -104,11 +111,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

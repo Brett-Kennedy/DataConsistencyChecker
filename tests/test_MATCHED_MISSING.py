@@ -5,14 +5,19 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'MATCHED_MISSING'
 random.seed(0)
 
-synth_patterns_cols = ['matched_missing_vals rand_a AND matched_missing_vals all']
-synth_exceptions_cols = ['matched_missing_vals rand_a AND matched_missing_vals most',
-                         'matched_missing_vals all AND matched_missing_vals most']
+synth_patterns_cols = ['"matched_missing_vals rand_a" AND "matched_missing_vals all"']
+synth_exceptions_cols = ['"matched_missing_vals rand_a" AND "matched_missing_vals most"',
+                         '"matched_missing_vals all" AND "matched_missing_vals most"']
+
+def test_real():
+	res = build_default_results()
+	res['hypothyroid'] = ([],['"T4U" AND "FTI"'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -93,11 +98,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

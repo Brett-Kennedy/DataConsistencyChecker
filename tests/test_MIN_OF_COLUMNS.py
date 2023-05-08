@@ -7,11 +7,11 @@ from check_data_consistency import DataConsistencyChecker
 
 from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
-test_id = 'MATCHED_ZERO_MISSING'
+test_id = 'MIN_OF_COLUMNS'
 random.seed(0)
 
-synth_patterns_cols = ['"matched zero miss rand_a" AND "matched zero miss all"']
-synth_exceptions_cols = ['"matched zero miss rand_a" AND "matched zero miss most"']
+synth_patterns_cols = ['"min_of_cols rand_a" AND "min_of_cols rand_b" AND "min_of_cols rand_c" AND "min_of_cols all"']
+synth_exceptions_cols = ['"min_of_cols rand_a" AND "min_of_cols rand_b" AND "min_of_cols rand_c" AND "min_of_cols most"']
 
 
 def test_real():
