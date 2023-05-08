@@ -5,17 +5,26 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'SUM_OF_COLUMNS'
 random.seed(0)
 
-synth_patterns_cols = ['"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols all"',
-                       '"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols plus all"',
-                       '"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols times all"']
-synth_exceptions_cols = ['"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols most"',
-                         '"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols plus most"',
-                         '"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols times most"']
+synth_patterns_cols = [
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols all"',
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols plus all"',
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols times all"'
+]
+synth_exceptions_cols = [
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols most"',
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols plus most"',
+	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols times most"'
+]
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
+
 
 
 def test_synthetic_no_nulls():
@@ -96,11 +105,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

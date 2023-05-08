@@ -5,7 +5,7 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'SIMILAR_WRT_DIFF'
 random.seed(0)
@@ -13,6 +13,11 @@ random.seed(0)
 synth_patterns_cols = ['"sim wrt diff rand" AND "sim wrt diff all"']
 synth_exceptions_cols = ['"sim wrt diff rand" AND "sim wrt diff most"',
                          '"sim wrt diff all" AND "sim wrt diff most"']
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -93,11 +98,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

@@ -5,13 +5,26 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'SIMILAR_TO_RATIO'
 random.seed(0)
 
 synth_patterns_cols = ['"similar_to_ratio rand_a" AND "similar_to_ratio rand_b" AND "similar_to_ratio all"']
 synth_exceptions_cols = ['"similar_to_ratio rand_a" AND "similar_to_ratio rand_b" AND "similar_to_ratio most"']
+
+
+def test_real():
+	res = build_default_results()
+	res['page_blocks'] = (
+		['"lenght" AND "height" AND "eccen"',
+		'"area" AND "height" AND "lenght"',
+		'"blackpix" AND "area" AND "p_black"',
+		'"blackpix" AND "mean_tr" AND "wb_trans"',
+		'"blackand" AND "area" AND "p_and"'],
+		[])
+	res['hypothyroid'] = ([], ['"TT4" AND "T4U" AND "FTI"'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +105,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)
