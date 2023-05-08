@@ -84,7 +84,8 @@ class DataConsistencyChecker:
                     combinations. Setting max_combinations will restrict the number of combinations examined. This may
                     result in missing some patterns, but allows execution time to be limited. This applies only to
                     tests that check subsets of multiple sizes.
-        verbose:    If 0, no output will be displayed until the tests are complete.
+        verbose:    If -1, no output at all will be displayed
+                    If 0, no output will be displayed until the tests are complete.
                     If 1, the test names will be displayed as they execute.
                     If 2, progress related to each of the more expensive tests will be displayed as well.
         """
@@ -296,8 +297,8 @@ class DataConsistencyChecker:
             'CONSTANT_SUM':             ('Check if the sum of two columns is consistently similar to a constant value',
                                          self.__check_constant_sum, self.__generate_constant_sum,
                                          True, True, False),
-            'CONSTANT_DIFF':            (('Check if the difference of two columns is consistently similar to a constant'
-                                          ' value'),
+            'CONSTANT_DIFF':            (('Check if the difference between two columns is consistently similar to a '
+                                          'constant value'),
                                          self.__check_constant_diff, self.__generate_constant_diff,
                                          True, True, False),
             'CONSTANT_PRODUCT':         (('Check if the product of two columns is consistently similar to a constant '
@@ -1149,7 +1150,7 @@ class DataConsistencyChecker:
             process_arr = []
             with concurrent.futures.ProcessPoolExecutor() as executor:
                 for test_id in self.execution_test_list:
-                    if self.verbose:
+                    if self.verbose >= 1:
                         self.__output_current_test(test_idx_dict[test_id], test_id)
                     # f = executor.submit(self.test_dict[test_id][TEST_DEFN_FUNC], test_id)
                     # func = self.test_dict[test_id][TEST_DEFN_FUNC]
@@ -1160,7 +1161,7 @@ class DataConsistencyChecker:
                     f.result()
         else:
             for test_id in self.execution_test_list:
-                if self.verbose:
+                if self.verbose >= 1:
                     self.__output_current_test(test_idx_dict[test_id], test_id)
                 try:
                     t1 = time.time()
@@ -1327,6 +1328,8 @@ class DataConsistencyChecker:
         of exceptions found. The dataframe has columns for: test id, the set of columns involved in the pattern,
         a description of the pattern and exceptions, and the number of exceptions.
         """
+        if self.results_summary_df is None:
+            return None
         return self.results_summary_df.drop(columns=['Display Information'])
 
     def get_exceptions(self):
@@ -2867,26 +2870,27 @@ class DataConsistencyChecker:
             print("No tests executed.")
             return
 
-        print()
-        print("Data consistency check complete.")
-        print(f"Analysed {self.num_rows:,} rows, {len(self.orig_df.columns)} columns")
-        print(f"Executed {self.n_tests_executed} tests.")
-        print()
-        print('Patterns without Exceptions:')
-        print(f"Found {len(self.patterns_df)} patterns without exceptions")
-        print((f"{self.patterns_df['Test ID'].nunique()} tests "
-               f"({self.patterns_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
-               f"identified at least one pattern without exceptions each. By default some patterns are not listed in "
-               f"calls to display_detailed_results()."))
-        print()
-        print('Patterns with Exceptions:')
-        print(f"Found {len(self.results_summary_df)} patterns with exceptions")
-        print((f"{self.results_summary_df['Test ID'].nunique()} tests "
-               f"({self.results_summary_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
-               f"flagged at least one exception each."))
-        print((f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at "
-               f"least one exception."))
-        print(f"Flagged {(self.test_results_by_column_np.sum(axis=0) > 0).sum()} column(s) with at least one exception.")
+        if self.verbose >= 0:
+            print()
+            print("Data consistency check complete.")
+            print(f"Analysed {self.num_rows:,} rows, {len(self.orig_df.columns)} columns")
+            print(f"Executed {self.n_tests_executed} tests.")
+            print()
+            print('Patterns without Exceptions:')
+            print(f"Found {len(self.patterns_df)} patterns without exceptions")
+            print((f"{self.patterns_df['Test ID'].nunique()} tests "
+                   f"({self.patterns_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
+                   f"identified at least one pattern without exceptions each. By default some patterns are not listed in "
+                   f"calls to display_detailed_results()."))
+            print()
+            print('Patterns with Exceptions:')
+            print(f"Found {len(self.results_summary_df)} patterns with exceptions")
+            print((f"{self.results_summary_df['Test ID'].nunique()} tests "
+                   f"({self.results_summary_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
+                   f"flagged at least one exception each."))
+            print((f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at "
+                   f"least one exception."))
+            print(f"Flagged {(self.test_results_by_column_np.sum(axis=0) > 0).sum()} column(s) with at least one exception.")
 
     def __update_results_by_column(self, results_col, original_cols):
         rows_with_issue = np.where(results_col)
@@ -3756,7 +3760,7 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    f"{col_name_1} AND {col_name_2}",
+                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The columns "{col_name_1}" (with {num_missing_1} Null values) and "{col_name_2}" (with '
@@ -5014,8 +5018,7 @@ class DataConsistencyChecker:
             return
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
-            if self.verbose and len(numeric_pairs_list) > 5000:
-                if (pair_idx > 0) and (pair_idx % 5000) == 0:
+            if self.verbose and (pair_idx > 0) and (pair_idx % 5000) == 0:
                     print(f"  Examining column set {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
             diff_medians = abs(self.column_medians[col_name_1] - self.column_medians[col_name_2])
@@ -5178,6 +5181,9 @@ class DataConsistencyChecker:
             return
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
+            if self.verbose and (pair_idx > 0) and (pair_idx % 5000) == 0:
+                print(f"  Examining column set {pair_idx:,} of {num_pairs:,} pairs of numeric columns")
+
             if not self.check_columns_same_scale_2(col_name_1, col_name_2, order=100):
                 continue
 
@@ -6996,6 +7002,7 @@ class DataConsistencyChecker:
         num_cols = len(cols)
         found_any = False
         know_failed_subsets = {}
+        printed_subset_size_msg = False
         for subset_size in range(num_cols, 1, -1):
             if found_any:
                 break
@@ -7003,9 +7010,10 @@ class DataConsistencyChecker:
             calc_size = math.comb(len(cols), subset_size)
             skip_subsets = calc_size > self.max_combinations
             if skip_subsets:
-                if self.verbose >= 2:
+                if self.verbose >= 2 and not printed_subset_size_msg :
                     print((f"    Skipping subsets of size {subset_size}. There are {calc_size:,} subsets. max_combinations is "
                            f"currently set to {self.max_combinations:,}"))
+                    printed_subset_size_msg = True
                 continue
 
             subsets = list(combinations(cols, subset_size))
@@ -7110,6 +7118,7 @@ class DataConsistencyChecker:
                 sample_non_zero_dict[col_name] = self.sample_df[col_name] != 0
 
         know_failed_subsets = {}
+        printed_subset_size_msg = False
 
         # Loop through the subsets, from biggest to smallest. Consider only subsets of at least 2 columns.
         # We may flag multiple subsets of the same size, but none that are smaller. This will allow some subsets to
@@ -7123,10 +7132,11 @@ class DataConsistencyChecker:
             calc_size = math.comb(len(cols), subset_size)
             skip_subsets = calc_size > self.max_combinations
             if skip_subsets:
-                if self.verbose >= 2:
+                if self.verbose >= 2 and not printed_subset_size_msg:
                     print((f"    Skipping subsets of size {subset_size}. There are {calc_size} subsets. max_combinations"
                            f"is currently set to {self.max_combinations:,}"))
-                    continue # todo: only print this message once.
+                    printed_subset_size_msg = True
+                continue
 
             subsets = list(combinations(cols, subset_size))
             if self.verbose >= 2:
@@ -9100,6 +9110,9 @@ class DataConsistencyChecker:
 
     def __check_binary_matches_sum(self, test_id):
         _, pairs = self.__get_numeric_column_pairs_unique()
+
+        if len(self.binary_cols) == 0:
+            return
 
         # Calculate and cache the sums of each pair of numeric columns
         sums_arr_dict = {}
@@ -13103,7 +13116,7 @@ def convert_to_numeric(arr, filler):
     #                   if str(np.format_float_positional(x)).replace('-', '').replace('.', '').isdigit()
     #                   else filler
     #                   for x in arr])
-    return pd.Series([float(x) if is_number(x) else filler for x in arr])
+    return pd.Series([float(x) if is_number(x) else filler for x in arr], dtype='float64')
 
 
 def get_num_digits(num):
