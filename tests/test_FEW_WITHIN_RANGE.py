@@ -5,13 +5,24 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'FEW_WITHIN_RANGE'
 random.seed(0)
 
 synth_patterns_cols = ['few in range all']
 synth_exceptions_cols = ['few in range most']
+
+
+def test_real():
+	res = build_default_results()
+	res['page_blocks'] = (
+		[],
+		['height', 'mean_tr', 'wb_trans'])
+	res['hypothyroid'] = (
+		[],
+		['T3', 'TT4', 'T4U', 'FTI'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +103,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

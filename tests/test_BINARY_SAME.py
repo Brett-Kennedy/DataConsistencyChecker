@@ -5,7 +5,7 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'BINARY_SAME'
 random.seed(0)
@@ -14,6 +14,11 @@ synth_patterns_cols = ['"bin sim all_1" AND "bin sim all_2"']
 synth_exceptions_cols = ['"bin sim all_1" AND "bin sim most"',
                          '"bin sim all_2" AND "bin sim most"']
 
+
+def test_real():
+	res = build_default_results()
+	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	real_test(test_id, res)
 
 def test_synthetic_no_nulls():
 	synth_test(
@@ -94,10 +99,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		synth_patterns_cols,
 		synth_exceptions_cols)
 
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

@@ -5,13 +5,18 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'A_SUFFIX_OF_B'
 random.seed(0)
 
-synth_patterns_cols = ['a_suffix_b rand_a AND a_suffix_b all']
-synth_exceptions_cols = ['a_suffix_b rand_a AND a_suffix_b most']
+synth_patterns_cols = ['"a_suffix_b rand_a" AND "a_suffix_b all"']
+synth_exceptions_cols = ['"a_suffix_b rand_a" AND "a_suffix_b most"']
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -93,10 +98,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		synth_patterns_cols,
 		synth_exceptions_cols)
 
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

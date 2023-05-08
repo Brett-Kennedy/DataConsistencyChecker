@@ -5,13 +5,21 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'CONSTANT_RATIO'
 random.seed(0)
 
 synth_patterns_cols = ['"constant ratio 1" AND "constant ratio 2"']
 synth_exceptions_cols = ['"constant ratio 1" AND "constant ratio 3"']
+
+
+def test_real():
+	res = build_default_results()
+	res['blood-transfusion-service-center'] = (['"V2" AND "V3"'], [])
+	res['eeg-eye-state'] = ([], ['"V5" AND "V6"', '"V5" AND "V8"', '"V6" AND "V8"', '"V8" AND "V9"', '"V9" AND "V10"'])
+	res['steel-plates-fault'] = (['"V3" AND "V4"'], [])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +100,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

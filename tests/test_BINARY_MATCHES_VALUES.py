@@ -5,7 +5,7 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'BINARY_MATCHES_VALUES'
 random.seed(0)
@@ -13,6 +13,39 @@ random.seed(0)
 synth_patterns_cols = []
 synth_exceptions_cols = ['"bin_match_val all" AND "bin_match_val rand_a"',
                          '"bin_match_val most" AND "bin_match_val rand_a"']
+
+
+def test_real():
+	res = build_default_results()
+	res['nomao'] = ([
+		'"V7" AND "V1"',
+		'"V8" AND "V2"',
+		'"V8" AND "V4"'
+		], [
+		'"V8" AND "V3"',
+		'"V8" AND "V6"'])
+	res['allbp'] = ([
+		'"FTI" AND "FTI_measured"'
+		], [
+		'"T3" AND "T3_measured"',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "T4U_measured"',
+		'"T4U" AND "FTI_measured"'])
+	res['allrep'] = ([
+		'"FTI" AND "FTI_measured"'
+		], [
+		'"T3" AND "T3_measured"',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "T4U_measured"',
+		'"T4U" AND "FTI_measured"'])
+	res['dis'] = ([
+		'"FTI" AND "FTI_measured"'
+		], [
+		'"T3" AND "T3_measured"',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "T4U_measured"',
+		'"T4U" AND "FTI_measured"'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -94,10 +127,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		synth_patterns_cols,
 		synth_exceptions_cols)
 
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

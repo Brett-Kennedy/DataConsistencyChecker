@@ -5,13 +5,33 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'LARGE_GIVEN_VALUE'
 random.seed(0)
 
 synth_patterns_cols = []  # None for this test
 synth_exceptions_cols = ['large_given rand AND large_given most']
+
+
+def test_hypothyroid():
+	hypothyroid_test(
+		test_id,
+		[],
+		[   ]
+	)
+
+
+def test_real():
+	res = build_default_results()
+	res['hypothyroid'] = ([], [
+		'"referral_source" AND "TT4"',
+		'"referral_source" AND "FTI"',
+		'"sex" AND "TT4"',
+		'"sex" AND "T4U"',
+		'"sick" AND "T3"',
+		'"sick" AND "FTI"'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +112,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

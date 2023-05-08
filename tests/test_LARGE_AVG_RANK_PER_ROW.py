@@ -5,13 +5,18 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'LARGE_AVG_RANK_PER_ROW'
 random.seed(0)
 
 synth_patterns_cols = []
 synth_exceptions_cols = ['"large_avg_rank_rand_0" AND "large_avg_rank_rand_1" AND "large_avg_rank_rand_2" AND "large_avg_rank_rand_3" AND "large_avg_rank_rand_4" AND "large_avg_rank_rand_5" AND "large_avg_rank_rand_6" AND "large_avg_rank_rand_7" AND "large_avg_rank_rand_8" AND "large_avg_rank_rand_9"']
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +97,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

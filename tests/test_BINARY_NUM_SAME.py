@@ -5,13 +5,18 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'BINARY_NUM_SAME'
 random.seed(0)
 
 synth_patterns_cols = []
 synth_exceptions_cols = ['"bin_num_same rand_a" AND "bin_num_same rand_b" AND "bin_num_same rand_c" AND "bin_num_same rand_d" AND "bin_num_same most" ']
+
+
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -93,10 +98,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		synth_patterns_cols,
 		synth_exceptions_cols)
 
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

@@ -5,13 +5,21 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'DECISION_TREE_CLASSIFIER'
 random.seed(0)
 
 synth_patterns_cols = ['"dt cls. 1a" AND "dt cls. 1b" AND "dt cls. 3" AND "dt cls. 2"']
 synth_exceptions_cols = ['"dt cls. 1b" AND "dt cls. 2" AND "dt cls. 2" AND "dt cls. 3"']
+
+
+def test_real():
+	res = build_default_results()
+	res['hypothyroid'] = (['"T4U" AND "FTI" AND "FTI_measured'],  # still figuring out which are real. this one is good!
+		['"TT4" AND "T4U" AND "TT4_measured"',
+		 '"T3" AND "T4U" AND "T4U_measured"'])
+	real_test(test_id, res)
 
 
 def test_synthetic_no_nulls():
@@ -92,11 +100,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

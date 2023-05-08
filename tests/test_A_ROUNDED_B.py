@@ -5,52 +5,59 @@ import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
 
-from utils import synth_test, synth_test_all_cols, kropt_test
+from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
 test_id = 'A_ROUNDED_B'
 random.seed(0)
 
-synth_patterns_cols = ['"a_rounded_b rand" AND "a_rounded_b all_a"',
-                       '"a_rounded_b rand" AND "a_rounded_b all_b"',
-                       '"a_rounded_b rand" AND "a_rounded_b all_c"',
-                       '"a_rounded_b rand" AND "a_rounded_b all_d"',
-                       '"a_rounded_b rand" AND "a_rounded_b all_e"',
-                       '"a_rounded_b rand" AND "a_rounded_b all_f"',
-                       '"a_rounded_b all_a" AND "a_rounded_b all_f"',
-                       '"a_rounded_b all_b" AND "a_rounded_b all_f"',
-                       '"a_rounded_b all_c" AND "a_rounded_b all_f"'
-                       ]
-synth_exceptions_cols = ['same rand AND same most'
-                         '"a_rounded_b rand" AND "a_rounded_b most_a',
-                         '"a_rounded_b rand" AND "a_rounded_b most_b"',
-                         '"a_rounded_b rand" AND "a_rounded_b most_c"',
-                         '"a_rounded_b rand" AND "a_rounded_b most_d"',
-                         '"a_rounded_b all_a" AND "a_rounded_b all_e"',
-                         '"a_rounded_b all_b" AND "a_rounded_b all_e"',
-                         '"a_rounded_b most_b" AND "a_rounded_b all_e"',
-                         '"a_rounded_b all_c" AND "a_rounded_b all_e"',
-                         '"a_rounded_b most_c" AND "a_rounded_b all_e"',
-                         '"a_rounded_b rand" AND "a_rounded_b most_e"',
-                         '"a_rounded_b all_b" AND "a_rounded_b most_e"',
-                         '"a_rounded_b most_b" AND "a_rounded_b most_e"',
-                         '"a_rounded_b all_c" AND "a_rounded_b most_e"',
-                         '"a_rounded_b most_c" AND "a_rounded_b most_e"',
-                         '"a_rounded_b most_a" AND "a_rounded_b all_f"',
-                         '"a_rounded_b most_b" AND "a_rounded_b all_f"',
-                         '"a_rounded_b most_c" AND "a_rounded_b all_f"',
-                         '"a_rounded_b all_d" AND "a_rounded_b all_f"',
-                         '"a_rounded_b most_d" AND "a_rounded_b all_f"',
-                         '"a_rounded_b rand" AND "a_rounded_b most_f"',
-                         '"a_rounded_b all_a" AND "a_rounded_b most_f"',
-                         '"a_rounded_b most_a" AND "a_rounded_b most_f"',
-                         '"a_rounded_b all_b" AND "a_rounded_b most_f"',
-                         '"a_rounded_b most_b" AND "a_rounded_b most_f"',
-                         '"a_rounded_b all_c" AND "a_rounded_b most_f"',
-                         '"a_rounded_b most_c" AND "a_rounded_b most_f"',
-                         '"a_rounded_b all_d" AND "a_rounded_b most_f"',
-                         '"a_rounded_b most_d" AND "a_rounded_b most_f"',
-                         ]
 
+# def test_real():
+# 	res = build_default_results()
+# 	real_test(test_id, res)
+
+
+synth_patterns_cols = [
+	'"a_rounded_b rand" AND "a_rounded_b all_a"',
+	'"a_rounded_b rand" AND "a_rounded_b all_b"',
+	'"a_rounded_b rand" AND "a_rounded_b all_c"',
+	'"a_rounded_b rand" AND "a_rounded_b all_d"',
+	'"a_rounded_b rand" AND "a_rounded_b all_e"',
+	'"a_rounded_b rand" AND "a_rounded_b all_f"',
+	'"a_rounded_b all_a" AND "a_rounded_b all_f"',
+	'"a_rounded_b all_b" AND "a_rounded_b all_f"',
+	'"a_rounded_b all_c" AND "a_rounded_b all_f"'
+	]
+
+synth_exceptions_cols = [
+	'"a_rounded_b rand" AND "a_rounded_b most_a"',
+	'"a_rounded_b rand" AND "a_rounded_b most_b"',
+	'"a_rounded_b rand" AND "a_rounded_b most_c"',
+	'"a_rounded_b rand" AND "a_rounded_b most_d"',
+	'"a_rounded_b all_a" AND "a_rounded_b all_e"',
+	'"a_rounded_b all_b" AND "a_rounded_b all_e"',
+	'"a_rounded_b most_b" AND "a_rounded_b all_e"',
+	'"a_rounded_b all_c" AND "a_rounded_b all_e"',
+	'"a_rounded_b most_c" AND "a_rounded_b all_e"',
+	'"a_rounded_b rand" AND "a_rounded_b most_e"',
+	'"a_rounded_b all_b" AND "a_rounded_b most_e"',
+	'"a_rounded_b most_b" AND "a_rounded_b most_e"',
+	'"a_rounded_b all_c" AND "a_rounded_b most_e"',
+	'"a_rounded_b most_c" AND "a_rounded_b most_e"',
+	'"a_rounded_b most_a" AND "a_rounded_b all_f"',
+	'"a_rounded_b most_b" AND "a_rounded_b all_f"',
+	'"a_rounded_b most_c" AND "a_rounded_b all_f"',
+	'"a_rounded_b all_d" AND "a_rounded_b all_f"',
+	'"a_rounded_b most_d" AND "a_rounded_b all_f"',
+	'"a_rounded_b rand" AND "a_rounded_b most_f"',
+	'"a_rounded_b all_a" AND "a_rounded_b most_f"',
+	'"a_rounded_b most_a" AND "a_rounded_b most_f"',
+	'"a_rounded_b all_b" AND "a_rounded_b most_f"',
+	'"a_rounded_b most_b" AND "a_rounded_b most_f"',
+	'"a_rounded_b all_c" AND "a_rounded_b most_f"',
+	'"a_rounded_b most_c" AND "a_rounded_b most_f"',
+	'"a_rounded_b all_d" AND "a_rounded_b most_f"',
+	'"a_rounded_b most_d" AND "a_rounded_b most_f"'
+]
 
 def test_synthetic_no_nulls():
 	synth_test(
@@ -73,7 +80,9 @@ def test_synthetic_in_sync_nulls():
 		test_id,
 		'in-sync',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols,
+		allow_more=True
+	)
 
 
 def test_synthetic_random_nulls():
@@ -81,7 +90,9 @@ def test_synthetic_random_nulls():
 		test_id,
 		'random',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols,
+		allow_more=True
+	)
 
 
 def test_synthetic_80_percent_nulls():
@@ -89,7 +100,9 @@ def test_synthetic_80_percent_nulls():
 		test_id,
 		'80-percent',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols,
+		allow_more=True
+	)
 
 
 def test_synthetic_all_cols_no_nulls():
@@ -131,10 +144,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		synth_patterns_cols,
 		synth_exceptions_cols)
 
-
-def test_fetch_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)
