@@ -24,7 +24,7 @@ def test_real():
 	                           'V78', 'V79', 'V81', 'V83', 'V89', 'V90', 'V93', 'V96', 'V97', 'V99', 'V100'])
 	res['ilpd'] = ([], ['V9'])
 	res['MagicTelescope'] = ([], ['fWidth', 'fM3Long'])
-	res['mc1'] = ([], 'HALSTEAD_DIFFICULTY', 'PERCENT_COMMENTS'])
+	res['mc1'] = ([], ['HALSTEAD_DIFFICULTY', 'PERCENT_COMMENTS'])
 	res['PC1'] = ([], ['D'])
 	res['steel-plates-fault'] = ([], ['V22'])
 	real_test(test_id, res)

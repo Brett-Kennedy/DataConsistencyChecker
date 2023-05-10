@@ -16,6 +16,8 @@ synth_exceptions_cols = ['"bin_num_same rand_a" AND "bin_num_same rand_b" AND "b
 
 def test_real():
 	res = build_default_results()
+	res['cardiotocography'] = ([], ['"V14" AND "V26" AND "V27" AND "V28" AND "V29" AND "V30" AND "V31" AND "V32" AND "V33" AND "V34" AND "V35"'])
+	res['car-evaluation'] = (['"buying_price_vhigh" AND "buying_price_high" AND "buying_price_med" AND "buying_price_low" AND "maintenance_price_vhigh" AND "maintenance_price_high" AND "maintenance_price_med" AND "maintenance_price_low" AND "doors_2" AND "doors_3" AND "doors_4" AND "doors_5more" AND "persons_2" AND "persons_4" AND "persons_more" AND "luggage_boot_size_small" AND "luggage_boot_size_med" AND "luggage_boot_size_big" AND "safety_low" AND "safety_med" AND "safety_high"'], [])
 	real_test(test_id, res)
 
 

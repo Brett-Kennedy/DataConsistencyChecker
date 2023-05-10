@@ -16,12 +16,13 @@ synth_exceptions_cols = ['"all_zero_or_not rand_a" AND "all_zero_or_not all" AND
 
 def test_real():
 	res = build_default_results()
-	res['nomao'] = ([], [
+	res['nomao'] = ([
 		'"V1" AND "V2"',
 		'"V4" AND "V6"'
-	])
-	res['mc1'] = (['"CONDITION_COUNT" AND "DECISION_COUNT" AND "MODIFIED_CONDITION_COUNT" AND "MULTIPLE_CONDITION_COUNT"'],
-	              [])
+	], [])
+	res['mc1'] = ([
+		'"CONDITION_COUNT" AND "DECISION_COUNT" AND "MODIFIED_CONDITION_COUNT" AND "MULTIPLE_CONDITION_COUNT"'],
+		[])
 	real_test(test_id, res)
 
 

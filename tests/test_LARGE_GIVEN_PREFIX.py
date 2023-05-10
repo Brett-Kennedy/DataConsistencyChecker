@@ -11,11 +11,17 @@ test_id = 'LARGE_GIVEN_PREFIX'
 random.seed(0)
 
 synth_patterns_cols = []  # None
-synth_exceptions_cols = ['large_given_prefix rand AND large_given most']
+synth_exceptions_cols = ['"large_given_prefix rand" AND "large_given_prefix most"']
 
 
 def test_real():
 	res = build_default_results()
+	res['musk'] = ([], [
+		'"molecule_name" AND "f36"',
+		'"molecule_name" AND "f47"',
+		'"molecule_name" AND "f141"',
+		'"molecule_name" AND "f144"',
+	])
 	real_test(test_id, res)
 
 

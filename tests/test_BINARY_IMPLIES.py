@@ -26,14 +26,23 @@ def test_real():
 		'"Beach" AND "FallFoliage"',
 		'"Sunset" AND "FallFoliage"',
 		'"Sunset" AND "Field"',
-		'"Sunset" AND "Mountain"',
+		'"Sunset" AND "Mountain"'
+		], [
 		'"Beach" AND "Field"'
-		], [])
+	])
 	res['nomao'] = (['"V7" AND "V8"'], [])
 	res['PhishingWebsites'] = ([], [
 		'"Favicon" AND "port"',
 		'"on_mouseover" AND "popUpWidnow"'])
 	res['hypothyroid'] = (['"T4U_measured" AND "FTI_measured"'], [])
+	res['cardiotocography'] = ([
+		'"V26" AND "V27"',
+		'"V26" AND "V31"',
+		'"V26" AND "V32"',
+		'"V27" AND "V31"',
+		'"V27" AND "V32"',
+		'"V31" AND "V32"'
+		], [])
 	res['car-evaluation'] = ([
 		'"buying_price_vhigh" AND "buying_price_high"',
 		'"buying_price_vhigh" AND "buying_price_med"',
@@ -63,15 +72,6 @@ def test_real():
 		'"safety_low" AND "safety_high"',
 		'"safety_med" AND "safety_high"'
 	], [])
-	res['cardiotocography'] = ([
-		'"V26" AND "V27"'
-		'"V26" AND "V31"',
-		'"V26" AND "V32"',
-		'"V27" AND "V31"',
-		'"V27" AND "V32"',
-		'"V31" AND "V32"',
-		'',
-		], [])
 	res['allbp'] = (['"T4U_measured" AND "FTI_measured"'], [])
 	res['allrep'] = (['"T4U_measured" AND "FTI_measured"'], [])
 	res['dis'] = (['"T4U_measured" AND "FTI_measured"'], [])
@@ -79,14 +79,10 @@ def test_real():
 		[
 			'"V12" AND "V13"',
 			'"V30" AND "V33"'
-		],
-		[
+		], [
 			'"V12" AND "V30"',
 			'"V13" AND "V30"'
 		])
-	res[''] = ([], [])
-	res[''] = ([], [])
-	res[''] = ([], [])
 	real_test(test_id, res)
 
 

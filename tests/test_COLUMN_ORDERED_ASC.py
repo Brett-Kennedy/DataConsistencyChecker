@@ -16,6 +16,8 @@ synth_exceptions_cols = ['col_asc most']
 
 def test_real():
 	res = build_default_results()
+	res['electricity'] = ([], ['date'])
+	res['bank-marketing'] = ([], ['V10'])
 	real_test(test_id, res)
 
 

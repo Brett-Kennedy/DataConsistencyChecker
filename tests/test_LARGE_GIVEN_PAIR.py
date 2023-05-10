@@ -16,6 +16,8 @@ synth_exceptions_cols = ['"large_given_pair rand_a" AND "large_given_pair rand_b
 
 def test_real():
 	res = build_default_results()
+	res['credit-g'] = ([], 38)
+	res['bank-marketing'] = ([], 25)
 	real_test(test_id, res)
 
 

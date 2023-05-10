@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"bin opp all_2" AND "bin opp most"']
 
 def test_real():
 	res = build_default_results()
+	res[''] = (['"V12" AND "V13"'], [])
 	real_test(test_id, res)
 
 

@@ -16,6 +16,7 @@ synth_exceptions_cols = ['first_char_small_set_most']
 
 def test_real():
 	res = build_default_results()
+	res['musk'] = (['molecule_name'], [])
 	real_test(test_id, res)
 
 

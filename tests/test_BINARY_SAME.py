@@ -11,13 +11,18 @@ test_id = 'BINARY_SAME'
 random.seed(0)
 
 synth_patterns_cols = ['"bin sim all_1" AND "bin sim all_2"']
-synth_exceptions_cols = ['"bin sim all_1" AND "bin sim most"',
-                         '"bin sim all_2" AND "bin sim most"']
+synth_exceptions_cols = [
+	'"bin sim all_1" AND "bin sim most"',
+	'"bin sim all_2" AND "bin sim most"'
+]
 
 
 def test_real():
 	res = build_default_results()
 	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['allbp'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['allrep'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['dis'] = ([], ['"T4U_measured" AND "FTI_measured"'])
 	real_test(test_id, res)
 
 def test_synthetic_no_nulls():

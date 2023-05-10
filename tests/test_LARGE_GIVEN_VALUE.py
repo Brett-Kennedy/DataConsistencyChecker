@@ -11,26 +11,75 @@ test_id = 'LARGE_GIVEN_VALUE'
 random.seed(0)
 
 synth_patterns_cols = []  # None for this test
-synth_exceptions_cols = ['large_given rand AND large_given most']
-
-
-def test_hypothyroid():
-	hypothyroid_test(
-		test_id,
-		[],
-		[   ]
-	)
+synth_exceptions_cols = ['"large_given rand" AND "large_given most"']
 
 
 def test_real():
 	res = build_default_results()
+	res['credit-g'] = ([], [
+		'"property_magnitude" AND "duration"',
+		'"property_magnitude" AND "credit_amount"',
+		'"job" AND "credit_amount"'
+	])
+	res['qsar-biodeg'] = ([], [
+		'"V25" AND "V9"',
+		'"V25" AND "V14"',
+		'"V25" AND "V35"'
+	])
+	res['scene'] = ([], 97)  # As there are many, we simply provide the count
+	res['bank-marketing'] = ([], ['"V3" AND "V1"'])
 	res['hypothyroid'] = ([], [
 		'"referral_source" AND "TT4"',
 		'"referral_source" AND "FTI"',
 		'"sex" AND "TT4"',
 		'"sex" AND "T4U"',
 		'"sick" AND "T3"',
-		'"sick" AND "FTI"'])
+		'"sick" AND "FTI"',
+	])
+	res['baseball'] = ([], [
+		'"Position" AND "Number_seasons"',
+		'"Position" AND "Triples"',
+	])
+	res['mc1'] = ([], [
+		'"ESSENTIAL_DENSITY" AND "CYCLOMATIC_DENSITY"',
+		'"ESSENTIAL_DENSITY" AND "NORMALIZED_CYLOMATIC_COMPLEXITY"',
+		'"GLOBAL_DATA_DENSITY" AND "HALSTEAD_LEVEL"',
+	])
+	res['cardiotocography'] = ([], 13)
+	res['allbp'] = ([], [
+		'"psych" AND "T3"',
+		'"psych" AND "T4U"',
+		'"T3_measured" AND "T3"',
+		'"T4U_measured" AND "T4U"',
+		'"FTI_measured" AND "T4U"',
+	])
+	res['allrep'] = ([], [
+		'"psych" AND "T3"',
+		'"psych" AND "T4U"',
+		'"T3_measured" AND "T3"',
+		'"T4U_measured" AND "T4U"',
+		'"FTI_measured" AND "T4U"',
+	])
+	res['dis'] = ([], [
+		'"psych" AND "T3"',
+		'"psych" AND "T4U"',
+		'"T3_measured" AND "T3"',
+		'"T4U_measured" AND "T4U"',
+		'"FTI_measured" AND "T4U"',
+	])
+	res['steel-plates-fault'] = ([], [
+		'"V12" AND "V22"',
+		'"V12" AND "V23"',
+		'"V13" AND "V22"',
+		'"V13" AND "V23"',
+		'"V28" AND "V18"',
+		'"V29" AND "V11"',
+		'"V30" AND "V14"',
+		'"V30" AND "V22"',
+		'"V30" AND "V23"',
+		'"V33" AND "V22"',
+		'"V33" AND "V23"',
+	])
 	real_test(test_id, res)
 
 

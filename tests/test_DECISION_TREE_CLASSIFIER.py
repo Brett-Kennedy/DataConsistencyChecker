@@ -16,6 +16,40 @@ synth_exceptions_cols = ['"dt cls. 1b" AND "dt cls. 2" AND "dt cls. 2" AND "dt c
 
 def test_real():
 	res = build_default_results()
+	res['nomao'] = ([
+		'"V1" AND "V7"',
+		'"V4" AND "V8"'
+		], [])
+	res['hypothyroid'] = (['"T4U" AND "FTI" AND "FTI_measured"'], [
+		'"TT4" AND "T4U" AND "TT4_measured"',
+		'"T4U" AND "FTI" AND "T4U_measured"'
+	])
+	res['mc1'] = (['"BRANCH_COUNT" AND "CYCLOMATIC_COMPLEXITY" AND "MAINTENANCE_SEVERITY"'], [])
+	res['car-evaluation'] = (21, [])
+	res['allbp'] = ([
+		'"TSH" AND "TSH_measured"',
+		'"T3" AND "T3_measured"',
+		'"TT4" AND "TT4_measured',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "FTI_measured"',
+	], [])
+	res['allrep'] = ([
+		'"TSH" AND "TSH_measured"',
+		'"T3" AND "T3_measured"',
+		'"TT4" AND "TT4_measured',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "FTI_measured"',
+	], [])
+	res['dis'] = ([
+		'"TSH" AND "TSH_measured"',
+		'"T3" AND "T3_measured"',
+		'"TT4" AND "TT4_measured',
+		'"T4U" AND "T4U_measured"',
+		'"FTI" AND "FTI_measured"',
+	], [])
+	res['steel-plates-fault'] = (['"V2" AND "V12"'], [])
+
+
 	res['hypothyroid'] = (['"T4U" AND "FTI" AND "FTI_measured'],  # still figuring out which are real. this one is good!
 		['"TT4" AND "T4U" AND "TT4_measured"',
 		 '"T3" AND "T4U" AND "T4U_measured"'])

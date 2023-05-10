@@ -11,20 +11,53 @@ test_id = 'BINARY_RARE_COMBINATION'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_c"',
-                         '"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_d"',
-                         '"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_e"',
-                         '"bin_rare_combo all_a" AND "bin_rare_combo all_c" AND "bin_rare_combo all_d"',
-                         '"bin_rare_combo all_a" AND "bin_rare_combo all_c" AND "bin_rare_combo all_e"',
-                         '"bin_rare_combo all_b" AND "bin_rare_combo all_c" AND "bin_rare_combo all_d"',
-                         '"bin_rare_combo all_b" AND "bin_rare_combo all_c" AND "bin_rare_combo all_e"',
-                         '"bin_rare_combo all_b" AND "bin_rare_combo all_d" AND "bin_rare_combo all_e"',
-                         '"bin_rare_combo all_c" AND "bin_rare_combo all_d" AND "bin_rare_combo all_e"'
-                         ]
+synth_exceptions_cols = [
+	'"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_c"',
+	'"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_d"',
+	'"bin_rare_combo all_a" AND "bin_rare_combo all_b" AND "bin_rare_combo all_e"',
+	'"bin_rare_combo all_a" AND "bin_rare_combo all_c" AND "bin_rare_combo all_d"',
+	'"bin_rare_combo all_a" AND "bin_rare_combo all_c" AND "bin_rare_combo all_e"',
+	'"bin_rare_combo all_b" AND "bin_rare_combo all_c" AND "bin_rare_combo all_d"',
+	'"bin_rare_combo all_b" AND "bin_rare_combo all_c" AND "bin_rare_combo all_e"',
+	'"bin_rare_combo all_b" AND "bin_rare_combo all_d" AND "bin_rare_combo all_e"',
+	'"bin_rare_combo all_c" AND "bin_rare_combo all_d" AND "bin_rare_combo all_e"'
+]
 
 
 def test_real():
 	res = build_default_results()
+	res['scene'] = ([], [
+		'"Beach" AND "Sunset" AND "Field"',
+		'"Beach" AND "FallFoliage" AND "Field"',
+		'"Beach" AND "Field" AND "Mountain"',
+		'"FallFoliage" AND "Field" AND "Mountain"'
+	])
+	res['PhishingWebsites'] = ([], 158)
+	res['hypothyroid'] = ([], [
+		'"sex" AND "on_thyroxine" AND "T4U_measured"',
+		'"sex" AND "on_thyroxine" AND "FTI_measured"',
+		'"sex" AND "T4U_measured" AND "FTI_measured"',
+		'"on_thyroxine" AND "T4U_measured" AND "FTI_measured"',
+		'"T3_measured" AND "T4U_measured" AND "FTI_measured"',
+	])
+	res['mc1'] = ([], ['"DESIGN_DENSITY" AND "GLOBAL_DATA_DENSITY" AND "MAINTENANCE_SEVERITY"'])
+	res['allbp'] = ([], [
+		'"on_thyroxine" AND "T4U_measured" AND "FTI_measured"',
+		'"T3_measured" AND "T4U_measured" AND "FTI_measured"',
+	])
+	res['allrep'] = ([], [
+		'"on_thyroxine" AND "T4U_measured" AND "FTI_measured"',
+		'"T3_measured" AND "T4U_measured" AND "FTI_measured"'
+	])
+	res['dis'] = ([], [
+		'"on_thyroxine" AND "T4U_measured" AND "FTI_measured"',
+		'"T3_measured" AND "T4U_measured" AND "FTI_measured"',
+	])
+	res['steel-plates-fault'] = ([], [
+		'"V12" AND "V13" AND "V30"',
+		'"V12" AND "V30" AND "V33"',
+		'"V13" AND "V30" AND "V33"',
+	])
 	real_test(test_id, res)
 
 

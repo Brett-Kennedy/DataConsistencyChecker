@@ -11,34 +11,55 @@ test_id = 'CORRELATED_FEATURES'
 random.seed(0)
 
 synth_patterns_cols = ['"correlated rand_a" AND "correlated rand_b"']
-synth_exceptions_cols = ['"correlated rand_a" AND "correlated most"',
-                         '"correlated rand_b" AND "correlated most"']
+synth_exceptions_cols = [
+	'"correlated rand_a" AND "correlated most"',
+	'"correlated rand_b" AND "correlated most"'
+]
 
 
 def test_real():
 	res = build_default_results()
 	res['blood-transfusion-service-center'] = (['"V2" AND "V3"'], [])
-	res['wdbc'] = (['"V1" AND "V3"', '"V1" AND "V4"'], [])  # need to debug this case.
-	res['ozone-level-8hr'] = ([], ['"V31" AND "V32"'])
-	res['kc2'] = ([], ['"n" AND "v"'])  # need to debug this case
+	res['wdbc'] = ([
+		'"V1" AND "V3"',
+		'"V1" AND "V4"',
+		'"V3" AND "V4"',
+		'"V21" AND "V24"'
+	], [])  # need to debug this case.
+	res['ozone-level-8hr'] = ([], [
+		'"V28" AND "V29"',
+		'"V29" AND "V30"',
+		'"V30" AND "V31"',
+		'"V31" AND "V32"'
+	])
+	res['kc2'] = (['"n" AND "v"'], [])    # debug this!!!!
 	res['climate-model-simulation-crashes'] = (['"V3" AND "V4"'], [])
-	res['madelon'] = ([], ['"V65" AND "V337"', '"V443" AND "V473"'])  # I think may turn these into-anti cases -- they're pretty close.
-	res['nomao'] = ([], [])  # need to decide. i think pattern with zero exceptions
+	res['madelon'] = ([], [
+		'"V65" AND "V337"',
+		'"V443" AND "V473"'
+	])
+	res['nomao'] = (['"V67" AND "V68"'], ['"V68" AND "V70"'])  # The exception here is marginal
 	res['mc1'] = ([
 		'"CONDITION_COUNT" AND "MULTIPLE_CONDITION_COUNT"',
 		'"EDGE_COUNT" AND "NODE_COUNT"',
-		'"HALSTEAD_EFFORT" AND "HALSTEAD_PROG_TIME"'], [])
+		'"HALSTEAD_EFFORT" AND "HALSTEAD_PROG_TIME"',
+		'"HALSTEAD_EFFORT" AND "HALSTEAD_VOLUME"',
+		'"HALSTEAD_PROG_TIME" AND "HALSTEAD_VOLUME"'
+	], [
+		'"LOC_EXECUTABLE" AND "LOC_TOTAL"', # this i think is wrong, some other as well
+	])
 	res['pc1'] = ([
+		'"loc" AND "lOCode"',
 		'"N" AND "V"',
 		'"N" AND "total_Op"',
+		'"N" AND "total_Opnd"',
 		'"V" AND "total_Op"',
+		'"V" AND "total_Opnd"',
 		'"E" AND "T"',
-	], [])  # shows some excpetions, but no red dots
-	res['steel-plates-fault'] = (['"V3" AND "V4"', '"V5" AND "V22"'], [])
-	res[''] = ([], [])
-	res[''] = ([], [])
-	res[''] = ([], [])
-	res[''] = ([], [])
+	], [])  # shows some exceptions, but no red dots
+	res['steel-plates-fault'] = ([
+		'"V3" AND "V4"',
+		'"V5" AND "V22"'], [])
 	real_test(test_id, res)
 
 
