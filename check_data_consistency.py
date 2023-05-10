@@ -151,6 +151,10 @@ class DataConsistencyChecker:
         # This maps the columns used in test_results_df and patterns_df to the original columns
         self.col_to_original_cols_dict = {}
 
+        # Information about the quartiles & deciles of the numeric & date columns
+        self.lower_limits_dict = None
+        self.upper_limits_dict = None
+
         # This maps one-to-one with the original data, but in each cell contains a score for the corresponding cell in
         # the original data. It has the same rows and columns as the original data. If a test finds an issue with
         # columns A, B, and C in rows 10 and 13, then test_results_by_column_np will have, in rows 10 & 13, in columns
@@ -992,6 +996,9 @@ class DataConsistencyChecker:
         self.results_summary_arr = []
         self.results_summary_df = None
 
+        self.lower_limits_dict = None
+        self.upper_limits_dict = None
+
         if self.verbose >= 2:
             print()
             print("Identified column types:")
@@ -1509,7 +1516,6 @@ class DataConsistencyChecker:
         df = pd.DataFrame(vals, columns=['Test ID',
                                          'Number Patterns without Exceptions',
                                          'Number Patterns with Exceptions'])
-
         if heatmap:
             pass  # todo: fill in
 
@@ -1692,7 +1698,6 @@ class DataConsistencyChecker:
                         show_exceptions=True,
                         display_info=sub_summary.iloc[0]['Display Information'])
 
-
     def get_results_by_row_id(self, row_num):
         """
         Returns a list of tuples, with each tuple containing a test ID, and column name, for all issues flagged in the
@@ -1770,6 +1775,7 @@ class DataConsistencyChecker:
         This displays the nrows rows from the original data with the lowest scores. These are the rows with the least
         flagged issues.
 
+        Parameters:
         with_results: If with_results is False, this displays a single dataframe showing the appropriate subset
         of the original data. If with_results is True, this displays a dataframe per original row, up to nrows. For
         each, the original data is shown, along with all flagged issues, across all tests on all features.
@@ -2403,7 +2409,6 @@ class DataConsistencyChecker:
             print(neighborhood_df)
 
     def display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
-
         # Do not show examples for some tests
         if is_patterns and test_id in ['UNIQUE_VALUES']:
             print("Examples not shown for this pattern.")
@@ -2535,7 +2540,7 @@ class DataConsistencyChecker:
             plt.show()
 
         elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
-            sns.countplot(x=((self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days))
+            sns.countplot(x=(self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days)
             plt.show()
 
         elif test_id in ['RARE_PAIRS_FIRST_CHAR']:
@@ -2647,6 +2652,60 @@ class DataConsistencyChecker:
                 s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], hue='Flagged')
             else:
                 s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
+            plt.show()
+
+        elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_df = self.orig_df.loc[flagged_idxs]
+            vals = flagged_df[[cols[0], cols[1]]].drop_duplicates()
+            nvals = len(vals)
+
+            counts_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]])
+            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
+            s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g')
+            s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
+            plt.show()
+
+            avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
+            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
+            s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g')
+            s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
+            plt.show()
+
+            # Also draw a histogram of the relevant classes.
+            fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
+            for v_idx in range(nvals):
+                v0 = vals.iloc[v_idx][cols[0]]
+                v1 = vals.iloc[v_idx][cols[1]]
+                sub_df = self.orig_df[(self.orig_df[cols[0]] == v0) & (self.orig_df[cols[1]] == v1)]
+                sub_flagged_df = flagged_df[(flagged_df[cols[0]] == v0) & (flagged_df[cols[1]] == v1)]
+                if nvals == 1:
+                    curr_ax = ax
+                else:
+                    curr_ax = ax[v_idx]
+                s = sns.histplot(data=sub_df, x=cols[2], color='blue', bins=100, ax=curr_ax)
+                flagged_vals = sub_flagged_df[cols[2]].values
+                for fv in flagged_vals:
+                    s.axvline(fv, color='red')
+                s.set_title(f'Distribution of \n"{cols[2]}" where \n"{cols[0]}" is "{v0}" and \n"{cols[1]}" is "{v1}"')
+            plt.show()
+
+        if test_id in ['BINARY_RARE_COMBINATION']:
+            counts_df = self.orig_df.groupby(cols).size().reset_index()
+            # The 0 column is the counts. The other columns have the values from the columns in the original data.
+            counts = counts_df[0]
+            labels = []
+            for i in counts_df.index:
+                label = ''
+                for c in cols:
+                    label += str(counts_df.loc[i, c]) + " / "
+                labels.append(label)
+            s = sns.barplot(orient='h', y=labels, x=counts)
+            s.set_title("Counts of combinations of values in columns")
+            for p_idx, p in enumerate(s.patches):
+                s.annotate('{:.1f}'.format(counts[p_idx]), (p.get_width()+0.25, (p.get_y() + (p.get_height() / 2))+0.1))
             plt.show()
 
     ##################################################################################################################
@@ -2935,7 +2994,9 @@ class DataConsistencyChecker:
                 summary_str = f'{pattern_string}, with exceptions {exception_str}'
             else:
                 summary_str = f'{pattern_string}, {exception_str}'
-            summary_str = summary_str.replace(" .", ".").replace("..",".").replace(".,",",")
+            summary_str = summary_str.replace(" .", ".").replace("..", ".").replace(".,", ",")
+            summary_str = summary_str.rstrip(', ')
+            summary_str = summary_str.rstrip('. ').rstrip('.') + '.'  # Ensure the string ends with a period.
 
             # Update results_summary_arr
             self.results_summary_arr.append([
@@ -3092,42 +3153,49 @@ class DataConsistencyChecker:
         return test_series
 
     def get_columns_iqr_upper_limit(self):
-        upper_limits_dict = {}
+        if self.upper_limits_dict:
+            return self.upper_limits_dict
+        self.upper_limits_dict = {}
         for col_name in self.numeric_cols:
             num_vals = self.numeric_vals[col_name]
             q1 = num_vals.quantile(0.25)
+            q2 = num_vals.quantile(0.5)
             q3 = num_vals.quantile(0.75)
             upper_limit = q3 + (self.iqr_limit * (q3 - q1))
-            upper_limits_dict[col_name] = upper_limit
+            self.upper_limits_dict[col_name] = (upper_limit, q2, q3)
         for col_name in self.date_cols:
             q1 = pd.to_datetime(self.orig_df[col_name]).quantile(0.25, interpolation='midpoint')
             q3 = pd.to_datetime(self.orig_df[col_name]).quantile(0.75, interpolation='midpoint')
             try:
                 upper_limit = q3 + (self.iqr_limit * (q3 - q1))
             except:
-                upper_limits_dict[col_name] = None
+                self.pper_limits_dict[col_name] = None
                 continue
-            upper_limits_dict[col_name] = upper_limit
-        return upper_limits_dict
+            self. upper_limits_dict[col_name] = upper_limit
+        return self.upper_limits_dict
 
     def get_columns_iqr_lower_limit(self):
-        lower_limits_dict= {}
+        if self.lower_limits_dict:
+            return self.lower_limits_dict
+        self.lower_limits_dict= {}
         for col_name in self.numeric_cols:
             num_vals = self.numeric_vals[col_name]
+            d1 = num_vals.quantile(0.1)
             q1 = num_vals.quantile(0.25)
-            q3 = num_vals.quantile(0.75)
-            lower_limit = q1 - (self.iqr_limit * (q3 - q1))
-            lower_limits_dict[col_name] = lower_limit
+            d9 = num_vals.quantile(0.9)
+            lower_limit = d1 - (self.idr_limit * (d9 - d1))
+            self.lower_limits_dict[col_name] = (lower_limit, d1, q1)
         for col_name in self.date_cols:
+            # todo: possibly use deciles, the same as the numeric case, though dates are distributed differently.
             q1 = pd.to_datetime(self.orig_df[col_name]).quantile(0.25, interpolation='midpoint')
             q3 = pd.to_datetime(self.orig_df[col_name]).quantile(0.75, interpolation='midpoint')
             try:
                 lower_limit = q1 - (self.iqr_limit * (q3 - q1))
             except:
-                lower_limits_dict[col_name] = None
+                self.lower_limits_dict[col_name] = None
                 continue
-            lower_limits_dict[col_name] = lower_limit
-        return lower_limits_dict
+            self.lower_limits_dict[col_name] = (lower_limit, q1, q3)
+        return self.lower_limits_dict
 
     ##################################################################################################################
     # Internal methods to get columns or sets of columns
@@ -4715,6 +4783,7 @@ class DataConsistencyChecker:
             # Skip any columns than have more than a few non-integer values. We do not use self.numeric_vals_filled
             # as the median values may have decimals or not.
             numeric_vals = convert_to_numeric(self.orig_df[col_name], 0)
+            numeric_vals = numeric_vals.fillna(0)
             if (numeric_vals.astype(int) == numeric_vals).tolist().count(False) > \
                     self.contamination_level:
                 continue
@@ -5572,8 +5641,10 @@ class DataConsistencyChecker:
                 continue
             if self.orig_df[col_name_2].nunique(dropna=True) < self.contamination_level:
                 continue
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            # vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
+            # vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
             if vals_arr_1.nunique() < 3:
                 continue
             if vals_arr_2.nunique() < 3:
@@ -5591,24 +5662,24 @@ class DataConsistencyChecker:
                 col_2_percentiles = self.orig_df[col_name_2].rank(pct=True)
 
                 # Test for positive correlation
-                test_series = np.array([abs(x-y) < 0.1 for x, y in zip(col_1_percentiles, col_2_percentiles)])
+                test_series = np.array([abs(x-y) < 0.2 for x, y in zip(col_1_percentiles, col_2_percentiles)])
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
                     self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
-                    f'"{col_name_1}" is consistently similar, with regards to percentile, to "{col_name_2}"')
+                    f'"{col_name_1}" is consistently similar, with respect to rank, to "{col_name_2}"')
 
                 # Test for negative correlation
-                test_series = np.array([abs(x-(1.0 - y)) < 0.1 for x, y in zip(col_1_percentiles, col_2_percentiles)])
+                test_series = np.array([abs(x-(1.0 - y)) < 0.2 for x, y in zip(col_1_percentiles, col_2_percentiles)])
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
                     f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
-                    f'"{col_name_1}" is consistently inversely similar in percentile to "{col_name_2}"')
+                    f'"{col_name_1}" is consistently inversely similar in rank to "{col_name_2}"')
 
     def __generate_matched_zero(self):
         """
@@ -8829,17 +8900,19 @@ class DataConsistencyChecker:
                             rare_vals = counts_info[0][count_idx]
                             sub_df = cols_df
                             for col_idx, col_name in enumerate(subset):
-                                sub_df = sub_df[sub_df[cols[col_idx]] == rare_vals[col_idx]]
+                                sub_df = sub_df[sub_df[cols[col_name]] == rare_vals[col_idx]]
                             for i in sub_df.index:
                                 test_series[i] = False
-                            subset_names = [cols[x] for x in list(subset)]
-                            self.__process_analysis_binary(
-                                test_id,
-                                self.get_col_set_name(subset_names),
-                                subset_names,
-                                test_series,
-                                f'For columns {subset}, the combination of values is rare'
-                            )
+
+                    subset_names = [cols[x] for x in list(subset)]
+                    self.__process_analysis_binary(
+                        test_id,
+                        self.get_col_set_name(subset_names),
+                        subset_names,
+                        test_series,
+                        f'For columns {subset_names}, the combinations of values flagged are rare',
+                        allow_patterns=False
+                    )
 
     ##################################################################################################################
     # Data consistency checks for pairs of columns where one is binary and one is numeric
@@ -9517,8 +9590,8 @@ class DataConsistencyChecker:
 
             test_series = self.orig_df[col_name].astype(str).str.slice(0, 1)  # Get the first letter of each value
 
-            # Skip columns that have almost as many distinct values as distinct first characters
-            if test_series.nunique() > (self.orig_df[col_name].nunique() / 2):
+            # Skip columns that have few distinct values
+            if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
                 continue
 
             counts_series = test_series.value_counts(normalize=False) # Get the counts for each first letter
@@ -10228,6 +10301,14 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].astype(str).str.len().max() > 5:
                 continue
 
+            # Skip columns that consistently contain only 1 character
+            if self.orig_df[col_name].astype(str).str.len().max() <= 1:
+                continue
+
+            # Skip columns that have few unique values
+            if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
+                continue
+
             full_text = ''.join(list(self.orig_df[col_name].astype(str)))
             chars_used = list(set(full_text))
             rare_chars = {}
@@ -10241,10 +10322,10 @@ class DataConsistencyChecker:
                 else:
                     common_chars[c] = count_c
 
-            if (0 < len(common_chars) < 20) and (len(rare_chars) < 20):
+            if (0 < len(common_chars) < 10) and (len(rare_chars) < 20):
                 test_series = [True] * self.num_rows
                 for rare_char in rare_chars.keys():
-                    test_series = test_series & ~self.orig_df[col_name].str.contains(rare_char)
+                    test_series = test_series & ~self.orig_df[col_name].astype(str).str.contains(rare_char)
 
                 self.__process_analysis_binary(
                     test_id,
@@ -11599,7 +11680,7 @@ class DataConsistencyChecker:
                     sub_df = sub_dfs_dict[v]
                     if col_name_2 in self.numeric_cols:
                         # Get the upper limit (based on IQR), given the full column
-                        upper_limit = upper_limits_dict[col_name_2]
+                        upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_2]
 
                         # Get the numeric values of the current subset
                         num_vals_no_null = pd.Series(
@@ -11620,8 +11701,13 @@ class DataConsistencyChecker:
 
                         # Get the upper limit given the current subset
                         q1 = num_vals.quantile(0.25)
+                        q2 = num_vals.quantile(0.5)
                         q3 = num_vals.quantile(0.75)
                         upper_limit_subset = q3 + (self.iqr_limit * (q3 - q1))
+
+                        # Check this subset is small compared to the full column
+                        if (q2 > col_q2) or (q3 > col_q3):
+                            continue
 
                         res = pd.Series([x <= upper_limit_subset for x in num_vals])
                     else:
@@ -11666,7 +11752,7 @@ class DataConsistencyChecker:
             small when 'small_given rand' has value 'C'.
         """
         self.__add_synthetic_column('small_given rand', ['A']*100 + ["B"]*100 + ['C']*(self.num_synth_rows - 200))
-        self.__add_synthetic_column('small_given all',np.concatenate([
+        self.__add_synthetic_column('small_given all', np.concatenate([
             np.random.randint(0, 100, 100),
             np.random.randint(100, 200, 100),
             np.random.randint(200, 300, (self.num_synth_rows - 200))
@@ -11696,12 +11782,16 @@ class DataConsistencyChecker:
                     sub_dfs_dict[v] = self.orig_df[self.orig_df[col_name_1] == v]
 
             for col_name_2 in self.numeric_cols + self.date_cols:
+
+                if self.orig_df[col_name_2].nunique() < math.sqrt(self.num_rows):
+                    continue
+
                 test_series = [True] * self.num_rows
                 for v in common_values:
                     sub_df = sub_dfs_dict[v]
                     if col_name_2 in self.numeric_cols:
                         # Get the iqr given the full column
-                        lower_limit = lower_limits_dict[col_name_2]
+                        lower_limit, col_d1, col_q1 = lower_limits_dict[col_name_2]
 
                         # Get the iqr given the current subset
                         num_vals_no_null = pd.Series(
@@ -11720,9 +11810,13 @@ class DataConsistencyChecker:
                         if res_1.tolist().count(True) > 0:
                             continue
 
-                        q1 = num_vals.quantile(0.25)
-                        q3 = num_vals.quantile(0.75)
-                        lower_limit_subset = q1 - (self.iqr_limit * (q3 - q1))
+                        d1 = num_vals.quantile(0.1)
+                        d9 = num_vals.quantile(0.9)
+                        lower_limit_subset = d1 - (self.idr_limit * (d9 - d1))
+
+                        # Ensure this subset is at least one decile shifted from the full column
+                        if d1 < col_q1:
+                            continue
 
                         res = pd.Series([x >= lower_limit_subset for x in num_vals])
                     else:
@@ -11762,7 +11856,7 @@ class DataConsistencyChecker:
 
     def __generate_large_given_prefix(self):
         """
-        Patterns without exceptions:
+        Patterns without exceptions: None
         Patterns with exception: 'large_given most' contains one row with value 290, which is common for the column
             but not common when 'large_given rand' is 'C'
         """
@@ -11784,7 +11878,7 @@ class DataConsistencyChecker:
         # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
         upper_limits_dict = self.get_columns_iqr_upper_limit()
 
-        for col_idx, col_name_1 in enumerate(self.string_cols + self.binary_cols):
+        for col_idx, col_name_1 in enumerate(self.string_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
                 print(f"  Examining column {col_idx} of {len(self.string_cols) + len(self.binary_cols)} string and binary columns")
 
@@ -11799,6 +11893,10 @@ class DataConsistencyChecker:
             first_words = pd.Series([x[0] if len(x) > 0 else "" for x in col_vals.str.split()])
             if first_words.nunique() > 10:
                 continue
+            # Skip columns where the set of unique first words is almost as large as the set of unique strings. In
+            # this case, the first word is not meaningful.
+            if first_words.nunique() > (col_vals.nunique() / 2):
+                continue
             vc = first_words.value_counts()
             common_values = []
             for v in vc.index:
@@ -11812,7 +11910,7 @@ class DataConsistencyChecker:
 
                     if col_name_2 in self.numeric_cols:
                         # Get the iqr given the full column
-                        upper_limit = upper_limits_dict[col_name_2]
+                        upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_2]
 
                         # Get the iqr given the current subset
                         num_vals_no_null = pd.Series([float(x) for x in sub_df[col_name_2] if str(x).replace('-', '').replace('.', '').isdigit()])
@@ -11828,8 +11926,13 @@ class DataConsistencyChecker:
                             continue
 
                         q1 = num_vals.quantile(0.25)
+                        q2 = num_vals.quantile(0.5)
                         q3 = num_vals.quantile(0.75)
                         upper_limit_subset = q3 + (self.iqr_limit * (q3 - q1))
+
+                        # Check this subset is small compared to the full column
+                        if (q2 > col_q2) or (q3 > col_q3):
+                            continue
 
                         res = pd.Series([x <= upper_limit_subset for x in num_vals])
                     else:
@@ -11895,7 +11998,7 @@ class DataConsistencyChecker:
         # Calculate and cache the lower limit based on q1 and q3 of each full numeric & date column
         lower_limits_dict = self.get_columns_iqr_lower_limit()
 
-        for col_idx, col_name_1 in enumerate(self.string_cols + self.binary_cols):
+        for col_idx, col_name_1 in enumerate(self.string_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
                 print((f"  Examining column {col_idx} of {len(self.string_cols) + len(self.binary_cols)} string and "
                        f"binary columns"))
@@ -11923,7 +12026,7 @@ class DataConsistencyChecker:
                     sub_df = self.orig_df[[col_name_2]][first_words == v]
                     if col_name_2 in self.numeric_cols:
                         # Get the iqr given the full column
-                        lower_limit = lower_limits_dict[col_name_2]
+                        lower_limit, col_d1, col_q1 = lower_limits_dict[col_name_2]
 
                         # Get the iqr given the current subset
                         num_vals_no_null = pd.Series([float(x) for x in sub_df[col_name_2] if str(x).replace('-', '').replace('.', '').isdigit() ])
@@ -11940,9 +12043,13 @@ class DataConsistencyChecker:
                         if res_1.tolist().count(True) > 0:
                             continue
 
-                        q1 = num_vals.quantile(0.25)
-                        q3 = num_vals.quantile(0.75)
-                        lower_limit_subset = q1 - (self.iqr_limit * (q3 - q1))
+                        d1 = num_vals.quantile(0.1)
+                        d9 = num_vals.quantile(0.9)
+                        lower_limit_subset = d1 - (self.idr_limit * (d9 - d1))
+
+                        # Ensure this subset is at least one decile shifted from the full column
+                        if d1 < col_q1:
+                            continue
 
                         res = pd.Series([x >= lower_limit_subset for x in num_vals])
                     else:
@@ -12058,6 +12165,9 @@ class DataConsistencyChecker:
         test.
         """
 
+        # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
+        upper_limits_dict = self.get_columns_iqr_upper_limit()
+
         # Determine if there are too many combinations to execute
         pairs = self.__get_string_column_pairs_unique()  # todo: we should check the binary columns as well
         total_combinations = len(pairs) * (len(self.numeric_cols) + len(self.date_cols))
@@ -12112,11 +12222,10 @@ class DataConsistencyChecker:
                         if len(sub_df) < 100:
                             continue
 
-                        # Todo: as with LARGE_GIVEN_VALUE, check the q1 q3 for the full column, so don't flag things
-                        #   that are large anyway, just large given this pair.
                         if col_name_3 in self.numeric_cols:
                             num_vals = self.numeric_vals_filled[col_name_3].loc[sub_df.index]
                             q1 = num_vals.quantile(0.25)
+                            q2 = num_vals.quantile(0.5)
                             q3 = num_vals.quantile(0.75)
                             upper_limit = q3 + (self.iqr_limit * (q3 - q1))
                             res = num_vals <= upper_limit
@@ -12132,6 +12241,11 @@ class DataConsistencyChecker:
                         if res.tolist().count(False) > self.contamination_level:
                             found_many = True
                             break
+
+                        # Ensure the subset is small relative to the full column.
+                        col_upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_3]
+                        if (q2 > col_q2) or (q3 > col_q3):
+                            continue
 
                         if 0 < res.tolist().count(False) <= self.contamination_level:
                             index_of_large = [x for x, y in zip(sub_df.index, res) if not y]
@@ -12499,6 +12613,14 @@ class DataConsistencyChecker:
                     categorical_features.append(col_name)
 
         for col_name in self.string_cols + self.binary_cols:
+
+            # Skip columns where one value dominates and a trivial decision tree could predict well
+            vc = self.orig_df[col_name].value_counts(normalize=True)
+            if len(vc) == 0:
+                continue
+            if vc.iloc[0] > 0.95:
+                continue
+
             if col_name in drop_features:
                 continue
             clf = DecisionTreeClassifier(max_leaf_nodes=4)
