@@ -1,12 +1,10 @@
 import pandas as pd
-import random
-import sklearn.datasets as datasets
 from sklearn.datasets import fetch_openml
 
 import sys
 sys.path.insert(1, '..')
 from check_data_consistency import DataConsistencyChecker
-from _list_real_files import real_files
+from list_real_files import real_files
 
 
 def build_default_results():
@@ -30,17 +28,24 @@ def real_test(test_id, expected_results_dict):
 
 		dc = DataConsistencyChecker(verbose=-1, execute_list=[test_id])
 		dc.check_data_quality(data_df, fast_only=fast_only)
+
 		patterns_df = dc.get_patterns_summary(short_list=True)
-		assert ((patterns_df is None) and (len(expected_patterns_cols) == 0)) or \
-				(len(patterns_df) == len(expected_patterns_cols))
-		for col in expected_patterns_cols:
-			assert col in patterns_df['Column(s)'].values
+		if type(expected_patterns_cols) == int:
+			assert len(patterns_df) == expected_patterns_cols
+		else:
+			assert ((patterns_df is None) and (len(expected_patterns_cols) == 0)) or \
+					(len(patterns_df) == len(expected_patterns_cols))
+			for col in expected_patterns_cols:
+				assert col in patterns_df['Column(s)'].values
 
 		exceptions_df = dc.get_exceptions_summary()
-		assert ((exceptions_df is None) and (len(expected_patterns_cols) == 0)) or \
-				(len(exceptions_df) == len(expected_exceptions_cols))
-		for col in expected_exceptions_cols:
-			assert col in exceptions_df['Column(s)'].values
+		if type(expected_exceptions_cols) == int:
+			assert len(exceptions_df) == expected_exceptions_cols
+		else:
+			assert ((exceptions_df is None) and (len(expected_patterns_cols) == 0)) or \
+					(len(exceptions_df) == len(expected_exceptions_cols))
+			for col in expected_exceptions_cols:
+				assert col in exceptions_df['Column(s)'].values
 
 
 def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_cols, allow_more=False):

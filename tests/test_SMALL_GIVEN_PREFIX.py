@@ -10,12 +10,13 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SMALL_GIVEN_PREFIX'
 random.seed(0)
 
-synth_patterns_cols = ['same rand AND same all']
-synth_exceptions_cols = ['small_given_prefix rand AND small_given_prefix most']
+synth_patterns_cols = []
+synth_exceptions_cols = ['"small_given_prefix rand" AND "small_given_prefix most"']
 
 
 def test_real():
 	res = build_default_results()
+	res['musk'] = ([], ['"molecule_name" AND "f165"'])
 	real_test(test_id, res)
 
 

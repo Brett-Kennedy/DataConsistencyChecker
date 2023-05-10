@@ -11,17 +11,78 @@ test_id = 'SMALL_GIVEN_VALUE'
 random.seed(0)
 
 synth_patterns_cols = []  # None for this test
-synth_exceptions_cols = ['small_given rand AND small_given most']
+synth_exceptions_cols = ['"small_given rand" AND "small_given most"']
 
 
 def test_real():
 	res = build_default_results()
-	res['hypothyroid'] = ([],[
-		'"referral_source" AND "T4U"',
-		'"referral_source" AND "FTI"',
-		'"sex" AND "T4U"',
-		'"sex" AND "FTI"'])
-	real_test(test_id, res)
+	res['qsar-biodeg'] = ([], [
+		'"V25" AND "V1"',
+		'"V25" AND "V27"'])
+	res['scene'] = ([], [
+		'"Beach" AND "attr29"',
+		'"Beach" AND "attr30"',
+		'"Beach" AND "attr31"',
+		'"Beach" AND "attr32"',
+		'"Beach" AND "attr34"',
+		'"Beach" AND "attr36"',
+		'"Beach" AND "attr37"',
+		'"Beach" AND "attr38"',
+		'"Beach" AND "attr39"',
+		'"Beach" AND "attr40"',
+		'"Beach" AND "attr44"',
+		'"Beach" AND "attr45"',
+		'"Beach" AND "attr46"',
+		'"Beach" AND "attr47"',
+		'"Beach" AND "attr146"',
+		'"FallFoliage" AND "attr211"',
+		'"FallFoliage" AND "attr224"',
+		'"FallFoliage" AND "attr226"',
+		'"FallFoliage" AND "attr227"',
+		'"FallFoliage" AND "attr230"',
+		'"Field" AND "attr29"',
+		'"Field" AND "attr40"',
+		'"Field" AND "attr41"',
+		'"Field" AND "attr225"',
+		'"Field" AND "attr226"',
+		'"Field" AND "attr232"',
+		'"Field" AND "attr233"',
+		'"Field" AND "attr234"',
+		'"Field" AND "attr235"',
+		'"Field" AND "attr241"',
+		'"Field" AND "attr242"',
+		'"Field" AND "attr243"',
+		'"Field" AND "attr244"',
+		])
+	res['hypothyroid'] = ([], ['"T4U_measured" AND "T3"', '"FTI_measured" AND "T3"'])
+	res['allbp'] = ([], [
+		'"TT4_measured" AND "TSH"',
+		'"TT4_measured" AND "T4U"',
+		'"TT4_measured" AND "FTI"',
+		'"T4U_measured" AND "FTI"',
+		])
+	res['allrep'] = ([], [
+		'"TT4_measured" AND "TSH"',
+		'"TT4_measured" AND "T4U"',
+		'"TT4_measured" AND "FTI"',
+		'"T4U_measured" AND "FTI"'
+	])
+	res['dis'] = ([], [
+		'"TT4_measured" AND "TSH"',
+		'"TT4_measured" AND "T4U"',
+		'"TT4_measured" AND "FTI"',
+		'"T4U_measured" AND "FTI"',
+	])
+	res['steel-plates-fault'] = ([], [
+		'"V28" AND "V25"',
+		'"V30" AND "V10"',
+		'"V30" AND "V16"',
+		'"V30" AND "V22"',
+		'"V30" AND "V24"',
+		'"V33" AND "V9"',
+		'"V33" AND "V20"',
+	])
+	real_test(test_id, res) # steel-plates-fault has 1 good one
 
 
 def test_synthetic_no_nulls():
