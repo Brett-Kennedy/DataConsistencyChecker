@@ -16,6 +16,7 @@ synth_exceptions_cols = ['very small most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], 45)
 	res['page_blocks'] = ([], ['p_and'])
 	res['hypothyroid'] = ([], ['T4U', 'FTI'])
 	real_test(test_id, res)

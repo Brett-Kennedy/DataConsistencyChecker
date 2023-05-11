@@ -16,6 +16,7 @@ synth_exceptions_cols = ['very large 3']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], 19)
 	res['hypothyroid'] = ([], ['age', 'TT4', 'T4U'])
 	real_test(test_id, res)
 

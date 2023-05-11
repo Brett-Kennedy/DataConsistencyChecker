@@ -16,6 +16,7 @@ synth_exceptions_cols = ['num decimals rand', 'num decimals most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (551, [])
 	real_test(test_id, res)
 
 

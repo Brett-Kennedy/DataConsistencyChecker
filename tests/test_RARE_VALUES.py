@@ -16,6 +16,7 @@ synth_exceptions_cols = ['rare_vals most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (['f581', 'f582', 'f583'], [])
 	real_test(test_id, res)
 
 

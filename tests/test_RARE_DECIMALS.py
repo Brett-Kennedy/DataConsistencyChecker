@@ -16,6 +16,7 @@ synth_exceptions_cols = ['rare_decimals_most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (['f581', 'f582', 'f583'], [])
 	res['hypothyroid'] = ([], ['T3', 'TT4', 'FTI'])
 	real_test(test_id, res)
 

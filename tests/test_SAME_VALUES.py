@@ -16,6 +16,13 @@ synth_exceptions_cols = ['same rand AND same most']
 
 def test_real():
 	res = build_default_results()
+	res['spambase'] = ([], ['"word_freq_857" AND "word_freq_415"'])
+	res['nomao'] = (18, [])
+	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['cardiotocography'] = (['"V4" AND "V5"'], [])
+	res['allbp'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['allrep'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['dis'] = ([], ['"T4U_measured" AND "FTI_measured"'])
 	real_test(test_id, res)
 
 

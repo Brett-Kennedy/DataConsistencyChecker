@@ -16,6 +16,7 @@ synth_exceptions_cols = ['non-zero most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (70, 397)
 	real_test(test_id, res)
 
 

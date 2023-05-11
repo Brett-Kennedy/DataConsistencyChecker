@@ -16,6 +16,7 @@ synth_exceptions_cols = ['very_small_abs most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], ['f414'])
 	real_test(test_id, res)
 
 

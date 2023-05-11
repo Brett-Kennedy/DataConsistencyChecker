@@ -16,6 +16,7 @@ synth_exceptions_cols = ['missing vals most', 'missing vals most null']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (617, [])
 	res['hypothyroid'] = ([], ['age'])
 	real_test(test_id, res)
 
