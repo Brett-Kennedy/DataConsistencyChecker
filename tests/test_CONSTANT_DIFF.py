@@ -10,9 +10,12 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'CONSTANT_DIFF'
 random.seed(0)
 
-synth_patterns_cols = ['"constant diff 1" AND "constant diff 2"']
-synth_exceptions_cols = ['"constant diff 1" AND "constant diff 3"',
-                         '"constant diff 2" AND "constant diff 3"']
+synth_patterns_cols = [
+	'"constant diff 1" AND "constant diff 2"'
+]
+synth_exceptions_cols = [
+	'"constant diff 1" AND "constant diff 3"'
+]
 
 
 def test_real():

@@ -16,6 +16,7 @@ synth_exceptions_cols = ['few in range most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (1, 316)
 	res['page_blocks'] = (
 		[],
 		['height', 'mean_tr', 'wb_trans'])

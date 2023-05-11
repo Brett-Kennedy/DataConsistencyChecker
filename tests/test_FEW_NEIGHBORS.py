@@ -15,6 +15,7 @@ synth_exceptions_cols = ['few neighbors most']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], ['f408'])
 	res['qsar-biodeg'] = ([], ['V7', 'V9', 'V11', 'V16', 'V32', 'V40', 'V41'])
 	res['wdbc'] = ([], ['V4', 'V11', 'V13', 'V17', 'V20', 'V30'])
 	res['ozone-level-8hr'] = ([], ['V72'])

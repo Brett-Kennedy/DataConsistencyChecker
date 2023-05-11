@@ -17,7 +17,14 @@ synth_exceptions_cols = ['"constant ratio 1" AND "constant ratio 3"']
 def test_real():
 	res = build_default_results()
 	res['blood-transfusion-service-center'] = (['"V2" AND "V3"'], [])
-	res['eeg-eye-state'] = ([], ['"V5" AND "V6"', '"V5" AND "V8"', '"V6" AND "V8"', '"V8" AND "V9"', '"V9" AND "V10"'])
+	res['eeg-eye-state'] = ([], [
+		'"V5" AND "V6"',
+		'"V5" AND "V8"',
+		'"V6" AND "V8"',
+		'"V8" AND "V9"',
+		'"V9" AND "V10"'
+	])
+	res['madelon'] = (5, 14)
 	res['steel-plates-fault'] = (['"V3" AND "V4"'], [])
 	real_test(test_id, res)
 

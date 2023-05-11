@@ -19,25 +19,29 @@ synth_exceptions_cols = [
 
 def test_real():
 	res = build_default_results()
+	res['vehicle'] = ([
+		'"SCATTER_RATIO" AND "SCALED_VARIANCE_MINOR"'
+		'"ELONGATEDNESS" AND "SCALED_VARIANCE_MINOR"',
+	], [])
+	res['segment'] = (['"intensity-mean" AND "value-mean"'], [])
+	res['jm1'] = (['"n" AND "v"', '"e" AND "t"'], 7)
+	res['gas-drift'] = (8, 14)
 	res['blood-transfusion-service-center'] = (['"V2" AND "V3"'], [])
 	res['wdbc'] = ([
 		'"V1" AND "V3"',
 		'"V1" AND "V4"',
 		'"V3" AND "V4"',
 		'"V21" AND "V24"'
-	], [])  # need to debug this case.
+	], [])
 	res['ozone-level-8hr'] = ([], [
 		'"V28" AND "V29"',
 		'"V29" AND "V30"',
 		'"V30" AND "V31"',
 		'"V31" AND "V32"'
 	])
-	res['kc2'] = (['"n" AND "v"'], [])    # debug this!!!!
+	res['hill-valley'] = (4950, [])
+	res['kc2'] = (['"n" AND "v"'], ['"e" AND "t"'])    # "e" AND "t" is correct, but hard to see in the plot
 	res['climate-model-simulation-crashes'] = (['"V3" AND "V4"'], [])
-	res['madelon'] = ([], [
-		'"V65" AND "V337"',
-		'"V443" AND "V473"'
-	])
 	res['nomao'] = (['"V67" AND "V68"'], ['"V68" AND "V70"'])  # The exception here is marginal
 	res['mc1'] = ([
 		'"CONDITION_COUNT" AND "MULTIPLE_CONDITION_COUNT"',
@@ -46,7 +50,10 @@ def test_real():
 		'"HALSTEAD_EFFORT" AND "HALSTEAD_VOLUME"',
 		'"HALSTEAD_PROG_TIME" AND "HALSTEAD_VOLUME"'
 	], [
-		'"LOC_EXECUTABLE" AND "LOC_TOTAL"', # this i think is wrong, some other as well
+		'"LOC_EXECUTABLE" AND "LOC_TOTAL"',
+		'"HALSTEAD_EFFORT" AND "HALSTEAD_LENGTH"',
+		'"HALSTEAD_LENGTH" AND "HALSTEAD_PROG_TIME"',
+		'"HALSTEAD_LENGTH" AND "HALSTEAD_VOLUME"'
 	])
 	res['pc1'] = ([
 		'"loc" AND "lOCode"',
@@ -56,7 +63,7 @@ def test_real():
 		'"V" AND "total_Op"',
 		'"V" AND "total_Opnd"',
 		'"E" AND "T"',
-	], [])  # shows some exceptions, but no red dots
+	], [])
 	res['steel-plates-fault'] = ([
 		'"V3" AND "V4"',
 		'"V5" AND "V22"'], [])

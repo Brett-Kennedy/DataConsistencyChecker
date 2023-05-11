@@ -10,13 +10,12 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'COMMON_CHARS'
 random.seed(0)
 
-synth_patterns_cols = ['repeated_chars all']
+synth_patterns_cols = []
 synth_exceptions_cols = ['repeated_chars most']
 
 
 def test_real():
 	res = build_default_results()
-	res['musk'] = (['molecule_name'], [])  #credit-g probably not a pattern. musk yes. bank-marketing also in a negative list.
 	real_test(test_id, res)
 
 

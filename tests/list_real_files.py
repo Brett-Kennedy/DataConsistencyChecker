@@ -1,8 +1,43 @@
 # OpenML files not used:
-# gina-agnostic  - file not available on OpenML
+# gina-agnostic - file not available on OpenML
 # amazon-commerce-reviews -- currently slow and needs to be sped up.
+# balance_scale - file not available on OpenML
+# synthetic-control  - file not available on OpenML
+# cjs - file not available on OpenML
 
 real_files = [
+	'isolet',
+	'bioresponse',
+	'soybean',
+	'micro-mass',
+	'mfeat-karhunen',
+	'Amazon_employee_access',
+	'abalone',
+	'cnae-9',
+	'semeion',
+	'vehicle',
+	'satimage',
+	'analcatdata_authorship',
+	'breast-w',
+	'SpeedDating',
+	'eucalyptus',
+	'vowel',
+	'wall-robot-navigation',
+	'credit-approval',
+	'artificial-characters',
+	'splice',
+	'har',
+	'cmc',
+	'segment',
+	'JapaneseVowels',
+	'jm1',
+	'gas-drift',
+	'mushroom',
+	'irish',
+	'profb',
+	'adult',
+	'higgs',
+	'anneal',
 	'credit-g',
 	'blood-transfusion-service-center',
 	'monks-problems-2',

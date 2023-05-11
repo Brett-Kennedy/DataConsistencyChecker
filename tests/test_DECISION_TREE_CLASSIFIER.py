@@ -16,9 +16,30 @@ synth_exceptions_cols = ['"dt cls. 1b" AND "dt cls. 2" AND "dt cls. 2" AND "dt c
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], [
+		'"f4" AND "f6" AND "f578"',
+		'"f6" AND "f579"'])
+	res['bioresponse'] = ([
+		'"D3" AND "D28"',
+		'"D5" AND "D94"'], [])
+	res['soybean'] = (['"precip" AND "temp" AND "sclerotia"'], [])
+	res['SpeedDating'] = (9, 10)
+	res['credit-approval'] = ([
+		'"A3" AND "A5" AND "A4"',
+		'"A3" AND "A5"',
+		'"A1" AND "A10"'
+		], [])
+	res['anneal'] = ([], [
+		'"carbon" AND "hardness" AND "temper_rolling"',
+		'"hardness" AND "formability" AND "len" AND "shape"'
+	])
+	res[''] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+
 	res['nomao'] = ([
 		'"V1" AND "V7"',
-		'"V4" AND "V8"'
+		'"V2" AND "V8"'
 		], [])
 	res['hypothyroid'] = (['"T4U" AND "FTI" AND "FTI_measured"'], [
 		'"TT4" AND "T4U" AND "TT4_measured"',

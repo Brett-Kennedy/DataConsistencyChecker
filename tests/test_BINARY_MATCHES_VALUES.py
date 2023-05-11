@@ -10,9 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'BINARY_MATCHES_VALUES'
 random.seed(0)
 
-synth_patterns_cols = []
-synth_exceptions_cols = ['"bin_match_val all" AND "bin_match_val rand_a"',
-                         '"bin_match_val most" AND "bin_match_val rand_a"']
+synth_patterns_cols = ['"bin_match_val all" AND "bin_match_val rand_a"']
+synth_exceptions_cols = ['"bin_match_val most" AND "bin_match_val rand_a"']
 
 
 def test_real():
