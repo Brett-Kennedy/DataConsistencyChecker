@@ -16,6 +16,13 @@ synth_exceptions_cols = ['"small_avg_rank_rand_0" AND "small_avg_rank_rand_1" AN
 
 def test_real():
 	res = build_default_results()
+	res['gas-drift'] = (0, 1)
+	res['phoneme'] = (0, 1)
+	res['one-hundred-plants-margin'] = (0, 1)
+	res['madelon'] = (0, 1)
+	res['musk'] = (0, 1)
+	res['CreditCardSubset'] = (0, 1)
+	res['shuttle'] = (0, 1)
 	real_test(test_id, res)
 
 
