@@ -16,7 +16,12 @@ synth_exceptions_cols = ['grouped_str most']
 
 def test_real():
 	res = build_default_results()
+	res['eucalyptus'] = (['Abbrev'], [])
+	res['vowel'] = (['Speaker_Number', 'Train_or_Test'], [])
 	res['nursery'] = ([], ['parents'])
+	res['car-evaluation'] = (['buying_price_vhigh', 'buying_price_low'], [])
+	res['car'] = (['buying'], [])
+	res['steel-plates-fault'] = (['V28'], [])
 	real_test(test_id, res)
 
 

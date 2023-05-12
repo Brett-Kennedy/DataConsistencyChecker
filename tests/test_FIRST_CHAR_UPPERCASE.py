@@ -16,6 +16,12 @@ synth_exceptions_cols = ['first_char_upper most']
 
 def test_real():
 	res = build_default_results()
+	res['eucalyptus'] = (['Abbrev', 'Locality'], [])
+	res['vowel'] = (['Speaker_Number'], [])
+	res['profb'] = (['Favorite_Name', 'Underdog_name'], [])
+	res['adult'] = (['marital-status', 'relationship', 'race'], [])
+	res['musk'] = (['molecule_name'], [])
+	res['baseball'] = (['Position'], [])
 	real_test(test_id, res)
 
 

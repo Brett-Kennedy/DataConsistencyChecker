@@ -16,13 +16,21 @@ synth_exceptions_cols = ['few in range most']
 
 def test_real():
 	res = build_default_results()
-	res['isolet'] = (1, 316)
-	res['page_blocks'] = (
-		[],
-		['height', 'mean_tr', 'wb_trans'])
-	res['hypothyroid'] = (
-		[],
-		['T3', 'TT4', 'T4U', 'FTI'])
+	res['bioresponse'] = (7, 8)
+	res['micro-mass'] = (2, [])
+	res['Amazon_employee_access'] = ([], ['ROLE_FAMILY'])
+	res['wall-robot-navigation'] = (2, 7)
+	res['har'] = ([], ['V559'])
+	res['segment'] = (2, ['hue-mean'])
+	res['electricity'] = (1, [])
+	res['musk'] = (2, ['f61', 'f104', 'f105'])
+	res['nomao'] = (2, ['V89', 'V103', 'V107'])
+	res['Click_prediction_small'] = (1, [])
+	res['mc1'] = ([], ['CYCLOMATIC_DENSITY'])
+	res['allbp'] = ([], ['T3'])
+	res['allrep'] = ([], ['T3'])
+	res['dis'] = ([], ['T3'])
+	res['steel-plates-fault'] = ([], ['V11'])
 	real_test(test_id, res)
 
 

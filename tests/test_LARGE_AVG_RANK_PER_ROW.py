@@ -16,6 +16,17 @@ synth_exceptions_cols = ['"large_avg_rank_rand_0" AND "large_avg_rank_rand_1" AN
 
 def test_real():
 	res = build_default_results()
+	res['cnae-9'] = (0, 1)
+	res['SpeedDating'] = (0, 1)
+	res['adult'] = (0, 1)
+	res['higgs'] = (0, 1)
+	res['bank-marketing'] = (0, 1)
+	res['MagicTelescope'] = (0, 1)
+	res['CreditCardSubset'] = (0, 1)
+	res['solar-flare'] = (0, 1)
+	res['allbp'] = (0, 1)
+	res['allrep'] = (0, 1)
+	res['dis'] = (0, 1)
 	real_test(test_id, res)
 
 

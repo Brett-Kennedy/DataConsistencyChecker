@@ -16,6 +16,31 @@ synth_exceptions_cols = ['"larger_sum rand_a" AND "larger_sum rand_b" AND "large
 
 def test_real():
 	res = build_default_results()
+	res['abalone'] = ([], [
+		'"Shucked_weight" AND "Viscera_weight" AND "Whole_weight"',
+		'"Shucked_weight" AND "Shell_weight" AND "Whole_weight"',
+		'"Viscera_weight" AND "Shell_weight" AND "Whole_weight"'
+	])
+	res['vehicle'] = (36, 8)
+	res['analcatdata_authorship'] = (3, 15)
+	res['SpeedDating'] = (471, 653)
+	res['segment'] = (2, 0)
+	res['jmi'] = ([], [
+		'"lOCode" AND "locCodeAndComment" AND "loc"',
+		'"lOComment" AND "locCodeAndComment" AND "loc"'
+	])
+	res['adult'] = (1, ['"capitalgain" AND "capitalloss" AND "education-num"'])  # this one is weak
+	res['anneal'] = (3, [])
+	res['qsar-biodeg'] = (202, 345)
+	res['wdbc'] = (1, ['"V5" AND "V10" AND "V29"'])
+	res['ozone-level-8hr'] = (7, [])
+	res['kc2'] = ([], 3)
+	res['spambase'] = (366, 1684)
+	res['baseball'] = (2, 2)
+	res['mc1'] = (11, 5)
+	res['pc1'] = ([], 13)
+	res['cardiotocography'] = (103, 33)
+	res['steel-plates-fault'] = (0, 2)
 	real_test(test_id, res)
 
 

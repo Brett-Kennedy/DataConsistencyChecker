@@ -16,17 +16,22 @@ synth_exceptions_cols = ['greater_than_one most']
 
 def test_real():
 	res = build_default_results()
-	res['qsar-biodeg'] = ([], ['V2'])
-	res['ozone-level-8hr'] = ([], ['V25', 'V27', 'V36', 'V37', 'V38', 'V39', 'V40', 'V43', 'V44', 'V45', 'V46', 'V47',
-	                               'V48', 'V49', 'V50', 'V52', 'V69'])
-	res['hill-valley'] = ([], ['V1', 'V6', 'V10', 'V13', 'V15', 'V18', 'V19', 'V21', 'V24', 'V25', 'V26', 'V27', 'V28',
-	                           'V30', 'V32', 'V36', 'V40', 'V41', 'V45', 'V48', 'V49', 'V60', 'V62', 'V70', 'V71',
-	                           'V78', 'V79', 'V81', 'V83', 'V89', 'V90', 'V93', 'V96', 'V97', 'V99', 'V100'])
-	res['ilpd'] = ([], ['V9'])
-	res['MagicTelescope'] = ([], ['fWidth', 'fM3Long'])
-	res['mc1'] = ([], ['HALSTEAD_DIFFICULTY', 'PERCENT_COMMENTS'])
-	res['PC1'] = ([], ['D'])
-	res['steel-plates-fault'] = ([], ['V22'])
+	res['bioresponse'] = ([], 127)
+	res['SpeedDating'] = (57, ['expected_num_matches'])
+	res['eucalyptus'] = (8, 5)
+	res['vowel'] = ([], ['Feature_0'])
+	res['wall-robot-navigation'] = (3, ['V4'])
+	res['gas-drift'] = (6, 44)
+	res['qsar-biodeg'] = (31, ['V2'])
+	res['ozone-level-8hr'] = (8, [
+		'V25', 'V27', 'V36', 'V37', 'V38', 'V39', 'V40', 'V43', 'V44', 'V45', 'V46', 'V47',
+	    'V48', 'V49', 'V50', 'V52', 'V69'])
+	res['hill-valley'] = ([], 35)
+	res['ilpd'] = (5, ['V9'])
+	res['MagicTelescope'] = (3, ['fWidth', 'fM3Long'])
+	res['mc1'] = (27, ['HALSTEAD_DIFFICULTY', 'PERCENT_COMMENTS'])
+	res['PC1'] = (17, ['D'])
+	res['steel-plates-fault'] = (12, ['V22'])
 	real_test(test_id, res)
 
 

@@ -10,14 +10,22 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'LARGER_THAN_ABS_DIFF'
 random.seed(0)
 
-synth_patterns_cols = ['"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff all"',
-                       '"larger_diff rand_b" AND "larger_diff all" AND "larger_diff most"']
-synth_exceptions_cols = ['"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff most"',
-                         '"larger_diff rand_a" AND "larger_diff all" AND "larger_diff most"']
+synth_patterns_cols = [
+	'"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff all"',
+	'"larger_diff rand_b" AND "larger_diff all" AND "larger_diff most"'
+]
+synth_exceptions_cols = [
+	'"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff most"',
+	'"larger_diff rand_a" AND "larger_diff all" AND "larger_diff most"'
+]
 
 
 def test_real():
 	res = build_default_results()
+	res['abalone'] = (5, 12)
+	res['vehicle'] = (287, 27)
+	res['analcatdata_authorship'] = (159, 263)
+	res['SpeedDating'] = (1339, 1678)
 	real_test(test_id, res)
 
 

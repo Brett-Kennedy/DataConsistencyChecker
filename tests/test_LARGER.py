@@ -16,6 +16,27 @@ synth_exceptions_cols = ['"larger most" AND "larger rand"']
 
 def test_real():
 	res = build_default_results()
+	res['abalone'] = (2, 8)
+	res['cnae-9'] = (5, 75)
+	res['vehicle'] = (80, 6)
+	res['analcatdata_authorship'] = (48, 152)
+	res['SpeedDating'] = (96, 78)
+	res['eucalyptus'] = (2, 15)
+	res['vowel'] = (4, [])
+	res['credit-approval'] = ([], [
+		'"A2" AND "A3"',
+		'"A2" AND "A11"'
+	])
+	res['artificial-characters'] = (5, [])
+	res['cmc'] = (1, [])
+	res['segment'] = (25, 14)
+	res['JapaneseVowels'] = (0, ['"frame" AND "coefficient3'])
+	res['jm1'] = (10, 70)
+	res['gas-drift'] = (2330, 2594)
+	res['irish'] = (1, [])
+	res['profb'] = (3, [])
+	res['adult'] = (2, 3)
+	res['anneal'] = (5, 2)
 	res['credit-g'] = (2, [])
 	res['qsar-biodeg'] = (125, 72)
 	res['wdbc'] = (57, 17)

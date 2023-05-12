@@ -16,6 +16,8 @@ synth_exceptions_cols = ['first_word most']
 
 def test_real():
 	res = build_default_results()
+	res['adult'] = ([], ['education'])
+	res['musk'] = (['molecule_name'], [])
 	real_test(test_id, res)
 
 

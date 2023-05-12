@@ -16,6 +16,8 @@ synth_exceptions_cols = ['first_char_numeric_3']
 
 def test_real():
 	res = build_default_results()
+	res['eucalyptus'] = (['Latitude'], [])
+	res['car'] = (['doors'], [])
 	real_test(test_id, res)
 
 
