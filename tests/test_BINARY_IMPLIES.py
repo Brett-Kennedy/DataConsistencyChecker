@@ -21,6 +21,17 @@ synth_exceptions_cols = [
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([
+		'"f578" AND "f579"',
+		'"f578" AND "f580"',
+		'"f579" AND "f580"'], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
+
 	res['scene'] = ([
 		'"Beach" AND "Sunset"',
 		'"Beach" AND "FallFoliage"',

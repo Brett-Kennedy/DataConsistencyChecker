@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"even multiple most" AND "even multiple rand"']
 
 def test_real():
 	res = build_default_results()
+	res['blood-transfusion-service-center'] = (['"V3" AND "V2"'], [])
 	real_test(test_id, res)
 
 

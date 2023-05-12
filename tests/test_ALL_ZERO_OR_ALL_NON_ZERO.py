@@ -16,6 +16,8 @@ synth_exceptions_cols = ['"all_zero_or_not rand_a" AND "all_zero_or_not all" AND
 
 def test_real():
 	res = build_default_results()
+	res['bioresponse'] = (15, [])
+	res['jm1'] = ([], ['"n" AND "v" AND "l" AND "d" AND "i" AND "e" AND "t" AND "lOCode" AND "uniq_Op" AND "uniq_Opnd" AND "total_Op" AND "total_Opnd"'])
 	res['nomao'] = ([
 		'"V1" AND "V2"',
 		'"V4" AND "V6"'

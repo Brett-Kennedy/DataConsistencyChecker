@@ -16,6 +16,8 @@ synth_exceptions_cols = ['"all_pos_neg rand_a" AND "all_pos_neg all" AND "all_po
 
 def test_real():
 	res = build_default_results()
+	res['har'] = (14, 10)
+	res['segment'] = (['"exgreen-mean" AND "hue-mean"'], [])
 	res['musk'] = ([], ['"f25" AND "f121"'])
 	real_test(test_id, res)
 
