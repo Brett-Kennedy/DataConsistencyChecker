@@ -63,8 +63,6 @@ TEST_DEFN_FAST = 5          # Element 5 indicates if the test is reasonably fast
 
 class DataConsistencyChecker:
     def __init__(self,
-                 execute_list=None,
-                 exclude_list=None,
                  iqr_limit=3.5,
                  idr_limit=1.0,
                  max_combinations=100_000,
@@ -90,24 +88,28 @@ class DataConsistencyChecker:
                     If 2, progress related to each of the more expensive tests will be displayed as well.
         """
 
-        # execute_list and exclude_list should not both be set.
-        assert execute_list is None or exclude_list is None
-
-        # The set of tests that are to be run / not run may optionally be specified. This may also effect any synthetic
-        # data which is generated.
-        self.execute_list = execute_list
-        self.exclude_list = exclude_list
-        self.execution_test_list = []  # The complete list for one call to check_data_quality()
-
-        self.contamination_level = -1
-        self.max_combinations = max_combinations
-        self.verbose = verbose
-
+        # Set class variables from the parameters
         # iqr_limit indicates how many multiples of the IQR below the 1st quartile or above the 3rd quartile are
         # considered outliers. This is used in numerous tests checking for small or large values. To reduce noise, a
         # stricter limit than the 1.5 or 2.2 normally used should be specified.
         self.iqr_limit = iqr_limit
         self.idr_limit = idr_limit
+        self.max_combinations = max_combinations
+        self.verbose = verbose
+
+        # # execute_list and exclude_list should not both be set.
+        # assert execute_list is None or exclude_list is None
+        #
+        # # The set of tests that are to be run / not run may optionally be specified. This may also effect any synthetic
+        # # data which is generated.
+        # self.execute_list = execute_list
+        # self.exclude_list = exclude_list
+        # self.execution_test_list = []  # The complete list for one call to check_data_quality()
+        self.execute_list = None
+        self.exclude_list = None
+        self.execution_test_list = []
+
+        self.contamination_level = -1
 
         # Synthetic data, if specified to create
         self.synth_df = None
@@ -804,18 +806,24 @@ class DataConsistencyChecker:
                                          False, True, True),
         }
 
-        # Check if the specified tests are valid, now that the set of valid tests are defined.
-        specified_test_list = []
-        if exclude_list:
-            specified_test_list.extend(exclude_list)
-        if execute_list:
-            specified_test_list.extend(execute_list)
-        for t in specified_test_list:
-            if t not in self.test_dict.keys():
-                print(f"Error {t} is not a valid test")
+    def init_data(self, df, known_date_cols=None):
+        """
+        Parameters:
+        known_date_cols: If specified, these, and only these, columns will be treated as date columns.
+        """
 
-    def __prepare_data(self, df, known_date_cols):
         self.orig_df = df
+
+        # Check the dataframe does not contain duplicate column names. If it does, rename all columns with a _idx at
+        # the end of each
+        if len(df.columns) > len(set(df.columns)):
+            df = df.copy()
+            print(("Duplicate column names encountered. A suffix will be added to all column names to ensure they are "
+                   f"unique. Duplicate column names: {set([x for x in df.columns if df.columns.tolist().count(x) > 1])}"))
+            new_col_names = []
+            for col_idx, col_name in enumerate(df.columns):
+                new_col_names.append(f"{col_name}_{col_idx}")
+            df.columns = new_col_names
 
         # Ensure the dataframe has at least a very minimum number of rows.
         if len(df) < 10:
@@ -1019,11 +1027,18 @@ class DataConsistencyChecker:
             print(f"Number binary: {len(self.binary_cols)}")
             print()
 
-    def generate_synth_data(self, all_cols=False, seed=0, add_nones="none"):
+    def generate_synth_data(self, all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none"):
         """
         Generate a random synthetic dataset which may be used to demonstrate each of the tests.
+
+        Parameters
+        all_cols:
         If all_cols is False, this generates columns specifically only for the tests that are specified to run.
         If all_cols is True, this generates columns related to all tests, even where that test is not specified to run.
+
+        execute_list
+
+        exclude_list
 
         If add_nones is set to 'random', then each column will have a set of None values added randomly, covering 50%
         the values.
@@ -1035,9 +1050,9 @@ class DataConsistencyChecker:
         self.synth_df = pd.DataFrame()
         for test_id in self.test_dict.keys():
             if all_cols or \
-                    ((self.execute_list is None and self.exclude_list is None) or
-                     (self.execute_list and test_id in self.execute_list) or
-                     (self.exclude_list and test_id not in self.exclude_list)):
+                    ((execute_list is None and exclude_list is None) or
+                     (execute_list and test_id in execute_list) or
+                     (exclude_list and test_id not in exclude_list)):
                 self.test_dict[test_id][TEST_DEFN_GEN_FUNC]()
 
         if add_nones == 'one-row':
@@ -1068,8 +1083,8 @@ class DataConsistencyChecker:
 
     def check_data_quality(
             self,
-            df,
-            date_cols=None,
+            execute_list=None,
+            exclude_list=None,
             test_start_id=0,
             fast_only=False,
             contamination_level=0.005,
@@ -1081,7 +1096,7 @@ class DataConsistencyChecker:
         Args:
             df: the dataframe containing all data to be assessed
 
-            date_cols: If specified, these, and only these, columns will be treated as date columns.
+            todo: move comments for execute & exclude list here
 
             test_start_id: Each test has a unique number. Specifying a value greater than 0 will skip the initial tests.
                 This may be specified to continue a previous execution that was incomplete.
@@ -1099,30 +1114,39 @@ class DataConsistencyChecker:
             This returns the results_summary dataframe.
         """
 
-        if df is None or len(df) == 0:
+        if self.orig_df is None or len(self.orig_df) == 0:
+            print("Valid dataframe not specified, possibly due to not calling init_data(), or passing a null dataframe")
             return None
 
-        # Check the dataframe does not contain duplicate column names. If it does, rename all columns with a _idx at
-        # the end of each
-        if len(df.columns) > len(set(df.columns)):
-            df = df.copy()
-            print(("Duplicate column names encountered. A suffix will be added to all column names to ensure they are "
-                   f"unique. Duplicate column names: {set([x for x in df.columns if df.columns.tolist().count(x) > 1])}"))
-            new_col_names = []
-            for col_idx, col_name in enumerate(df.columns):
-                new_col_names.append(f"{col_name}_{col_idx}")
-            df.columns = new_col_names
+        # execute_list and exclude_list should not both be set.
+        assert execute_list is None or exclude_list is None
+
+        # The set of tests that are to be run / not run may optionally be specified. This may also effect any synthetic
+        # data which is generated.
+        self.execute_list = execute_list
+        self.exclude_list = exclude_list
+        self.execution_test_list = []  # The complete list for one call to check_data_quality()
+
+        # Check if the specified tests are valid
+        specified_test_list = []
+        if exclude_list:
+            specified_test_list.extend(exclude_list)
+        if execute_list:
+            specified_test_list.extend(execute_list)
+        for t in specified_test_list:
+            if t not in self.test_dict.keys():
+                print(f"Error {t} is not a valid test")
 
         # Store the contamination_level in terms of number of rows. It may have been passed either in this form or as a
         # fraction.
         if contamination_level > 1 and type(contamination_level) == int:
-            if contamination_level > len(df):
+            if contamination_level > len(self.orig_df):
                 print((f"Error. contamination rate set to {contamination_level}, more than the number of rows in the "
                        f"dataframe passed. The contamination_level rate should be substantially smaller."))
                 return None
             self.contamination_level = contamination_level
         elif contamination_level < 1.0:
-            self.contamination_level = contamination_level * len(df)
+            self.contamination_level = contamination_level * len(self.orig_df)
             if self.contamination_level < 1.0:
                 if contamination_level != 0.005:
                     print((f"Error. contamination rate set to {contamination_level}, not allowing even 1 row to be in "
@@ -1131,7 +1155,7 @@ class DataConsistencyChecker:
                     return None
                 self.contamination_level = 1
 
-        self.__prepare_data(df, date_cols)
+        #self.__prepare_data(df, date_cols)
 
         # Adjust the test_start_id to 0 if necessary. 0 is the lowest valid value.
         if test_start_id < 0:
@@ -1302,6 +1326,18 @@ class DataConsistencyChecker:
     # Public methods to output the results of the analysis in various ways
     ##################################################################################################################
 
+    # todo: move this out of this section
+    def _clean_column_names(self, df):
+        clean_df = df.copy()
+        idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all columns'
+        idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
+                                            'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all numeric columns'
+        return clean_df
+
     def get_patterns_summary(self, test_exclude_list=None, column_exclude_list=None, short_list=True):
         """
         This returns a dataframe containing a list of all, or some, of the identified patterns that had no exceptions.
@@ -1331,7 +1367,7 @@ class DataConsistencyChecker:
             return None
 
         if test_exclude_list is None and column_exclude_list is None and not short_list:
-            return self.patterns_df.drop(columns=['Display Information'])
+            return self._clean_column_names(self.patterns_df.drop(columns=['Display Information']))
         df = self.patterns_df.copy()
         if test_exclude_list:
             df = df[~df['Test ID'].isin(test_exclude_list)]
@@ -1339,7 +1375,7 @@ class DataConsistencyChecker:
             df = df[~df['Column(s)'].isin(column_exclude_list)]
         if short_list:
             df = df[df['Test ID'].isin(self.get_patterns_shortlist())]
-        return df.drop(columns=['Display Information'])
+        return self._clean_column_names(df.drop(columns=['Display Information']))
 
     def get_exceptions_summary(self):
         """
@@ -1564,10 +1600,10 @@ class DataConsistencyChecker:
             print()
             print(hyphens)
             if test_id in ['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']:
-                print("Column(s): This test executes on all columns")
+                print("Column(s): This test executes over all columns")
             elif test_id in ['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
                            'LARGE_AVG_RANK_PER_ROW']:
-                print("Column(s): This test executes on all numeric columns")
+                print("Column(s): This test executes over all numeric columns")
             else:
                 print(f"Column(s): {col_name}")
 
@@ -2085,9 +2121,9 @@ class DataConsistencyChecker:
                     for column_name in self.col_to_original_cols_dict[result_col_name]:
                         if self.test_results_df[result_col_name][row_idx]:
                             column_idx = np.where(self.orig_df.columns == column_name)[0][0]
-                            test_row[column_idx+1] = "Flagged"
+                            test_row[column_idx+1] = u'\u2714'
                             colour_cells[column_idx] = True
-                if test_row.count("Flagged"):
+                if test_row.count(u'\u2714'):
                     orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
             orig_row = orig_row.reset_index()
             orig_row = orig_row.drop(columns=['index'])
@@ -2095,7 +2131,7 @@ class DataConsistencyChecker:
             # Display the dataframe representing this row from the original data
             print()
             if is_notebook():
-                display(Markdown(f"**Row: {row_idx}  --  Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
+                display(Markdown(f"**Row: {row_idx} " + u'\u2014' + f" Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
                 display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
             else:
                 print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
@@ -2201,13 +2237,14 @@ class DataConsistencyChecker:
             if test_id in ['RARE_COMBINATION']:
                 for v in display_info['bins_1']:
                     if v not in [-np.inf, np.inf]:
-                        ax.axvline(v, color='green')
+                        ax.axvline(v, color='green', linewidth=1)
                 for v in display_info['bins_2']:
                     if v not in [-np.inf, np.inf]:
-                        ax.axhline(v, color='green')
+                        ax.axhline(v, color='green', linewidth=1)
 
         col_name_1, col_name_2 = cols
-        if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
+        if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols) and \
+                test_id not in ['RARE_COMBINATION']:
             fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8.5, 4))
             plot_one(trim_outliers=False, ax=ax[0])
             plot_one(trim_outliers=True, ax=ax[1])
@@ -4376,6 +4413,10 @@ class DataConsistencyChecker:
                 continue
             if len(common_values) == 0:
                 continue
+            if set(common_values) == set(('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')):
+                continue
+            if set(common_values) == set(('', '1', '2', '3', '4', '5', '6', '7', '8', '9')):
+                continue
             test_series = [True if y else x[1] in common_values
                             for x, y in zip(self.numeric_vals_filled[col_name].apply(np.format_float_positional).astype(str).str.split('.'),
                                             self.orig_df[col_name].isna())]
@@ -4384,7 +4425,7 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 test_series,
-                f"The column consistently contains values with one of {common_values} after the decimal point",
+                f"The column consistently contains values with one of {str(common_values)[1:-1]} after the decimal point",
                 allow_patterns=(len(common_values) > 1) or (common_values[0] != "")
             )
 
@@ -4646,20 +4687,20 @@ class DataConsistencyChecker:
             if abs(self.numeric_vals[col_name]).min() < 1:
                 continue
             vals_arr = self.orig_df[col_name].replace([0, np.inf, -np.inf, np.NaN], self.column_medians[col_name])
-            vals_arr = convert_to_numeric(vals_arr, self.column_medians[col_name])
-            #vals_arr = pd.Series([float(x) if str(x).isdigit() else self.column_medians[col_name] for x in vals_arr])
-            test_series = np.where(vals_arr > 0, np.log10(abs(vals_arr.replace(0, 1))), -np.log10(abs(vals_arr.replace(0, 1)))).astype(int)
+            vals_arr = self.numeric_vals_filled[col_name]
+            test_series = np.where(
+                vals_arr > 0,
+                np.log10(abs(vals_arr.replace(0, 1))),
+                -np.log10(abs(vals_arr.replace(0, 1)))).astype(int)
             test_series = [math.pow(10, x) for x in test_series]
             self.__process_analysis_counts(
                 test_id,
                 col_name,
                 [col_name],
                 test_series,
-                # todo: make this more clear. give min, max, mean values.
-                (f"The column contains values in the range {self.numeric_vals[col_name].min()} to "
+                (f"This test checks for values in the order of 1.0, 10.0, 100.0, etc. "
+                 f"The column contains values in the range {self.numeric_vals[col_name].min()} to "
                  f"{self.numeric_vals[col_name].max()}, consistently in the order of"),
-                 # f"{[math.pow(10, x) for x in sorted(pd.Series(test_series).unique())]}, that is: of 10 to the power "
-                 # f"of"),
                 "")
 
     def __generate_few_neighbors(self):
@@ -5418,7 +5459,7 @@ class DataConsistencyChecker:
 
         min_unique_vals = math.sqrt(self.num_rows)
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
-            if self.verbose and (pair_idx > 0) and (pair_idx % 5000) == 0:
+            if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
                 print(f"  Examining column set {pair_idx:,} of {num_pairs:,} pairs of numeric columns")
 
             # Check there are a sufficient number of unique values in both columns
@@ -5551,7 +5592,7 @@ class DataConsistencyChecker:
 
         min_unique_vals = math.sqrt(self.num_rows)
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
-            if self.verbose and (pair_idx > 0) and (pair_idx % 5000) == 0:
+            if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
                 print(f"  Examining column set {pair_idx:,} of {num_pairs:,} pairs of numeric columns")
 
             # Check there are a sufficient number of unique values in both columns
@@ -10862,7 +10903,7 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 np.array(test_series),
-                f"The column consistently begins with one of {common_values}",
+                f"The column consistently begins with one of {str(common_values)[1:-1]}",
                 display_info={'counts': vc}
             )
 
@@ -10903,7 +10944,7 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 np.array(test_series),
-                f"The column consistently ends with one of {common_values}")
+                f"The column consistently ends with one of {str(common_values)[1:-1]}")
 
     def __generate_num_words(self):
         """
@@ -13606,7 +13647,7 @@ class DataConsistencyChecker:
             self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
-            "The values in the dataset consistently have",
+            "The dataset consistently has",
             " Null values per row"
         )
 
@@ -13642,7 +13683,7 @@ class DataConsistencyChecker:
             self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
-            f"The values in the dataset consistently have {most_common_count} elements with value 0 per row"
+            f"The dataset consistently has {most_common_count} elements with value 0 per row"
         )
 
     def __generate_unique_values_per_row(self):
@@ -13698,7 +13739,7 @@ class DataConsistencyChecker:
             self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
-            f"The values in the dataset consistently have {common_str} unique values per row",
+            f"The dataset consistently has {common_str} unique values per row",
             exceptions_str,
             display_info={'min_common_counts':min_common_counts, 'max_common_counts': max_common_counts}
         )
@@ -13728,7 +13769,7 @@ class DataConsistencyChecker:
             self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
-            "The values in the dataset consistently have",
+            "The dataset consistently has",
             " negative values per row"
         )
 
