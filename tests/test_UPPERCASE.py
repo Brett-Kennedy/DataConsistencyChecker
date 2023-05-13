@@ -16,6 +16,11 @@ synth_exceptions_cols = ['uppercase most']
 
 def test_real():
 	res = build_default_results()
+	res['abalone'] = (['Sex'], [])
+	res['eucalyptus'] = (['Map_Ref'], [])
+	res['splice'] = (60, [])
+	res['profb'] = (['Favorite_Name', 'Underdog_name'], [])
+	res['solar-flare'] = (['class', 'largest_spot_size', 'spot_distribution'], [])
 	real_test(test_id, res)
 
 

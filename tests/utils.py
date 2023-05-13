@@ -38,9 +38,12 @@ def real_test(test_id, expected_results_dict):
 		dc.check_data_quality(data_df, fast_only=fast_only)
 		assert dc.num_exceptions == 0
 
-		patterns_df = dc.get_patterns_summary(short_list=True)
+		patterns_df = dc.get_patterns_summary(short_list=False)
 		if type(expected_patterns_cols) == int:
-			assert len(patterns_df) == expected_patterns_cols
+			if expected_patterns_cols < 0:
+				assert len(patterns_df) >= abs(expected_patterns_cols)
+			else:
+				assert len(patterns_df) == expected_patterns_cols
 		else:
 			assert ((patterns_df is None) and (len(expected_patterns_cols) == 0)) or \
 					(len(patterns_df) == len(expected_patterns_cols))
@@ -49,7 +52,10 @@ def real_test(test_id, expected_results_dict):
 
 		exceptions_df = dc.get_exceptions_summary()
 		if type(expected_exceptions_cols) == int:
-			assert len(exceptions_df) == expected_exceptions_cols
+			if expected_exceptions_cols < 0:
+				assert len(exceptions_df) >= abs(expected_exceptions_cols)
+			else:
+				assert len(exceptions_df) == expected_exceptions_cols
 		else:
 			assert ((exceptions_df is None) and (len(expected_patterns_cols) == 0)) or \
 					(len(exceptions_df) == len(expected_exceptions_cols))

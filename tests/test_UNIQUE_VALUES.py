@@ -16,6 +16,10 @@ synth_exceptions_cols = ['unique_vals most']
 
 def test_real():
 	res = build_default_results()
+	res['har'] = ([], ['V160'])                         # real, but just a case of many rows
+	res['gas-drift'] = (2, 114)                         # real, but just a case of many rows
+	res['climate-model-simulation-crashes'] = (16, 2)   # real, but just a case of many rows
+	res['steel-plates-fault'] = (0, 2)                  # real, but just a case of many rows
 	real_test(test_id, res)
 
 

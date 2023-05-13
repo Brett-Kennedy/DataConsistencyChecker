@@ -16,6 +16,11 @@ synth_exceptions_cols = []  # None
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = (1, [])
+	res['mfeat-karhunen'] = (1, [])
+	res['Amazon_employee_access'] = ([], [])
+	res[''] = ([], [])
+	res[''] = ([], [])
 	real_test(test_id, res)
 
 
