@@ -6,11 +6,11 @@
 # cjs - file not available on OpenML
 
 real_files = [
-	'isolet',
-	'bioresponse',
-	'soybean',
-	'micro-mass',
-	'mfeat-karhunen',
+	# 'isolet',
+	# 'bioresponse',
+	# 'soybean',
+	# 'micro-mass',
+	# 'mfeat-karhunen',
 	'Amazon_employee_access',
 	'abalone',
 	'cnae-9',

@@ -16,6 +16,8 @@ synth_exceptions_cols = ['common_spec_chars most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (55, [])
+	res['eucalyptus'] = (['Locality', 'Map_Ref', 'Latitude'], [])
 	res['musk'] = (['molecule_name'], [])
 	real_test(test_id, res)
 

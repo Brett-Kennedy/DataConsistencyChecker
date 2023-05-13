@@ -16,6 +16,7 @@ synth_exceptions_cols = ['words_used most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (['d_interests_correlate'], [])
 	res['musk'] = (['molecule_name'], [])
 	real_test(test_id, res)
 

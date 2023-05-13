@@ -16,6 +16,9 @@ synth_exceptions_cols = ['col_asc most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (['wave'], [])
+	res['JapaneseVowels'] = ([], ['utterance'])
+	res['profb'] = ([], ['Week'])
 	res['electricity'] = ([], ['date'])
 	res['bank-marketing'] = ([], ['V10'])
 	real_test(test_id, res)

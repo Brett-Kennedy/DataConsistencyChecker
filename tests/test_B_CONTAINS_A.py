@@ -14,6 +14,7 @@ synth_patterns_cols = ['"b_contains_a rand_a" AND "b_contains_a all"']
 synth_exceptions_cols = ['"b_contains_a rand_a" AND "b_contains_a most"']
 
 
+# Currently not flagged in any real files
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

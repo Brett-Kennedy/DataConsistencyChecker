@@ -16,6 +16,7 @@ synth_exceptions_cols = ['tends_asc most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (['wave'], [])
 	real_test(test_id, res)
 
 

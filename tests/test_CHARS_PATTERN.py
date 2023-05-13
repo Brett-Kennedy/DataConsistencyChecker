@@ -16,6 +16,8 @@ synth_exceptions_cols = ['chars_pattern most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (54, [])
+	res['eucalyptus'] = (['Map_Ref', 'Latitude'], [])
 	real_test(test_id, res)
 
 

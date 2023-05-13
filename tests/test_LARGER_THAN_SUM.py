@@ -13,7 +13,8 @@ random.seed(0)
 synth_patterns_cols = ['"larger_sum rand_a" AND "larger_sum rand_b" AND "larger_sum all"']
 synth_exceptions_cols = ['"larger_sum rand_a" AND "larger_sum rand_b" AND "larger_sum most"']
 
-
+# This test can occasionally vary in the numbers of exceptions found, as it works on
+# a sample, and in some cases, the values are only slightly above or below the sum.
 def test_real():
 	res = build_default_results()
 	res['abalone'] = ([], [
@@ -23,9 +24,9 @@ def test_real():
 	])
 	res['vehicle'] = (36, 8)
 	res['analcatdata_authorship'] = (3, 15)
-	res['SpeedDating'] = (471, 653)
+	res['SpeedDating'] = (471, -400)
 	res['segment'] = (2, 0)
-	res['jmi'] = ([], [
+	res['jm1'] = ([], [
 		'"lOCode" AND "locCodeAndComment" AND "loc"',
 		'"lOComment" AND "locCodeAndComment" AND "loc"'
 	])

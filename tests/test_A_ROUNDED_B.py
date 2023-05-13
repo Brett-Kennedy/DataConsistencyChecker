@@ -11,9 +11,10 @@ test_id = 'A_ROUNDED_B'
 random.seed(0)
 
 
-# def test_real():
-# 	res = build_default_results()
-# 	real_test(test_id, res)
+# Currently none pass
+def test_real():
+	res = build_default_results()
+	real_test(test_id, res)
 
 
 synth_patterns_cols = [
@@ -58,6 +59,7 @@ synth_exceptions_cols = [
 	'"a_rounded_b all_d" AND "a_rounded_b most_f"',
 	'"a_rounded_b most_d" AND "a_rounded_b most_f"'
 ]
+
 
 def test_synthetic_no_nulls():
 	synth_test(

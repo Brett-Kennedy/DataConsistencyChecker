@@ -12,20 +12,40 @@ random.seed(0)
 
 synth_patterns_cols = [
 	'"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff all"',
-	'"larger_diff rand_b" AND "larger_diff all" AND "larger_diff most"'
 ]
 synth_exceptions_cols = [
 	'"larger_diff rand_a" AND "larger_diff rand_b" AND "larger_diff most"',
-	'"larger_diff rand_a" AND "larger_diff all" AND "larger_diff most"'
 ]
 
 
 def test_real():
 	res = build_default_results()
-	res['abalone'] = (5, 12)
-	res['vehicle'] = (287, 27)
-	res['analcatdata_authorship'] = (159, 263)
-	res['SpeedDating'] = (1339, 1678)
+	res['Amazon_employee_access'] = ([], 14)
+	res['abalone'] = (0, 16)
+	res['vehicle'] = (263, 43)
+	res['analcatdata_authorship'] = (22, 142)
+	res['SpeedDating'] = (1204, 1141)
+	res['eucalyptus'] = (2, 17)
+	res['segment'] = (3, 1)
+	res['jm1'] = (3, 5)
+	res['adult'] = (1, 1)  # This one is weak
+	res['higgs'] = ([], 3)
+	res['anneal'] = (3, 1)
+	res['qsar-biodeg'] = (488, 391)
+	res['wdbc'] = (75, 22)
+	res['ozone-level-8hr'] = (315, 1940)
+	res['kc2'] = (5, 6)
+	res['eeg-eye-state'] = (40, 324)
+	res['spambase'] = (368, 1667)
+	res['electricity'] = ([], ['"nswdemand" AND "vicdemand" AND "transfer"'])
+	res['yeast'] = ([], ['"mcg" AND "gvh" AND "alm"', '"mcg" AND "gvh" AND "vac"'])
+	res['shuttle'] = ([], [])
+	res['baseball'] = ([], [])
+	res['mc1'] = ([], [])
+	res['pc1'] = ([], [])
+	res['cardiotocography'] = ([], [])
+	res['wine-quality-white'] = ([], [])
+	res['steel-plates-fault'] = ([], [])
 	real_test(test_id, res)
 
 

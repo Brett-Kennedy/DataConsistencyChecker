@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"bin_match_val most" AND "bin_match_val rand_a"']
 
 def test_real():
 	res = build_default_results()
+	res['credit-approval'] = (['"A10" AND "A11"'], [])
 	res['nomao'] = ([
 		'"V7" AND "V1"',
 		'"V8" AND "V2"',

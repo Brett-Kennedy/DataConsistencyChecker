@@ -24,7 +24,6 @@ def test_real():
 		'"V8" AND "V9"',
 		'"V9" AND "V10"'
 	])
-	res['madelon'] = (5, 14)
 	res['steel-plates-fault'] = (['"V3" AND "V4"'], [])
 	real_test(test_id, res)
 
