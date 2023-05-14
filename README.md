@@ -45,13 +45,19 @@ data = datasets.fetch_california_housing()
 df = pd.DataFrame(data.data, columns=data.feature_names)
 
 dc = DataConsistencyChecker()
-dc.check_data_quality(df)
+dc.check_data_quality()
+dc.init_data(df)
 dc.display_detailed_results()
 ```
 
 ## Examples
 
 In this section we provide some examples of patterns identified in datasets available on OpenML. See the example notebooks as well for examples of working with datasets from OpenML and the toy sets provided with sklearn. 
+
+### Housing
+In the sklearn housing dataset, the tool identified that AveRooms and AveOccup are consistently above 1.0, with 2 and 3 exceptions respectively. It also flags population values of 3, 6, and 8, and AveOccup values in the hundreds or thousands.
+
+Note: in most cases, other patterns were also identified, which may or may not be interesting. There may be some step involved with examining the patterns to identify the relevant ones, but this is typically quite quick and worth it to identify the interesting patterns.  
 
 ## Documentation
 
