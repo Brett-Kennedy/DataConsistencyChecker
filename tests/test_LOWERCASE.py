@@ -16,6 +16,19 @@ synth_exceptions_cols = ['lowercase most']
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = (18, 0)
+	res['eucalyptus'] = (1, 0)
+	res['credit-approval'] = (5, 0)
+	res['mushroom'] = (16, 0)
+	res['irish'] = (1, 0)
+	res['profb'] = (1, 0)
+	res['anneal'] = ([], ['bc', 'exptl'])
+	res['credit-g'] = (8, 0)
+	res['tic-tac-toe'] = (9, 0)
+	res['bank-marketing'] = (6, 0)
+	res['nursery'] = (6, 0)
+	res['kropt'] = (3, 0)
+	res['car'] = (4, 0)
 	real_test(test_id, res)
 
 

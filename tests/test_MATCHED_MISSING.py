@@ -10,13 +10,30 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'MATCHED_MISSING'
 random.seed(0)
 
-synth_patterns_cols = ['"matched_missing_vals rand_a" AND "matched_missing_vals all"']
-synth_exceptions_cols = ['"matched_missing_vals rand_a" AND "matched_missing_vals most"',
-                         '"matched_missing_vals all" AND "matched_missing_vals most"']
+synth_patterns_cols = [
+	'"matched_missing_vals rand_a" AND "matched_missing_vals all"'
+]
+synth_exceptions_cols = [
+	'"matched_missing_vals rand_a" AND "matched_missing_vals most"',
+	'"matched_missing_vals all" AND "matched_missing_vals most"'
+]
+
 
 def test_real():
 	res = build_default_results()
-	res['hypothyroid'] = ([],['"T4U" AND "FTI"'])
+	res['soybean'] = ([
+		'"precip" AND "stem-cankers" AND "canker-lesion" AND "external-decay" AND "mycelium" AND "int-discolor" AND "sclerotia"',
+		'"hail" AND "severity" AND "seed-tmt" AND "lodging"',
+		'"crop-hist" AND "plant-growth" AND "stem"',
+		'"leafspots-halo" AND "leafspots-marg" AND "leafspot-size" AND "leaf-malf"',
+		'"fruiting-bodies" AND "fruit-spots" AND "seed-discolor" AND "shriveling"',
+		'"seed" AND "mold-growth" AND "seed-size"'
+	], [])
+	res['SpeedDating'] = (4, 256)
+	res['eucalyptus'] = (['"Vig" AND "Ins_res" AND "Stem_Fm" AND "Crown_Fm" AND "Brnch_Fm"'], [])
+	res['credit-approval'] = (['"A4" AND "A5"', '"A6" AND "A7"'], 4)
+	res['adult'] = (['"workclass" AND "occupation"'], [])
+	res['hypothyroid'] = ([], ['"T4U" AND "FTI"'])
 	real_test(test_id, res)
 
 

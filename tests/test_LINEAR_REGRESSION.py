@@ -16,6 +16,19 @@ synth_exceptions_cols = ['"lin regr 1d" AND "lin regr 1e" AND "lin regr 1f" AND 
 
 def test_real():
 	res = build_default_results()
+	res['vehicle'] = ([
+		'"SCALED_VARIANCE_MINOR" AND "SCATTER_RATIO"',
+		'"SCATTER_RATIO" AND "SCALED_VARIANCE_MINOR"'],
+	[])
+	res['gas-drift'] = (0, 14)  # Generally good, though flags some points quite close to the predictions
+	res['blood-transfusion-service-center'] = (['"V2" AND "V4" AND "V3"'], 0)
+	res['kc2'] = (0, ['"e" AND "t"'])
+	res['madelon'] = (6, 0)
+	res['musk'] = (['"f71" AND "f101" AND "f41"', '"f3" AND "f41" AND "f87" AND "f71"'], 3)
+	res['baseball'] = (['"Games_played" AND "At_bats" AND "Runs" AND "Doubles" AND "Triples" AND "RBIs" AND "Hits"'], 0)
+	res['mc1'] = (0, ['"HALSTEAD_EFFORT" AND "HALSTEAD_PROG_TIME"'])
+	res['pc1'] = (0, ['"loc" AND "N" AND "V" AND "T" AND "E"'])
+	res['steel-plates-fault'] = (['"V4" AND "V14" AND "V3"'], 0)
 	real_test(test_id, res)
 
 

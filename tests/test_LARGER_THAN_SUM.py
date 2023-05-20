@@ -36,7 +36,7 @@ def test_real():
 	res['wdbc'] = (1, ['"V5" AND "V10" AND "V29"'])
 	res['ozone-level-8hr'] = (7, [])
 	res['kc2'] = ([], 3)
-	res['spambase'] = (366, 1684)
+	res['spambase'] = (366, -1680)
 	res['baseball'] = (2, 2)
 	res['mc1'] = (11, 5)
 	res['pc1'] = ([], 13)

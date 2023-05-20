@@ -14,6 +14,7 @@ synth_patterns_cols = ['last_word all']
 synth_exceptions_cols = ['last_word most']
 
 
+# No current test files have this pattern
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)
