@@ -20,7 +20,7 @@ synth_exceptions_cols = [
 def test_real():
 	res = build_default_results()
 	res['vehicle'] = ([
-		'"SCATTER_RATIO" AND "SCALED_VARIANCE_MINOR"'
+		'"SCATTER_RATIO" AND "SCALED_VARIANCE_MINOR"',
 		'"ELONGATEDNESS" AND "SCALED_VARIANCE_MINOR"',
 	], [])
 	res['segment'] = (['"intensity-mean" AND "value-mean"'], [])

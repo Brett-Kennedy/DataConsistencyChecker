@@ -16,6 +16,7 @@ synth_exceptions_cols = ['few_chars most']
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = ([], ['area-damaged'])
 	real_test(test_id, res)
 
 

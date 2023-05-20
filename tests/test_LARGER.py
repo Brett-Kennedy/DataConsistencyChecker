@@ -17,7 +17,7 @@ synth_exceptions_cols = ['"larger most" AND "larger rand"']
 def test_real():
 	res = build_default_results()
 	res['abalone'] = (2, 8)
-	res['cnae-9'] = (5, 75)
+	res['cnae-9'] = (5, -70)
 	res['vehicle'] = (80, 6)
 	res['analcatdata_authorship'] = (48, 152)
 	res['SpeedDating'] = (96, 78)

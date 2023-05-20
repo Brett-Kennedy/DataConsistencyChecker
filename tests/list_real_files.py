@@ -6,8 +6,8 @@
 # cjs - file not available on OpenML
 
 real_files = [
-	'isolet',
-	'bioresponse',
+	# 'isolet',
+	# 'bioresponse',
 	'soybean',
 	'micro-mass',
 	'mfeat-karhunen',

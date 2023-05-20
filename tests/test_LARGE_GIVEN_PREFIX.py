@@ -19,8 +19,6 @@ def test_real():
 	res['musk'] = ([], [
 		'"molecule_name" AND "f36"',
 		'"molecule_name" AND "f47"',
-		'"molecule_name" AND "f141"',
-		'"molecule_name" AND "f144"',
 	])
 	real_test(test_id, res)
 

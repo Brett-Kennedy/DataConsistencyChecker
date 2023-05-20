@@ -16,7 +16,7 @@ synth_exceptions_cols = ['"dt regr. 1c" AND "dt regr. 1d" AND "dt regr. 3"']
 
 def test_real():
 	res = build_default_results()
-	res['bioresponse'] = ([], ['"D19" AND "D49" AND "D183"'])
+	res['bioresponse'] = (0, 1)  # '"D19" AND "D49" AND "D183"'
 	real_test(test_id, res)
 
 

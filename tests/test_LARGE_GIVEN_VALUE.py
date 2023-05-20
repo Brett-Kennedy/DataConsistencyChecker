@@ -16,11 +16,16 @@ synth_exceptions_cols = ['"large_given rand" AND "large_given most"']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = ([], 24)
+	res['abalone'] = ([], ['"Sex" AND "Whole_weight"', '"Sex" AND "Viscera_weight"', '"Sex" AND "Shell_weight"'])
+	res['SpeedDating'] = ([], 26)
+	res['eucalyptus'] = ([], ['"Locality" AND "DBH"', '"Frosts" AND "DBH"'])
+	res['credit-approval'] = ([], 6)
+	res['adult'] = ([], 4)
 	res['credit-g'] = ([], [
 		'"property_magnitude" AND "duration"',
 		'"property_magnitude" AND "credit_amount"',
-		'"job" AND "credit_amount"'
-	])
+		'"job" AND "credit_amount"'])
 	res['qsar-biodeg'] = ([], [
 		'"V25" AND "V9"',
 		'"V25" AND "V14"',

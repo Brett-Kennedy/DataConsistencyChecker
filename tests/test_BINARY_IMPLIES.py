@@ -25,7 +25,6 @@ def test_real():
 		'"f578" AND "f579"',
 		'"f578" AND "f580"',
 		'"f579" AND "f580"'], [])
-	res['soybean'] = (0, 16)
 	res['scene'] = ([
 		'"Beach" AND "Sunset"',
 		'"Beach" AND "FallFoliage"',

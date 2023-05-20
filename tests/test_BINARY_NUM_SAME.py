@@ -11,7 +11,7 @@ test_id = 'BINARY_NUM_SAME'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"bin_num_same rand_a" AND "bin_num_same rand_b" AND "bin_num_same rand_c" AND "bin_num_same rand_d" AND "bin_num_same most" ']
+synth_exceptions_cols = ['"bin_num_same rand_a" AND "bin_num_same rand_b" AND "bin_num_same rand_c" AND "bin_num_same rand_d" AND "bin_num_same most"']
 
 
 def test_real():

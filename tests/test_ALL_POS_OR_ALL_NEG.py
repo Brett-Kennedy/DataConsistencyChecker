@@ -18,7 +18,6 @@ def test_real():
 	res = build_default_results()
 	res['segment'] = ([], ['"exgreen-mean" AND "hue-mean"'])
 	res['har'] = (14, 10)
-	res['segment'] = (['"exgreen-mean" AND "hue-mean"'], [])
 	res['musk'] = ([], ['"f25" AND "f121"'])
 	real_test(test_id, res)
 

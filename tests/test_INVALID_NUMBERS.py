@@ -11,7 +11,7 @@ test_id = 'INVALID_NUMBERS'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['invalid_number most']
+synth_exceptions_cols = ['"invalid_number most"']
 
 
 def test_real():

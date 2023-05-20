@@ -16,6 +16,11 @@ synth_exceptions_cols = ['"large_given_pair rand_a" AND "large_given_pair rand_b
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = ([], 11583)
+	res['eucalyptus'] = (0, ['"Locality" AND "Latitude" AND "DBH"'])
+	res['credit-approval'] = (0, ['"A4" AND "A5" AND "A3"', '"A4" AND "A5" AND "A8"'])
+	res['adult'] = (0, 47)
+	res['anneal'] = (0, 5)
 	res['credit-g'] = ([], 38)
 	res['bank-marketing'] = ([], 25)
 	real_test(test_id, res)
