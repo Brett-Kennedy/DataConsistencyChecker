@@ -97,14 +97,7 @@ class DataConsistencyChecker:
         self.max_combinations = max_combinations
         self.verbose = verbose
 
-        # # execute_list and exclude_list should not both be set.
-        # assert execute_list is None or exclude_list is None
-        #
-        # # The set of tests that are to be run / not run may optionally be specified. This may also effect any synthetic
-        # # data which is generated.
-        # self.execute_list = execute_list
-        # self.exclude_list = exclude_list
-        # self.execution_test_list = []  # The complete list for one call to check_data_quality()
+        # The tests to execute are specified in check_data_quality()
         self.execute_list = None
         self.exclude_list = None
         self.execution_test_list = []
@@ -154,12 +147,7 @@ class DataConsistencyChecker:
         self.col_to_original_cols_dict = {}
 
         # Data that is collected once needed, and then saved for other tests to use.
-        self.lower_limits_dict = None
-        self.upper_limits_dict = None
-        self.larger_pairs_dict = None
-        self.larger_pairs_with_bool_dict = None
-        self.is_missing_dict = None
-        self.percentiles_dict = None
+        self.__init_variables()
 
         # This maps one-to-one with the original data, but in each cell contains a score for the corresponding cell in
         # the original data. It has the same rows and columns as the original data. If a test finds an issue with
@@ -1011,12 +999,8 @@ class DataConsistencyChecker:
         self.results_summary_arr = []
         self.results_summary_df = None
 
-        self.lower_limits_dict = None
-        self.upper_limits_dict = None
-        self.larger_pairs_dict = None
-        self.larger_pairs_with_bool_dict = None
-        self.is_missing_dict = None
-        self.percentiles_dict = None
+        # Variables set as needed.
+        self.__init_variables()
 
         if self.verbose >= 2:
             print()
@@ -1026,6 +1010,17 @@ class DataConsistencyChecker:
             print(f"Number date/time: {len(self.date_cols)}")
             print(f"Number binary: {len(self.binary_cols)}")
             print()
+
+    def __init_variables(self):
+        self.lower_limits_dict = None
+        self.upper_limits_dict = None
+        self.larger_pairs_dict = None
+        self.larger_pairs_with_bool_dict = None
+        self.is_missing_dict = None
+        self.percentiles_dict = None
+        self.nunique_dict = None
+        self.count_most_freq_value_dict = None
+        self.words_list_dict = None
 
     def generate_synth_data(self, all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none"):
         """
@@ -3413,6 +3408,33 @@ class DataConsistencyChecker:
             self.percentiles_dict[col_name] = self.orig_df[col_name].rank(pct=True)
         return self.percentiles_dict
 
+    # todo: call this were we are now calling nunique() on the full columns
+    def get_nunique_dict(self):
+        if self.nunique_dict:
+            return self.nunique_dict
+        self.nunique_dict = {}
+        for col_name in self.orig_df.columns:
+            self.nunique_dict[col_name] = self.orig_df[col_name].nunique()
+        return self.nunique_dict
+
+    # todo: call this were we are now calling value_counts on the full columns
+    def get_count_most_freq_value_dict(self):
+        if self.count_most_freq_value_dict:
+            return self.count_most_freq_value_dict
+        self.count_most_freq_value_dict = {}
+        for col_name in self.orig_df.columns:
+            self.count_most_freq_value_dict[col_name] = self.orig_df[col_name].value_counts().values[0]
+        return self.count_most_freq_value_dict
+
+    # todo: call this were get word lists
+    def get_words_list_dict(self):
+        if self.words_list_dict:
+            return self.words_list_dict
+        self.words_list_dict = {}
+        for col_name in self.string_cols:
+            self.words_list_dict[col_name] = self.orig_df[col_name].astype(str).apply(replace_special_with_space).str.split().values
+        return self.words_list_dict
+
     ##################################################################################################################
     # Internal methods to get columns or sets of columns
     ##################################################################################################################
@@ -3422,17 +3444,27 @@ class DataConsistencyChecker:
         Returns a set of all pairs of columns A & B, other than where A == B. This will return both
         (A,B) and (B,A). This may be used to test, for example, where A >> B and B >> A.
         """
+        # Check if there would be too many pairs.
+        num_pairs = math.comb(len(self.orig_df.columns), 2)
+        if num_pairs > self.max_combinations:
+            return num_pairs, None
+
         pairs_arr = []
         for col_idx_1 in range(len(self.orig_df.columns)-1):
             col_name_1 = self.orig_df.columns[col_idx_1]
             for col_idx_2 in range(col_idx_1+1, len(self.orig_df.columns)):
                 col_name_2 = self.orig_df.columns[col_idx_2]
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return num_pairs, pairs_arr
 
     def __get_binary_column_pairs(self, same_vocabulary=True):
         """
         """
+        # Check if there would be too many pairs.
+        num_pairs = len(self.binary_cols) * (len(self.binary_cols) - 1)
+        if num_pairs > self.max_combinations:
+            return num_pairs, None
+
         pairs_arr = []
         for col_name_1 in self.binary_cols:
             col_1_vals = set(self.orig_df[col_name_1].unique())
@@ -3443,12 +3475,18 @@ class DataConsistencyChecker:
                 if same_vocabulary and len(col_1_vals.intersection(col_2_vals)) != 2:
                     continue
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return num_pairs, airs_arr
 
     def __get_binary_column_pairs_unique(self, same_vocabulary=True):
         """
         if same_vocabulary is True, this returns only pairs of binary columns that contain the same 2 values.
         """
+
+        # Check if there would be too many pairs. We can not say, though, if same_vocabulary is set True
+        num_pairs = math.comb(len(self.binary_cols), 2)
+        if not same_vocabulary and (num_pairs > self.max_combinations):
+            return num_pairs, None
+
         pairs_arr = []
         for col_idx_1 in range(len(self.binary_cols)-1):
             col_name_1 = self.binary_cols[col_idx_1]
@@ -3459,13 +3497,13 @@ class DataConsistencyChecker:
                 if same_vocabulary and len(col_1_vals.intersection(col_2_vals)) != 2:
                     continue
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return len(pairs_arr), pairs_arr
 
     def __get_numeric_column_pairs(self):
         """
         This behaves the same as __get_column_pairs(), but returns only pairs where both columns are numeric.
         """
-        num_pairs = len(self.numeric_cols) * len(self.numeric_cols)
+        num_pairs = len(self.numeric_cols) * (len(self.numeric_cols) - 1)
         if num_pairs > self.max_combinations:
             return num_pairs, None
 
@@ -3496,7 +3534,7 @@ class DataConsistencyChecker:
         return num_pairs, pairs_arr
 
     def __get_numeric_column_triples(self):
-        num_triples = len(self.numeric_cols) * len(self.numeric_cols) * len(self.numeric_cols)
+        num_triples = len(self.numeric_cols) * (len(self.numeric_cols) - 1) * (len(self.numeric_cols) - 2)
         if num_triples > self.max_combinations:
             return num_triples, None
 
@@ -3527,34 +3565,46 @@ class DataConsistencyChecker:
         return num_triples, triples_arr
 
     def __get_string_column_pairs_unique(self):
+        num_pairs = math.comb(len(self.string_cols), 2)
+        if num_pairs > self.max_combinations:
+            return num_pairs, None
+
         pairs_arr = []
         for col_idx_1 in range(len(self.string_cols)-1):
             col_name_1 = self.string_cols[col_idx_1]
             for col_idx_2 in range(col_idx_1+1, len(self.string_cols)):
                 col_name_2 = self.string_cols[col_idx_2]
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return num_pairs, pairs_arr
 
     def __get_string_column_pairs(self):
         """
         This behaves the same as __get_column_pairs(), but returns only pairs where both columns are string.
         """
+        num_pairs = len(self.string_cols) * (len(self.string_cols) - 1)
+        if num_pairs > self.max_combinations:
+            return num_pairs, None
+
         pairs_arr = []
         for col_name_1 in self.string_cols:
             for col_name_2 in self.string_cols:
                 if col_name_1 == col_name_2:
                     continue
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return num_pairs, pairs_arr
 
     def __get_date_column_pairs_unique(self):
+        num_pairs = math.comb(len(self.date_cols), 2)
+        if num_pairs > self.max_combinations:
+            return num_pairs, None
+
         pairs_arr = []
         for col_idx_1 in range(len(self.date_cols)-1):
             col_name_1 = self.date_cols[col_idx_1]
             for col_idx_2 in range(col_idx_1+1, len(self.date_cols)):
                 col_name_2 = self.date_cols[col_idx_2]
                 pairs_arr.append((col_name_1, col_name_2))
-        return pairs_arr
+        return num_pairs, pairs_arr
 
     ##################################################################################################################
     # Clear issues
@@ -4131,9 +4181,13 @@ class DataConsistencyChecker:
 
     def __check_same(self, test_id):
         def test_arrs(arr1, arr2, is_sample):
-            if arr1.isna().sum() > (len(arr1) * 0.75):
+            if is_missing_dict[col_name_1].sum() > missing_limit:
                 return False
-            if arr2.isna().sum() > (len(arr2) * 0.75):
+            if is_missing_dict[col_name_2].sum() > missing_limit:
+                return False
+            if count_most_freq_value_dict[col_name_1] > most_freq_limit:
+                return False
+            if count_most_freq_value_dict[col_name_2] > most_freq_limit:
                 return False
 
             test_series = [x == y or is_missing(x) or is_missing(y) for x, y in zip(arr1, arr2)]
@@ -4151,26 +4205,59 @@ class DataConsistencyChecker:
                 return
             test_arrs(self.orig_df[col_name_1], self.orig_df[col_name_2], is_sample=False)
 
+        count_most_freq_value_dict = self.get_count_most_freq_value_dict()
+        is_missing_dict = self.get_is_missing_dict()
+        missing_limit = self.num_rows * 0.75
+        most_freq_limit = self.num_rows * 0.99
+
+        # Numeric columns
         num_pairs, pairs = self.__get_numeric_column_pairs_unique()
         if num_pairs > self.max_combinations:
             if self.verbose >= 1:
                 print((f"  Skipping testing pairs of numeric columns. There are {num_pairs:,} pairs. "
-                    f"max_combinations is currently set to {self.max_combinations:,}"))
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
         else:
             for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
                 if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                     print(f"  Examining pair number {pair_idx:,} of {len(pairs):,} pairs of numeric columns")
                 test_pair()
 
+        # Binary columns
+        num_pairs, pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of binary columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+        else:
+            for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+                if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
+                    print(f"  Examining pair number {pair_idx:,} of {len(pairs):,} pairs of binary columns")
+                test_pair()
+
         # todo: add checks for size for other column types as did for numeric
-        for col_name_1, col_name_2 in self.__get_binary_column_pairs_unique():
-            test_pair()
+        # String columns
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+        else:
+            for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+                if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
+                    print(f"  Examining pair number {pair_idx:,} of {len(pairs):,} pairs of string columns")
+                test_pair()
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
-            test_pair()
-
-        for col_name_1, col_name_2 in self.__get_date_column_pairs_unique():
-            test_pair()
+        # Date columns
+        num_pairs, pairs = self.__get_date_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of date columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+        else:
+            for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+                if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
+                    print(f"  Examining pair number {pair_idx:,} of {len(pairs):,} pairs of date columns")
+                test_pair()
 
     def __generate_same_or_constant(self):
         """
@@ -4249,10 +4336,10 @@ class DataConsistencyChecker:
             else:
                 return False
 
-        col_pairs = self.__get_column_pairs_unique()
-        if len(col_pairs) > self.max_combinations:
+        num_pairs, col_pairs = self.__get_column_pairs_unique()
+        if num_pairs > self.max_combinations:
             if self.verbose >= 1:
-                print((f"  Skipping testing pairs of numeric columns. There are {len(col_pairs):,} pairs. "
+                print((f"  Skipping testing pairs of numeric columns. There are {num_pairs:,} pairs. "
                        f"max_combinations is currently set to {self.max_combinations:,}"))
             return
 
@@ -5417,7 +5504,7 @@ class DataConsistencyChecker:
 
     def __check_similar_to_negative(self, test_id):
         num_pairs, numeric_pairs_list = self.__get_numeric_column_pairs_unique()
-        if len(numeric_pairs_list) > self.max_combinations:
+        if num_pairs > self.max_combinations:
             if self.verbose >= 1:
                 print((f"  Skipping testing pairs of numeric columns. There are {num_pairs:,} pairs. "
                        f"max_combinations is currently set to {self.max_combinations:,}"))
@@ -8695,10 +8782,10 @@ class DataConsistencyChecker:
         if self.num_rows > 10_000:
             sample_1000_df = self.orig_df[self.binary_cols].sample(n=1000)
 
-        pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
-        if len(pairs) > self.max_combinations:
+        num_pairs, pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
+        if num_pairs > self.max_combinations:
             if self.verbose >= 1:
-                print((f"  Skipping testing pairs of binary columns. There are {len(pairs):,} pairs. "
+                print((f"  Skipping testing pairs of binary columns. There are {num_pairs:,} pairs. "
                        f"max_combinations is currently set to {self.max_combinations:,}"))
             return
 
@@ -8755,7 +8842,13 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('bin opp most',  [0]*(self.num_synth_rows-501) + [1]*501)
 
     def __check_binary_opposite(self, test_id):
-        column_pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
+        num_pairs, column_pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of binary columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(column_pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 100 == 0:
                 print(f"  Examining pair of binary columns: {pair_idx} of {len(column_pairs)}")
@@ -8802,10 +8895,10 @@ class DataConsistencyChecker:
         This essentially checks for rare combinations, and does not work well with columns with many Null values.
         """
 
-        column_pairs = self.__get_binary_column_pairs_unique()
-        if len(column_pairs) > self.max_combinations:
+        num_pairs, column_pairs = self.__get_binary_column_pairs_unique()
+        if num_pairs > self.max_combinations:
             if self.verbose >= 1:
-                print((f"  Skipping testing pairs of binary columns. There are {len(column_pairs):,} pairs. "
+                print((f"  Skipping testing pairs of binary columns. There are {num_pairs:,} pairs. "
                        f"max_combinations is currently set to {self.max_combinations:,}"))
             return
 
@@ -9132,7 +9225,7 @@ class DataConsistencyChecker:
                     self.orig_df[col_name_1].tolist().count(col_vals_1[1]) < min_rows_per_value:
                 continue
 
-            for col_name_2, col_name_3 in self.__get_binary_column_pairs_unique():
+            for num_pairs, (col_name_2, col_name_3) in self.__get_binary_column_pairs_unique():
                 columns_tuple = tuple(sorted([col_name_1, col_name_2, col_name_3]))
                 if columns_tuple in reported_dict:  # todo: maybe faster to remove
                     continue
@@ -9638,13 +9731,16 @@ class DataConsistencyChecker:
             for col_name_2, col_name_3 in pairs:
                 test_set(bin_col, col_name_2, col_name_3)
 
-            for col_name_2, col_name_3 in self.__get_string_column_pairs_unique():
+            _, pairs = self.__get_string_column_pairs_unique()
+            for col_name_2, col_name_3 in pairs:
                 test_set(bin_col, col_name_2, col_name_3)
 
-            for col_name_2, col_name_3 in self.__get_date_column_pairs_unique():
+            _, pairs = self.__get_date_column_pairs_unique()
+            for col_name_2, col_name_3 in pairs:
                 test_set(bin_col, col_name_2, col_name_3)
 
-            for col_name_2, col_name_3 in self.__get_binary_column_pairs_unique():
+            _, pairs = self.__get_binary_column_pairs_unique()
+            for col_name_2, col_name_3 in pairs:
                 test_set(bin_col, col_name_2, col_name_3)
 
     ##################################################################################################################
@@ -11252,7 +11348,13 @@ class DataConsistencyChecker:
         on each pair of string columns. The test RARE_COMBINATION covers pairs of numeric columns. For pairs of
         columns with one string and one numeric, there are the VERY_LARGE_GIVEN_VALUE and VERY_SMALL_GIVEN_VALUE tests.
         """
-        for col_name_1, col_name_2 in self.__get_binary_column_pairs_unique():
+        num_pairs, pairs = self.__get_binary_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of binary columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+
+        for col_name_1, col_name_2 in pairs:
             # Skip columns that have many unique values, as all combinations will be somewhat rare.
             if self.orig_df[col_name_1].nunique() > math.sqrt(self.num_rows) or \
                self.orig_df[col_name_2].nunique() > math.sqrt(self.num_rows):
@@ -11336,7 +11438,13 @@ class DataConsistencyChecker:
             median_len = val_lens.quantile(0.5)
             char_count_dict[col_name] = median_len
 
-        pairs = self.__get_string_column_pairs_unique()
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
                 print(f"  Examining pair: {pair_idx:,} of {len(pairs):,} pairs of binary columns)")
@@ -11418,7 +11526,14 @@ class DataConsistencyChecker:
             col_vals = self.orig_df[col_name].astype(str).apply(replace_special_with_space)
             first_words_dict[col_name] = pd.Series([x[0] if len(x) >0 else "" for x in col_vals.str.split()])
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             # Skip columns if the first words are as unique as teh values in the column. In this case, the first words
             # have no real meaning on their own.
             if first_words_dict[col_name_1].nunique() >= (self.orig_df[col_name_1].nunique() / 2):
@@ -11501,7 +11616,13 @@ class DataConsistencyChecker:
             first_words_dict[col_name] = pd.Series([x[0] if len(x) > 0 else "" for x in col_vals.str.split()])
             word_count_dict[col_name] = pd.Series([len(x) for x in col_vals.str.split()])
 
-        pairs = self.__get_string_column_pairs()
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
                 print(f"  Examining pair number {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -11628,7 +11749,14 @@ class DataConsistencyChecker:
             char_len_dict[col_name] = self.orig_df[col_name].astype(str).str.len().replace(0, 1)
             col_std_dev_len_dict[col_name] = char_len_dict[col_name].std()
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if (col_std_dev_len_dict[col_name_1] < 2.0) or (col_std_dev_len_dict[col_name_2] < 2.0):
                 continue
 
@@ -11664,7 +11792,14 @@ class DataConsistencyChecker:
             word_counts_not_null = pd.Series([len(x.split()) for x in self.orig_df[col_name] if (not is_missing(x))])
             word_counts_medians[col_name] = word_counts_not_null.median()
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             word_counts_medians_1 = word_counts_medians[col_name_1]
             word_counts_medians_2 = word_counts_medians[col_name_2]
             if word_counts_medians_1 < 3 or word_counts_medians_2 < 3:
@@ -11714,7 +11849,14 @@ class DataConsistencyChecker:
             word_counts_not_null = pd.Series([len(x.split()) for x in self.orig_df[col_name] if (not is_missing(x))])
             word_counts_medians[col_name] = word_counts_not_null.median()
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             word_counts_medians_1 = word_counts_medians[col_name_1]
             word_counts_medians_2 = word_counts_medians[col_name_2]
             if word_counts_medians_1 < 3 or word_counts_medians_2 < 3:
@@ -11765,7 +11907,14 @@ class DataConsistencyChecker:
                 return False
             return True
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             # Check if either column always starts with the same characters anyway.
             if not check_column(col_name_1) or not check_column(col_name_2):
                 continue
@@ -11824,15 +11973,40 @@ class DataConsistencyChecker:
 
     def __check_same_first_word(self, test_id):
 
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         # todo: probably need to call replace_special_with_space() as in __check_first_word()
         # Get the first word in each string
-        sample_first_words_dict = {}
+        nunique_dict = self.get_nunique_dict()
+        words_list_dict = self.get_words_list_dict()
         first_words_dict = {}
+        sample_first_words_dict = {}
         for col_name in self.string_cols:
-            sample_first_words_dict[col_name] = [x[0] if (x and (len(x) > 0)) else "" for x in self.sample_df[col_name].astype(str).str.split()]
-            first_words_dict[col_name] = [x[0] if (x and (len(x) > 0)) else "" for x in self.orig_df[col_name].astype(str).str.split()]
+            first_words_dict[col_name] = [x[0] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]
+            sample_first_words_dict[col_name] = pd.Series([x[0] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]).loc[self.sample_df.index]
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs():
+        for col_name_1, col_name_2 in pairs:
+            # Skip columns that are primarily 1 word
+            word_arr = words_list_dict[col_name_1]
+            num_words_arr = [len(x) for x in word_arr]
+            if pd.Series(num_words_arr).quantile(0.5) <= 1:
+                continue
+            word_arr = words_list_dict[col_name_2]
+            num_words_arr = [len(x) for x in word_arr]
+            if pd.Series(num_words_arr).quantile(0.5) <= 1:
+                continue
+
+            # Skip columns that have few unique values
+            if nunique_dict[col_name_1] < 10:
+                continue
+            if nunique_dict[col_name_2] < 10:
+                continue
+
             test_series = [x == y for x, y in zip(sample_first_words_dict[col_name_1], sample_first_words_dict[col_name_2])]
             if test_series.count(False) > 1:
                 continue
@@ -11868,14 +12042,45 @@ class DataConsistencyChecker:
 
     def __check_same_last_word(self, test_id):
 
-        # Get the last word in each string
-        sample_last_words_dict = {}
-        last_words_dict = {}
-        for col_name in self.string_cols:
-            sample_last_words_dict[col_name] = [None if is_missing(x) else x[0] for x in self.sample_df[col_name].astype(str).str.split()]
-            last_words_dict[col_name] = [None if is_missing(x) else x[0] for x in self.orig_df[col_name].astype(str).str.split()]
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
 
-        for col_name_1, col_name_2 in self.__get_string_column_pairs():
+        # Get the last word in each string
+        # sample_last_words_dict = {}
+        # last_words_dict = {}
+        # for col_name in self.string_cols:
+        #     sample_last_words_dict[col_name] = [None if is_missing(x) else x[0] for x in self.sample_df[col_name].astype(str).str.split()]
+        #     last_words_dict[col_name] = [None if is_missing(x) else x[0] for x in self.orig_df[col_name].astype(str).str.split()]
+
+        nunique_dict = self.get_nunique_dict()
+        words_list_dict = self.get_words_list_dict()
+        last_words_dict = {}
+        sample_last_words_dict = {}
+        for col_name in self.string_cols:
+            last_words_dict[col_name] = [x[-1] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]
+            sample_last_words_dict[col_name] = pd.Series([x[-1] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]).loc[self.sample_df.index]
+
+        for col_name_1, col_name_2 in pairs:
+            # Skip columns that are primarily 1 word
+            word_arr = words_list_dict[col_name_1]
+            num_words_arr = [len(x) for x in word_arr]
+            if pd.Series(num_words_arr).quantile(0.5) <= 1:
+                continue
+            word_arr = words_list_dict[col_name_2]
+            num_words_arr = [len(x) for x in word_arr]
+            if pd.Series(num_words_arr).quantile(0.5) <= 1:
+                continue
+
+            # Skip columns that have few unique values
+            if nunique_dict[col_name_1] < 10:
+                continue
+            if nunique_dict[col_name_2] < 10:
+                continue
+
             test_series = [x == y for x, y in zip(sample_last_words_dict[col_name_1], sample_last_words_dict[col_name_2])]
             if test_series.count(False) > 1:
                 continue
@@ -11903,7 +12108,14 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'same_alpha most'] = 'ABCDE'
 
     def __check_same_alpha_chars(self, test_id):
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             # Test on a sample.
             alpha_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             alpha_col_1 = [[c for c in x if c and c.isalpha()] for x in alpha_col_1]
@@ -11945,7 +12157,14 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'same_num most'] = '1234'
 
     def __check_same_numeric_chars(self, test_id):
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             # Test on a sample
             digits_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             digits_col_1 = [[c for c in x if c and c.isdigit()] for x in digits_col_1]
@@ -11988,7 +12207,14 @@ class DataConsistencyChecker:
 
     def __check_same_special_chars(self, test_id):
         # todo: in display, add a column listing the special chars
-        for col_name_1, col_name_2 in self.__get_string_column_pairs_unique():
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
+        for col_name_1, col_name_2 in pairs:
             # Test on a sample.
             special_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_1]
@@ -12038,7 +12264,13 @@ class DataConsistencyChecker:
     def __check_a_prefix_of_b(self, test_id):
         is_missing_dict = self.get_is_missing_dict()
 
-        pairs = self.__get_string_column_pairs()
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 500 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -12079,7 +12311,13 @@ class DataConsistencyChecker:
     def __check_a_suffix_of_b(self, test_id):
         is_missing_dict = self.get_is_missing_dict()
 
-        pairs = self.__get_string_column_pairs()
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 500 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -12118,7 +12356,13 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'b_contains_a most'] = 'abcdef'
 
     def __check_b_contains_a(self, test_id):
-        pairs = self.__get_string_column_pairs()
+        num_pairs, pairs = self.__get_string_column_pairs()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 500 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -12165,7 +12409,13 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('correlated_alpha most', list_b)
 
     def __check_correlated_alpha(self, test_id):
-        pairs = self.__get_string_column_pairs_unique()
+        num_pairs, pairs = self.__get_string_column_pairs_unique()
+        if num_pairs > self.max_combinations:
+            if self.verbose >= 1:
+                print((f"  Skipping testing pairs of string columns. There are {num_pairs:,} pairs. "
+                       f"max_combinations is currently set to {self.max_combinations:,}"))
+            return
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -12792,12 +13042,12 @@ class DataConsistencyChecker:
         upper_limits_dict = self.get_columns_iqr_upper_limit()
 
         # Determine if there are too many combinations to execute
-        pairs = self.__get_string_column_pairs_unique()  # todo: we should check the binary columns as well
-        total_combinations = len(pairs) * (len(self.numeric_cols) + len(self.date_cols))
+        num_pairs, pairs = self.__get_string_column_pairs_unique()  # todo: we should check the binary columns as well
+        total_combinations = num_pairs * (len(self.numeric_cols) + len(self.date_cols))
         if total_combinations > self.max_combinations:
             if self.verbose >= 1:
                 print((f"  Skipping test {test_id}. There are {(len(self.numeric_cols) + len(self.date_cols)):,} "
-                       f"numeric and string columns, multiplied by {len(pairs):,} pairs of string columns, results in "
+                       f"numeric and date columns, multiplied by {num_pairs:,} pairs of string columns, results in "
                        f"{total_combinations:,} combinations. max_combinations is currently set to "
                        f"{self.max_combinations:,}"))
             return
@@ -12928,12 +13178,12 @@ class DataConsistencyChecker:
         """
 
         # Determine if there are too many combinations to execute
-        pairs = self.__get_string_column_pairs_unique()  # todo: we should check the binary columns as well
-        total_combinations = len(pairs) * (len(self.numeric_cols) + len(self.date_cols))
+        num_pairs, pairs = self.__get_string_column_pairs_unique()  # todo: we should check the binary columns as well
+        total_combinations = num_pairs * (len(self.numeric_cols) + len(self.date_cols))
         if total_combinations > self.max_combinations:
             if self.verbose >= 1:
                 print((f"  Skipping test {test_id}. There are {(len(self.numeric_cols) + len(self.date_cols)):,} "
-                       f"numeric and string columns, multiplied by {len(pairs):,} pairs of string columns, results in "
+                       f"numeric and string columns, multiplied by {num_pairs:,} pairs of string columns, results in "
                        f"{total_combinations:,} combinations. max_combinations is currently set to "
                        f"{self.max_combinations:,}"))
             return
@@ -13466,7 +13716,7 @@ class DataConsistencyChecker:
             for col_idx, col_name_c in enumerate(self.string_cols):
                 if self.verbose >= 2 and col_idx > -1 and col_idx % 1 == 0:
                     print(f"  Examining column {col_idx} of {len(self.string_cols)} string columns")
-                pairs_arr = self.__get_string_column_pairs_unique()
+                num_pairs, pairs_arr = self.__get_string_column_pairs_unique()
                 for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                     check_triple()
 
@@ -13480,7 +13730,7 @@ class DataConsistencyChecker:
             for col_idx, col_name_c in enumerate(self.date_cols):
                 if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
                     print(f"  Examining column {col_idx} of {len(self.date_cols)} date columns")
-                pairs_arr = self.__get_date_column_pairs_unique()
+                num_pairs, pairs_arr = self.__get_date_column_pairs_unique()
                 for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                     check_triple()
 
