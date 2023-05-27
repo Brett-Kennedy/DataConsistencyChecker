@@ -16,6 +16,8 @@ synth_exceptions_cols = ['rare_words most']
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = (0, ['area-damaged'])  # flags 'nan'
+	res['adult'] = (0, ['education', 'marital-status'])
 	real_test(test_id, res)
 
 

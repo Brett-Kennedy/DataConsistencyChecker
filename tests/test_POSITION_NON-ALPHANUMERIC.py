@@ -16,6 +16,8 @@ synth_exceptions_cols = ['posn-special most']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (55, 0)
+	res['eucalyptus'] = (['Map_Ref', 'Latitude'], 0)
 	real_test(test_id, res)
 
 

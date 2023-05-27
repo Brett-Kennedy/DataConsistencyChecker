@@ -10,14 +10,18 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SAME_VALUES'
 random.seed(0)
 
-synth_patterns_cols = ['same rand AND same all']
-synth_exceptions_cols = ['same rand AND same most']
+synth_patterns_cols = ['"same rand" AND "same all"']
+synth_exceptions_cols = [
+	'"same rand" AND "same most"',
+	'"same all" AND "same most"'
+]
 
 
 def test_real():
 	res = build_default_results()
+	res['cnae-9'] = ([], ['"V383" AND "V602"'])
 	res['spambase'] = ([], ['"word_freq_857" AND "word_freq_415"'])
-	res['nomao'] = (18, [])
+	res['nomao'] = (18, 4)
 	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
 	res['cardiotocography'] = (['"V4" AND "V5"'], [])
 	res['allbp'] = ([], ['"T4U_measured" AND "FTI_measured"'])

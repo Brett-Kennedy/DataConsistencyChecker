@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"rare_pair_first_char all_a" AND "rare_pair_first_char
 
 def test_real():
 	res = build_default_results()
+	res['eucalyptus'] = (0, ['"Abbrev" AND "Sp"'])
 	real_test(test_id, res)
 
 

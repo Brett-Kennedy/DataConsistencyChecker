@@ -16,6 +16,15 @@ synth_exceptions_cols = ['rounding 3']
 
 def test_real():
 	res = build_default_results()
+	res['eucalyptus'] = (['Altitude', 'Rainfall'], 0)
+	res['blood-transfusion-service-center'] = (['V3'], 0)
+	res['Click_prediction_small'] = (0, [
+		'ad_id',
+		'keyword_id',
+		'title_id',
+		'description_id',
+		'user_id'
+	])
 	real_test(test_id, res)
 
 

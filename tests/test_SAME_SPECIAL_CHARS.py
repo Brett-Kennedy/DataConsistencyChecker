@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"same_special all" AND "same_special most"']
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (1431, 0)
 	real_test(test_id, res)
 
 

@@ -12,9 +12,7 @@ random.seed(0)
 
 synth_patterns_cols = [
 	'"same_start_word rand_a" AND "same_start_word all_a"',
-	'"same_start_word all_a" AND "same_start_word rand_a"',
 	'"same_start_word rand_b" AND "same_start_word all_b"',
-	'"same_start_word all_b" AND "same_start_word rand_b"',
 	]
 synth_exceptions_cols = [
 	'"same_start_word rand_a" AND "same_start_word most_a"',
@@ -28,6 +26,7 @@ synth_exceptions_cols = [
 	]
 
 
+# No datasets currently contain this pattern
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

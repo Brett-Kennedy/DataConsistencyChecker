@@ -13,7 +13,7 @@ random.seed(0)
 synth_patterns_cols = []
 synth_exceptions_cols = ['"rare_pair_first_word all_a" AND "rare_pair_first_word all_b"']
 
-
+# This pattern is not found in the current test datasets
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

@@ -11,7 +11,7 @@ test_id = 'OPPOSITE_ZERO'
 random.seed(0)
 
 synth_patterns_cols = ['"opp_zero all_a" AND "opp_zero all_b"']
-synth_exceptions_cols = [' "opp_zero all_a" AND "opp_zero most"']
+synth_exceptions_cols = ['"opp_zero all_a" AND "opp_zero most"']
 
 
 def test_real():

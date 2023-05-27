@@ -16,7 +16,21 @@ synth_exceptions_cols = ['"rare_pair rand_a" AND "rare_pair rand_b"']
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = (0, ['"leaf-malf" AND "seed-discolor"'])
+	res['semeion'] = (0, 39)
+	res['qsar-biodeg'] = (0, ['"V24" AND "V25"', '"V25" AND "V29'])
+	res['scene'] = (0, ['"Beach" AND "Field"'])
 	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['solar-flare'] = (0, [
+		'"Historically-complex" AND "Area"',
+		'"Did_region_become_historically_complex" AND "Area_of_the_largest_spot"'])
+	res['allbp'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['allrep'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['dis'] = ([], ['"T4U_measured" AND "FTI_measured"'])
+	res['steel-plates-fault'] = (0, [
+		'"V12" AND "V30"',
+		'"V13" AND "V30"'
+	])
 	real_test(test_id, res)
 
 

@@ -10,13 +10,19 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'RARE_VALUES'
 random.seed(0)
 
-synth_patterns_cols = ['rare_vals all']
+synth_patterns_cols = []
 synth_exceptions_cols = ['rare_vals most']
 
 
 def test_real():
 	res = build_default_results()
-	res['isolet'] = (['f581', 'f582', 'f583'], [])
+	res['soybean'] = (0, ['data', 'area-damaged'])
+	res['credit-approval'] = (0, ['A4', 'A5'])
+	res['splice'] = (0 , 45)
+	res['mushroom'] = (0, 9)
+	res['adult'] = (0, ['workclass', 'marital-status'])
+	res['anneal'] = (0, ['bc', 'exptl'])
+	res['bank-marketing'] = (0, ['V11'])
 	real_test(test_id, res)
 
 

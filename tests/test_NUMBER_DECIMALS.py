@@ -17,6 +17,59 @@ synth_exceptions_cols = ['num decimals rand', 'num decimals most']
 def test_real():
 	res = build_default_results()
 	res['isolet'] = (551, [])
+	res['mfeat-karhunen'] = (64, 0)
+	res['abalone'] = (7, 0)
+	res['satimage'] = (36, 0)
+	res['SpeedDating'] = (1, 0)
+	res['eucalyptus'] = (2, 0)
+	res['vowel'] = (10, 0)
+	res['wall-robot-navigation'] = (24, 0)
+	res['credit-approval'] = (3, 0)
+	res['artificial-characters'] = (2, 0)
+	res['har'] = (560, 0)
+	res['segment'] = (2, [
+		'hue-mean'
+	])
+	res['JapaneseVowels'] = (12, 0)
+	res['jm1'] = (7, 0)
+	res['gas-drift'] = (128, 0)
+	res['higgs'] = (19, [
+		'lepton_eta',
+		'missing_energy_phi',
+		'jet1eta',
+		'jet1phi',
+		'jet2eta'
+	])
+	res['qsar-biodeg'] = (15, 0)
+	res['wdbc'] = (0, [
+		'V28'
+	])
+	res['phoneme'] = (5, 0)
+	res['diabetes'] = (2, 0)
+	res['hill-valley'] = (100, 0)
+	res['kc2'] = (7, 0)
+	res['eeg-eye-state'] = (13, [
+		'V13'
+	])
+	res['climate-model-simulation-crashes'] = (17, 0)
+	res['spambase'] = (2, 0)
+	res['ilpd'] = (4, 0)
+	res['one-hundred-plants-margin'] = (55, 0)
+	res['electricity'] = (7, 0)
+	res['scene'] = (294, 0)
+	res['nomao'] = (55, 0)
+	res['MagicTelescope'] = (10, 0)
+	res['page-blocks'] = (4, 0)
+	res['hypothyroid'] = (2, 0)
+	res['yeast'] = (6, 0)
+	res['CreditCardSubset'] = (29, 0)
+	res['baseball'] = (4, 0)
+	res['mc1'] = (8, 0)
+	res['pc1'] = (7, 0)
+	res['cardiotocography'] = (2, 0)
+	res['volcanoes-a1'] = (1, 0)
+	res['wine-quality-white'] = (8, 0)
+	res['steel-plates-fault'] = (12, 0)
 	real_test(test_id, res)
 
 

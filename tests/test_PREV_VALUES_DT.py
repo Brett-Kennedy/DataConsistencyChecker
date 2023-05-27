@@ -10,16 +10,35 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'PREV_VALUES_DT'
 random.seed(0)
 
-synth_patterns_cols = ['pattern_history_df_str all_a', 'pattern_history_df_num all_a']
-synth_exceptions_cols = ['pattern_history_df_str most_a', 'pattern_history_df_str most_b',
-                         'pattern_history_df_num most_a']
+synth_patterns_cols = [
+	'pattern_history_df_str all_a',
+	'pattern_history_df_num all_a'
+]
+synth_exceptions_cols = [
+	'pattern_history_df_str most_a',
+	'pattern_history_df_str most_b',
+    'pattern_history_df_num most_a'
+]
 
 
 def test_real():
 	res = build_default_results()
 	res['nursery'] = (
 		['finance', 'social', 'health'],  # the values cycle in this column
-	    [])
+		[])
+	res['car-evaluation'] = ([
+		'luggage_boot_size_small',
+		'luggage_boot_size_med',
+		'luggage_boot_size_big',
+		'safety_low',
+		'safety_med',
+		'safety_high'
+	], [])
+	res['car'] = ([
+		'persons',
+		'lug_boot',
+		'safety'
+	], [])
 	real_test(test_id, res)
 
 

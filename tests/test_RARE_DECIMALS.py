@@ -17,7 +17,19 @@ synth_exceptions_cols = ['rare_decimals_most']
 def test_real():
 	res = build_default_results()
 	res['isolet'] = (['f581', 'f582', 'f583'], [])
-	res['hypothyroid'] = ([], ['T3', 'TT4', 'FTI'])
+	res['SpeedDating'] = ([], 14)
+	res['segment'] = ([], ['short-line-density-2'])
+	res['jm1'] = ([], 10)
+	res['profb'] = (['Pointspread'], [])
+	res['higgs'] = (4, [])
+	res['anneal'] = (['width'], [])
+	res['ozone-level-8hr'] = (5, [])
+	res['kc2'] = ([], 10)
+	res['nomao'] = (8, 5)
+	res['hypothyroid'] = ([], ['TT4', 'FTI'])
+	res['pc1'] = ([], 10)
+	res['wine-quality-white'] = (['V6'], [])
+	res['steel-plates-fault'] = (['V21'], [])
 	real_test(test_id, res)
 
 

@@ -10,7 +10,7 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SAME_OR_CONSTANT'
 random.seed(0)
 
-synth_patterns_cols = ['"same_or_const rand" AND "same_or_const all "']
+synth_patterns_cols = ['"same_or_const rand" AND "same_or_const all"']
 synth_exceptions_cols = ['same_or_const rand" AND "same_or_const most']
 
 
