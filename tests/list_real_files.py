@@ -8,7 +8,7 @@
 real_files = [
 	# 'isolet',
 	# 'bioresponse',
-	'soybean',
+	# 'soybean',
 	'micro-mass',
 	'mfeat-karhunen',
 	'Amazon_employee_access',
