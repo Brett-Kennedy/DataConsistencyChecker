@@ -10,13 +10,27 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'MATCHED_ZERO'
 random.seed(0)
 
-synth_patterns_cols = ['"matched zero rand_a" AND "matched zero all"']
-synth_exceptions_cols = ['"matched zero rand_a" AND "matched zero most"',
-                         '"matched zero all" AND "matched zero most"']
+synth_patterns_cols = [
+	'"matched zero rand_a" AND "matched zero all"'
+]
+synth_exceptions_cols = [
+	'"matched zero rand_a" AND "matched zero most"',
+	'"matched zero all" AND "matched zero most"'
+]
 
 
 def test_real():
 	res = build_default_results()
+	res['cnae-9'] = (['"V383" AND "V602"'], 47)
+	res['segment'] = (16, 50)
+	res['jm1'] = (18, 48)
+	res['wdbc'] = (15, 0)
+	res['kc2'] = (11, 0)
+	res['spambase'] = (0, ['"word_freq_857" AND "word_freq_415"'])
+	res['nomao'] = (14, 3)
+	res['mc1'] = (15, 16)
+	res['pc1'] = (16, 6)
+	res['steel-plates-fault'] = (['"V1" AND "V15"'], 0)
 	real_test(test_id, res)
 
 

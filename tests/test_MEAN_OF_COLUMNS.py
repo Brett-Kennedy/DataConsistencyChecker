@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"mean_of_cols rand_b" AND "mean_of_cols rand_a" AND "m
 
 def test_real():
 	res = build_default_results()
+	res['namao'] =(1, 0)
 	real_test(test_id, res)
 
 

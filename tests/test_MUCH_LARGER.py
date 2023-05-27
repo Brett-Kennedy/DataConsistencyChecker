@@ -15,10 +15,33 @@ synth_exceptions_cols = ['"much larger most" AND "much larger rand"']
 
 def test_real():
 	res = build_default_results()
+	res['vehicle'] = (1, 0)
+	res['eucalyptus'] = (8, 16)
+	res['gas-drift'] = (0, 588)
+	res['adult'] = (1, 0)
+	res['anneal'] = (0, ['"width" AND "thick"'])
+	res['credit-g'] = (4, 0)
+	res['blood-transfusion-service-center'] = (1, 0)
+	res['qsar-biodeg'] = (0, 2)
+	res['wdbc'] = (132, 11)
+	res['diabetes'] = (1, 0)
+	res['ozone-level-8hr'] = (80, 80)
+	res['climate-model-simulation-crashes'] = (1, 0)
+	res['ilpd'] = (3, 1)
+	res['electricity'] = (0, 5)
+	res['MagicTelescope'] = (0, 5)
+	res['Click_prediction_small'] = (6, ['"impression" AND "advertiser_id"'])
 	res['hypothyroid'] = ([], [
-		'"TT4" AND "T3"',
-		'"TT4" AND "T4U"',
-		'"FTI" AND "T3"'])
+		'"T3" AND "TT4"',
+		'"T4U" AND "TT4"',
+		'"T3" AND "FTI"'])
+	res['baseball'] = (34, 8)
+	res['cardiotocography'] = (7, ['"V10" AND "V16"'])
+	res['volcanoes-a1'] = (2, 0)
+	res[''] = (0, 0)
+	res[''] = (0, 0)
+	res['wine-quality-white'] = (7, 7)
+	res['steel-plates-fault'] = (56, 44)
 	real_test(test_id, res)
 
 

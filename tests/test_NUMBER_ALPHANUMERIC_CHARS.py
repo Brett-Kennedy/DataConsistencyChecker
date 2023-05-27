@@ -16,6 +16,13 @@ synth_exceptions_cols = ['number_alphanumeric_3']
 
 def test_real():
 	res = build_default_results()
+	res['soybean'] = (0, ['area-damaged'])
+	res['eucalyptus'] = (['Latitude'], 0)
+	res['splice'] = (45, 0)
+	res['mushroom'] = (10, 0)
+	res['bank-marketing'] = (['V11'], 0)
+	res['kropt'] = (['white_rook_col', 'black_king_col'])
+	res['solar-flare'] = ['class','largest_spot_size'], 0)
 	real_test(test_id, res)
 
 
