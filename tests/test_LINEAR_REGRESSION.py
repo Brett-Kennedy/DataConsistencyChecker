@@ -10,17 +10,21 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'LINEAR_REGRESSION'
 random.seed(0)
 
-synth_patterns_cols = ['"lin regr 1a" AND "lin regr 1b" AND "lin regr 1c" AND "lin regr 2" AND "lin regr 2"']
-synth_exceptions_cols = ['"lin regr 1d" AND "lin regr 1e" AND "lin regr 1f" AND "lin regr 3" AND "lin regr 3"']
+synth_patterns_cols = [
+	'"lin regr 1a" AND "lin regr 1b" AND "lin regr 1c" AND "lin regr 2"'
+]
+synth_exceptions_cols = [
+	'"lin regr 1d" AND "lin regr 1e" AND "lin regr 1f" AND "lin regr 3"'
+]
 
-
+# todo: need to check features on somehow that all features are relevant.
 def test_real():
 	res = build_default_results()
 	res['vehicle'] = ([
 		'"SCALED_VARIANCE_MINOR" AND "SCATTER_RATIO"',
 		'"SCATTER_RATIO" AND "SCALED_VARIANCE_MINOR"'],
 	[])
-	res['gas-drift'] = (0, 14)  # Generally good, though flags some points quite close to the predictions
+	res['gas-drift'] = (0, -12)  # Generally good, though flags some points quite close to the predictions
 	res['blood-transfusion-service-center'] = (['"V2" AND "V4" AND "V3"'], 0)
 	res['kc2'] = (0, ['"e" AND "t"'])
 	res['madelon'] = (6, 0)

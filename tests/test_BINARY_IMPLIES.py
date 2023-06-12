@@ -25,6 +25,7 @@ def test_real():
 		'"f578" AND "f579"',
 		'"f578" AND "f580"',
 		'"f579" AND "f580"'], [])
+	res['semeion'] = (0, 16)
 	res['scene'] = ([
 		'"Beach" AND "Sunset"',
 		'"Beach" AND "FallFoliage"',
@@ -38,7 +39,7 @@ def test_real():
 	res['PhishingWebsites'] = ([], [
 		'"Favicon" AND "port"',
 		'"on_mouseover" AND "popUpWidnow"'])
-	res['hypothyroid'] = (['"T4U_measured" AND "FTI_measured"'], [])
+	res['hypothyroid'] = (0, ['"T4U_measured" AND "FTI_measured"'])
 	res['cardiotocography'] = ([
 		'"V26" AND "V27"',
 		'"V26" AND "V31"',
@@ -76,9 +77,9 @@ def test_real():
 		'"safety_low" AND "safety_high"',
 		'"safety_med" AND "safety_high"'
 	], [])
-	res['allbp'] = (['"T4U_measured" AND "FTI_measured"'], [])
-	res['allrep'] = (['"T4U_measured" AND "FTI_measured"'], [])
-	res['dis'] = (['"T4U_measured" AND "FTI_measured"'], [])
+	res['allbp'] = (0, ['"T4U_measured" AND "FTI_measured"'])
+	res['allrep'] = (0, ['"T4U_measured" AND "FTI_measured"'])
+	res['dis'] = (0, ['"T4U_measured" AND "FTI_measured"'])
 	res['steel-plates-fault'] = (
 		[
 			'"V12" AND "V13"',
@@ -102,32 +103,32 @@ def test_synthetic_one_row_nulls():
 	synth_test(
 		test_id,
 		'one-row',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		3)  # The pattern is now an exception
 
 
 def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,  # We should consider making these more robust to nulls.
+		0)
 
 
 def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():

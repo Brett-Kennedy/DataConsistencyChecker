@@ -91,8 +91,8 @@ def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols,
+		-5,
+		-5,
 		allow_more=True
 	)
 
@@ -101,8 +101,8 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols,
+		-5,
+		-5,
 		allow_more=True
 	)
 

@@ -1,4 +1,4 @@
-# OpenML files not used:
+# OpenML files specifically not used:
 # gina-agnostic - file not available on OpenML
 # amazon-commerce-reviews -- currently slow and needs to be sped up.
 # balance_scale - file not available on OpenML
@@ -6,9 +6,9 @@
 # cjs - file not available on OpenML
 
 real_files = [
-	# 'isolet',
-	# 'bioresponse',
-	# 'soybean',
+	'isolet',
+	'bioresponse',
+	'soybean',
 	'micro-mass',
 	'mfeat-karhunen',
 	'Amazon_employee_access',

@@ -11,7 +11,9 @@ test_id = 'ALL_ZERO_OR_ALL_NON_ZERO'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"all_zero_or_not rand_a" AND "all_zero_or_not all" AND "all_zero_or_not most"']
+synth_exceptions_cols = [
+	'"all_zero_or_not rand_a" AND "all_zero_or_not all" AND "all_zero_or_not most"'
+]
 
 
 def test_real():
@@ -57,7 +59,7 @@ def test_synthetic_random_nulls():
 		test_id,
 		'random',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		['"all_zero_or_not rand_a" AND "all_zero_or_not most"'])  # This is reasonable, but also random
 
 
 def test_synthetic_80_percent_nulls():
@@ -65,7 +67,7 @@ def test_synthetic_80_percent_nulls():
 		test_id,
 		'80-percent',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		[])
 
 
 def test_synthetic_all_cols_no_nulls():

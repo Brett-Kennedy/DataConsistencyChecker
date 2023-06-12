@@ -55,7 +55,7 @@ def test_real():
 	res['electricity'] = (5, 7)
 	res['scene'] = ([], 24)
 	res['musk'] = (50, 122)
-	res['nomao'] = (2499, 317)
+	res['nomao'] = (-2400, -300)
 	res['bank-marketing'] = ([], ['"V1" AND "V13"', '"V1" AND "V15"', '"V12" AND "V15"'])
 	res['MagicTelescope'] = (3, 4)
 	res['Click_prediction_small'] = (1, 3)

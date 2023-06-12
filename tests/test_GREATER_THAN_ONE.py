@@ -59,7 +59,7 @@ def test_real():
 	res['musk'] = (166, 0)
 	res['nomao'] = (27, 0)
 	res['bank-marketing'] = (7, 0)
-	res['MagicTelescope'] = (3, ['fWidth', 'fM3Long'])
+	res['MagicTelescope'] = (3, ['fWidth:', 'fM3Long:'])
 	res['Click_prediction_small'] = (9, 0)
 	res['PhishingWebsites'] = (8, 0)
 	res['page-blocks'] = (7, 0)

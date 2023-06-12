@@ -10,8 +10,12 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'BINARY_MATCHES_SUM'
 random.seed(0)
 
-synth_patterns_cols = ['"bin_match_sum rand_a" AND "bin_match_sum rand_b" AND "bin_match_sum all"']
-synth_exceptions_cols = ['"bin_match_sum rand_a" AND "bin_match_sum rand_b" AND "bin_match_sum most"']
+synth_patterns_cols = [
+	'"bin_match_sum rand_a" AND "bin_match_sum rand_b" AND "bin_match_sum all"'
+]
+synth_exceptions_cols = [
+	'"bin_match_sum rand_a" AND "bin_match_sum rand_b" AND "bin_match_sum most"'
+]
 
 
 def test_real():
@@ -120,16 +124,16 @@ def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		2)  # The pattern is now an exception
 
 
 def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():

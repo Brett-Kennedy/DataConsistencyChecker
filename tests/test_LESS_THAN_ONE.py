@@ -17,6 +17,7 @@ synth_exceptions_cols = ['less_than_one most']
 def test_real():
 	res = build_default_results()
 	res['isolet'] = (613, 0)
+	res['bioresponse'] = (311, 0)
 	res['abalone'] = (3, 2)
 	res['cnae-9'] = (0, ['V195', 'V648', 'V731', 'V814'])
 	res['SpeedDating'] = (['interests_correlate'], 0)

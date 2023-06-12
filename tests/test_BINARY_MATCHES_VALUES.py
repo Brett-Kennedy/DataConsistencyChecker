@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'BINARY_MATCHES_VALUES'
 random.seed(0)
 
-synth_patterns_cols = ['"bin_match_val all" AND "bin_match_val rand_a"']
-synth_exceptions_cols = ['"bin_match_val most" AND "bin_match_val rand_a"']
+synth_patterns_cols = ['"bin_match_val rand_a" AND "bin_match_val all"']
+synth_exceptions_cols = ['"bin_match_val rand_a" AND "bin_match_val most"']
 
 
 def test_real():
@@ -84,8 +84,8 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():

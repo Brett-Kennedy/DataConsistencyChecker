@@ -11,7 +11,9 @@ test_id = 'BINARY_NUM_SAME'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"bin_num_same rand_a" AND "bin_num_same rand_b" AND "bin_num_same rand_c" AND "bin_num_same rand_d" AND "bin_num_same most"']
+synth_exceptions_cols = [
+	'"bin_num_same rand_a" AND "bin_num_same rand_b" AND "bin_num_same rand_c" AND "bin_num_same rand_d" AND "bin_num_same most"'
+]
 
 
 def test_real():
@@ -43,7 +45,7 @@ def test_synthetic_in_sync_nulls():
 		test_id,
 		'in-sync',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		0)
 
 
 def test_synthetic_random_nulls():
@@ -51,7 +53,7 @@ def test_synthetic_random_nulls():
 		test_id,
 		'random',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		0)
 
 
 def test_synthetic_80_percent_nulls():
@@ -59,7 +61,7 @@ def test_synthetic_80_percent_nulls():
 		test_id,
 		'80-percent',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():

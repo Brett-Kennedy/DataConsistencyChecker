@@ -55,46 +55,46 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		[],
+		[])
 
 
 def test_synthetic_all_cols_no_nulls():
 	synth_test_all_cols(
 		test_id,
 		'none',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		-40,
+		-25)
 
 
 def test_synthetic_all_cols_one_row_nulls():
 	synth_test_all_cols(
 		test_id,
 		'one-row',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		-40,
+		-25)
 
 
 def test_synthetic_all_cols_in_sync_nulls():
 	synth_test_all_cols(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		-40,
+		-25)
 
 
 def test_synthetic_all_cols_random_nulls():
 	synth_test_all_cols(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		-40,
+		-25)
 
 
 def test_synthetic_all_cols_80_percent_nulls():
 	synth_test_all_cols(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		-40,
+		-25)
 

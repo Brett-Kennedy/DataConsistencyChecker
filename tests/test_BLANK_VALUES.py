@@ -16,7 +16,7 @@ synth_exceptions_cols = ['blank_vals_most']
 
 def test_real():
 	res = build_default_results()
-	res['soybean'] = (19, 0)
+	res['soybean'] = (0, 0)
 	res['abalone'] = (1, 0)
 	res['SpeedDating'] = (58, 0)
 	res['eucalyptus'] = (5, 0)

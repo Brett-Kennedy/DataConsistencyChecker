@@ -48,7 +48,7 @@ def test_real():
 	res['mc1'] = ([], [
 		'"ESSENTIAL_DENSITY" AND "CYCLOMATIC_DENSITY"',
 		'"ESSENTIAL_DENSITY" AND "NORMALIZED_CYLOMATIC_COMPLEXITY"',
-		'"GLOBAL_DATA_DENSITY" AND "HALSTEAD_LEVEL"',
+		# '"GLOBAL_DATA_DENSITY" AND "HALSTEAD_LEVEL"', -- no longer appearing due to tighter definition
 	])
 	res['cardiotocography'] = ([], 13)
 	res['allbp'] = ([], [

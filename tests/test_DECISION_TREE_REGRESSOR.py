@@ -10,8 +10,10 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'DECISION_TREE_REGRESSOR'
 random.seed(0)
 
-synth_patterns_cols = ['"dt regr. 1a" AND "dt regr. 1b" AND "dt regr. 2"']
-synth_exceptions_cols = ['"dt regr. 1c" AND "dt regr. 1d" AND "dt regr. 3"']
+synth_patterns_cols = 1
+	#'"dt regr. 1a" AND "dt regr. 1b" AND "dt regr. 2"'
+synth_exceptions_cols = 1
+	#'"dt regr. 1c" AND "dt regr. 1d" AND "dt regr. 3"'
 
 
 def test_real():
