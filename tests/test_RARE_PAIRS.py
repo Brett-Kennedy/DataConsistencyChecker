@@ -18,7 +18,7 @@ def test_real():
 	res = build_default_results()
 	res['soybean'] = (0, ['"leaf-malf" AND "seed-discolor"'])
 	res['semeion'] = (0, 39)
-	res['qsar-biodeg'] = (0, ['"V24" AND "V25"', '"V25" AND "V29'])
+	res['qsar-biodeg'] = (0, ['"V24" AND "V25"', '"V25" AND "V29"'])
 	res['scene'] = (0, ['"Beach" AND "Field"'])
 	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
 	res['solar-flare'] = (0, [

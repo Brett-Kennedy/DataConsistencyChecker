@@ -32,7 +32,7 @@ def test_real():
 	res['SpeedDating'] = (4, 256)
 	res['eucalyptus'] = (['"Vig" AND "Ins_res" AND "Stem_Fm" AND "Crown_Fm" AND "Brnch_Fm"'], [])
 	res['credit-approval'] = (['"A4" AND "A5"', '"A6" AND "A7"'], 4)
-	res['adult'] = (['"workclass" AND "occupation"'], [])
+	res['adult'] = ([], ['"workclass" AND "occupation"'] )
 	res['hypothyroid'] = ([], ['"T4U" AND "FTI"'])
 	real_test(test_id, res)
 

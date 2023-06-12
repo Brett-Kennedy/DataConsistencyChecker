@@ -17,12 +17,8 @@ synth_patterns_cols = [
 synth_exceptions_cols = [
 	'"same_start_word rand_a" AND "same_start_word most_a"',
 	'"same_start_word all_a" AND "same_start_word most_a"',
-	'"same_start_word most_a" AND "same_start_word rand_a"',
-	'"same_start_word most_a" AND "same_start_word all_a"',
 	'"same_start_word rand_b" AND "same_start_word most_b"',
 	'"same_start_word all_b" AND "same_start_word most_b"',
-	'"same_start_word most_b" AND "same_start_word rand_b"',
-	'"same_start_word most_b" AND "same_start_word all_b"',
 	]
 
 

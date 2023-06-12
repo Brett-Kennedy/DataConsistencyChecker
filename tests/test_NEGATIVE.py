@@ -13,10 +13,21 @@ random.seed(0)
 synth_patterns_cols = ['negative all']
 synth_exceptions_cols = ['negative most']
 
-
+# Need  to fix issue with Nuls
 def test_real():
 	res = build_default_results()
-	res['isolet'] = ([], 16)
+	res['isolet'] = (0, 16)
+	res['bioresponse'] = (0, 114)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
+	# res[''] = (0, 0)
 	real_test(test_id, res)
 
 

@@ -14,6 +14,7 @@ synth_patterns_cols = ['"sim to neg rand" AND "sim to neg all"']
 synth_exceptions_cols = ['"sim to neg rand" AND "sim to neg most"']
 
 
+# No datasets in the current test set display this pattern
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

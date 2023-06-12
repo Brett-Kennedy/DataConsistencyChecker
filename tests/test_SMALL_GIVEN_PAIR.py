@@ -16,7 +16,10 @@ synth_exceptions_cols = ['"small_given_pair rand_a" AND "small_given_pair rand_b
 
 def test_real():
 	res = build_default_results()
-	res['bank-marketing'] = ([], 16)
+	res['SpeedDating'] = (0, 10497) # we need to address this, as it's flagging way too many
+	res['eucalyptus'] = (0, 4)
+	res['adult'] = (0, 16)
+	res['bank-marketing'] = (0, 16)
 	real_test(test_id, res)
 
 

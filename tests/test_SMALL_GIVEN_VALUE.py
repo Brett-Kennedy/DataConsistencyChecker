@@ -16,6 +16,7 @@ synth_exceptions_cols = ['"small_given rand" AND "small_given most"']
 
 def test_real():
 	res = build_default_results()
+	res['isolet'] = (0, 19)
 	res['qsar-biodeg'] = ([], [
 		'"V25" AND "V1"',
 		'"V25" AND "V27"'])

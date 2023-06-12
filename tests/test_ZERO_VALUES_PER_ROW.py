@@ -10,17 +10,13 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'ZERO_VALUES_PER_ROW'
 random.seed(0)
 
-synth_patterns_cols = ['"zero_per_row_0" AND "zero_per_row_1" AND "zero_per_row_2" AND "zero_per_row_3"']
-synth_exceptions_cols = []  # None
+synth_exceptions_cols = ['"zero_per_row_0" AND "zero_per_row_1" AND "zero_per_row_2" AND "zero_per_row_3"']
+synth_patterns_cols = []  # None
 
 
+# No datasets with this pattern exist in the test set
 def test_real():
 	res = build_default_results()
-	res['soybean'] = (1, [])
-	res['mfeat-karhunen'] = (1, [])
-	res['Amazon_employee_access'] = ([], [])
-	res[''] = ([], [])
-	res[''] = ([], [])
 	real_test(test_id, res)
 
 

@@ -11,11 +11,24 @@ test_id = 'SIMILAR_PREVIOUS'
 random.seed(0)
 
 synth_patterns_cols = ['sim_prev_all']
-synth_exceptions_cols = ['sim_prev_all']
+synth_exceptions_cols = ['sim_prev_most']
 
 
 def test_real():
 	res = build_default_results()
+	res['analcatdata_authorship'] = (0, ['BookID'])
+	res['SpeedDating'] = (['wave'], 0)
+	res['eucalyptus'] = (0, ['Year'])
+	res['har'] = (0, 66)
+	res['JapaneseVowels'] = (0, ['utterance'])
+	res['profb'] = (0, ['Week'])
+	res['eeg-eye-state'] = (0, 10)
+	res['climate-model-simulation-crashes'] = (0, ['V2'])
+	res['mozilla4'] = (0, ['id'])
+	res['electricity'] = (['date', 'nswdemand'], ['day'])
+	res['bank-marketing'] = (0, ['V10'])
+	res['kr-vs-k'] = (0, ['V3'])
+	res['volcanoes-a1'] = (0, ['V2'])
 	real_test(test_id, res)
 
 

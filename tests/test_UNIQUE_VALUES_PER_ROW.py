@@ -18,6 +18,7 @@ def test_real():
 	# This pattern appears in most datasets (69 / 81 on last testing), rarely with an exception, though occasionally
 	pass
 
+
 def test_synthetic_no_nulls():
 	synth_test(
 		test_id,

@@ -16,11 +16,15 @@ synth_exceptions_cols = ['"similar to prod 1a" AND "similar to prod 1b" AND "sim
 
 def test_real():
 	res = build_default_results()
+	res['jm1'] = (0, ['"v" AND "d" AND "e"', '"d" AND "i" AND "v"'])
+	res['kc2'] = (0, ['"v" AND "d" AND "e"'])
 	res['page_blocks'] = ([
 			'"height" AND "lenght" AND "area"',
 			'"height" AND "eccen" AND "lenght"',
 			'"mean_tr" AND "wb_trans" AND "blackpix"'
-		], [])
+		], 0)
+	res['mc1'] = (['"HALSTEAD_DIFFICULTY" AND "HALSTEAD_VOLUME" AND "HALSTEAD_EFFORT"'], 0)
+	res['pc1'] = (['"V" AND "D" AND "E"'], 0)
 	real_test(test_id, res)
 
 

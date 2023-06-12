@@ -42,7 +42,7 @@ def test_real():
 		'"description_id" AND "user_id"'
 	])
 	res['cardiotocography'] = (0, ['"V8" AND "V11"'])
-	res['steel-plates-fault'] = (0, ['"V3" AND "V16"', '"V3" AND "V19"', '"V4" AND "V16"', "V4" AND "V19"'])
+	res['steel-plates-fault'] = (0, ['"V3" AND "V16"', '"V3" AND "V19"', '"V4" AND "V16"', '"V4" AND "V19"'])
 
 	real_test(test_id, res)
 

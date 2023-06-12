@@ -14,6 +14,7 @@ synth_patterns_cols = []
 synth_exceptions_cols = ['"two_pairs_rand_a" AND "two_pairs_rand_b" AND "two_pairs_rand_c" AND "two_pairs_rand_d"']
 
 
+# This pattern is not found in any datasets currently in the test set
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

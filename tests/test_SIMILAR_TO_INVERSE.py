@@ -14,6 +14,7 @@ synth_patterns_cols = ['"sim to inv rand" AND "sim to inv all"']
 synth_exceptions_cols = ['"sim to inv rand" AND "sim to inv most"']
 
 
+# This pattern does not appear in any datasets currently in the test set
 def test_real():
 	res = build_default_results()
 	real_test(test_id, res)

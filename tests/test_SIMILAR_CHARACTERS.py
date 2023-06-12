@@ -21,6 +21,7 @@ synth_exceptions_cols = [
 
 def test_real():
 	res = build_default_results()
+	res['anneal'] = (0, ['"bc" AND "exptl"'])
 	real_test(test_id, res)
 
 

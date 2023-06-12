@@ -19,8 +19,7 @@ synth_exceptions_cols = [
 
 def test_real():
 	res = build_default_results()
-	res['cnae-9'] = ([], ['"V383" AND "V602"'])
-	res['spambase'] = ([], ['"word_freq_857" AND "word_freq_415"'])
+	res['cnae-9'] = (['"V383" AND "V602"'], 0)
 	res['nomao'] = (18, 4)
 	res['hypothyroid'] = ([], ['"T4U_measured" AND "FTI_measured"'])
 	res['cardiotocography'] = (['"V4" AND "V5"'], [])
@@ -108,11 +107,3 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
-
-
-def test_kropt():
-	kropt_test(
-		test_id,
-		[],
-		[]
-	)

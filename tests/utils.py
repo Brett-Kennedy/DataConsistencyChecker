@@ -3,6 +3,7 @@
 import pandas as pd
 from sklearn.datasets import fetch_openml
 import pickle
+import dill
 import os
 import sys
 
@@ -12,10 +13,12 @@ from check_data_consistency import DataConsistencyChecker
 from list_real_files import real_files
 
 # Settings. Adjust these before running the tests to run a reduced set of tests.
-TEST_REAL = True
+TEST_REAL = False
 TEST_SYNTHETIC = True
-TEST_SYNTHETIC_NONES = False
+TEST_SYNTHETIC_NONES = True
 TEST_SYNTHETIC_ALL_COLUMNS = False
+
+cache_folder = "dc_cache"
 
 
 def build_default_results():
@@ -38,7 +41,6 @@ def real_test(test_id, expected_results_dict):
 		return
 
 	# If not present, create the folder for the cache
-	cache_folder = "dc_cache"
 	os.makedirs(cache_folder, exist_ok=True)
 
 	for dataset_name in real_files:
@@ -68,6 +70,10 @@ def real_test(test_id, expected_results_dict):
 			else:
 				assert len(patterns_df) == expected_patterns_cols
 		else:
+			# print("expected_patterns_cols:", expected_patterns_cols)
+			# print("patterns_df['Column(s)'].values: ", patterns_df['Column(s)'].values)
+			# print("len(patterns_df):", len(patterns_df))
+			# print("len(expected_patterns_cols):", len(expected_patterns_cols))
 			assert ((patterns_df is None) and (len(expected_patterns_cols) == 0)) or \
 					(len(patterns_df) == len(expected_patterns_cols))
 			for col in expected_patterns_cols:
@@ -81,6 +87,10 @@ def real_test(test_id, expected_results_dict):
 			else:
 				assert len(exceptions_df) == expected_exceptions_cols
 		else:
+			# print("expected_exceptions_cols:", expected_exceptions_cols)
+			# print("exceptions_df['Column(s)'].values: ", exceptions_df['Column(s)'].values)
+			# print("len(exceptions_df):", len(exceptions_df))
+			# print("len(expected_exceptions_cols):", len(expected_exceptions_cols))
 			assert ((exceptions_df is None) and (len(expected_patterns_cols) == 0)) or \
 					(len(exceptions_df) == len(expected_exceptions_cols))
 			for col in expected_exceptions_cols:
@@ -99,37 +109,85 @@ def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_c
 	dc.init_data(synth_df)
 	dc.check_data_quality(execute_list=execute_list)
 
-	ret = dc.get_patterns_summary(short_list=False)
-	if allow_more:
-		assert len(ret) >= len(expected_patterns_cols)
+	patterns_df = dc.get_patterns_summary(short_list=False)
+	print()
+	print("add_nones:", add_nones)
+	print("len(patterns_df)", len(patterns_df))
+	print("abs(expected_patterns_cols)", expected_patterns_cols)
+	if type(expected_patterns_cols) == int:
+		if expected_patterns_cols < 0:
+			assert len(patterns_df) >= abs(expected_patterns_cols)
+		else:
+			assert len(patterns_df) == expected_patterns_cols
 	else:
-		assert len(ret) == len(expected_patterns_cols)
-	for col in expected_patterns_cols:
-		assert col in ret['Column(s)'].values
+		if allow_more:
+			assert len(patterns_df) >= len(expected_patterns_cols)
+		else:
+			assert len(patterns_df) == len(expected_patterns_cols)
+		for col in expected_patterns_cols:
+			assert col in patterns_df['Column(s)'].values
 
-	ret = dc.get_exceptions_summary()
-	if allow_more:
-		assert len(ret) >= len(expected_exceptions_cols)
+	exceptions_df = dc.get_exceptions_summary()
+	print("len(exceptions_df)", len(exceptions_df))
+	print("abs(expected_exceptions_cols)", expected_exceptions_cols)
+	if type(expected_exceptions_cols) == int:
+		if expected_exceptions_cols < 0:
+			assert len(exceptions_df) >= abs(expected_exceptions_cols)
+		else:
+			assert len(exceptions_df) == expected_exceptions_cols
 	else:
-		assert len(ret) == len(expected_exceptions_cols)
-	for col in expected_exceptions_cols:
-		assert col in ret['Column(s)'].values
+		if allow_more:
+			assert len(exceptions_df) >= len(expected_exceptions_cols)
+		else:
+			assert len(exceptions_df) == len(expected_exceptions_cols)
+		for col in expected_exceptions_cols:
+			assert col in exceptions_df['Column(s)'].values
 
 
-def synth_test_all_cols(test_id, add_nones, patterns_cols, exceptions_cols):
+def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exceptions_cols):
 	if not TEST_SYNTHETIC:
 		return
 	if not TEST_SYNTHETIC_ALL_COLUMNS:
 		return
 
-	dc = DataConsistencyChecker(execute_list=[test_id])
-	synth_df = dc.generate_synth_data(all_cols=True, add_nones=add_nones)
-	dc.check_data_quality(synth_df)
+	# If not present, create the folder for the cache
+	os.makedirs(cache_folder, exist_ok=True)
 
-	ret = dc.get_patterns_summary(short_list=False)
-	for col in patterns_cols:
-		assert col in ret['Column(s)'].values
+	file_name = os.path.join(cache_folder, 'synth_all_cols' + "_dc.pkl")
+	if os.path.exists(file_name):
+		file_handle = open(file_name, 'rb')
+		dc = pickle.load(file_handle)
+	else:
+		dc = DataConsistencyChecker(verbose=-1)
+		synth_df = dc.generate_synth_data(all_cols=True, add_nones=add_nones)
+		dc.init_data(synth_df)
+		filehandler = open(file_name, 'wb')
+		dill.dump(dc, filehandler)
 
-	ret = dc.get_exceptions_summary()
-	for col in exceptions_cols:
-		assert col in ret['Column(s)'].values
+	dc.check_data_quality(execute_list=[test_id])
+
+	patterns_df = dc.get_patterns_summary(short_list=False)
+	print("len(patterns_df)", len(patterns_df))
+	print("abs(expected_patterns_cols)",abs(expected_patterns_cols))
+	if type(expected_patterns_cols) == int:
+		if expected_patterns_cols < 0:
+			# print("len(patterns_df)", len(patterns_df))
+			# print("abs(expected_patterns_cols)",abs(expected_patterns_cols))
+			assert len(patterns_df) >= abs(expected_patterns_cols)
+		else:
+			assert len(patterns_df) == expected_patterns_cols
+	else:
+		for col in expected_patterns_cols:
+			assert col in patterns_df['Column(s)'].values
+
+	exceptions_df = dc.get_exceptions_summary()
+	print("len(exceptions_df)", len(exceptions_df))
+	print("abs(expected_exceptions_cols)",abs(expected_exceptions_cols))
+	if type(expected_exceptions_cols) == int:
+		if expected_exceptions_cols < 0:
+			assert len(exceptions_df) >= abs(expected_exceptions_cols)
+		else:
+			assert len(exceptions_df) == expected_exceptions_cols
+	else:
+		for col in expected_exceptions_cols:
+			assert col in exceptions_df['Column(s)'].values

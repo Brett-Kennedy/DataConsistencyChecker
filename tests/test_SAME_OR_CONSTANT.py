@@ -11,7 +11,7 @@ test_id = 'SAME_OR_CONSTANT'
 random.seed(0)
 
 synth_patterns_cols = ['"same_or_const rand" AND "same_or_const all"']
-synth_exceptions_cols = ['same_or_const rand" AND "same_or_const most']
+synth_exceptions_cols = ['"same_or_const rand" AND "same_or_const most"']
 
 
 def test_real():

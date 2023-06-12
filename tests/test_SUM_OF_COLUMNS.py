@@ -21,10 +21,12 @@ synth_exceptions_cols = [
 	'"sum of cols rand_a" AND "sum of cols rand_b" AND "sum of cols rand_c" AND "sum of cols times most"'
 ]
 
+
 def test_real():
 	res = build_default_results()
+	res['mc1'] = (['"NUM_OPERANDS" AND "NUM_OPERATORS" AND "HALSTEAD_LENGTH"'], 0)
+	res['pc1'] = (0, ['"total_Op" AND "total_Opnd" AND "N"'])
 	real_test(test_id, res)
-
 
 
 def test_synthetic_no_nulls():

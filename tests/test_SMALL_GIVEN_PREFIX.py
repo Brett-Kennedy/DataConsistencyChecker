@@ -16,6 +16,8 @@ synth_exceptions_cols = ['"small_given_prefix rand" AND "small_given_prefix most
 
 def test_real():
 	res = build_default_results()
+	res['SpeedDating'] = (0, 111)
+	res['adult'] = (0, ['"relationship" AND "education-num"'])
 	res['musk'] = ([], ['"molecule_name" AND "f165"'])
 	real_test(test_id, res)
 

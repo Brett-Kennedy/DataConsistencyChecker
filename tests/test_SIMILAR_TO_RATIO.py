@@ -16,14 +16,15 @@ synth_exceptions_cols = ['"similar_to_ratio rand_a" AND "similar_to_ratio rand_b
 
 def test_real():
 	res = build_default_results()
-	res['page_blocks'] = (
-		['"lenght" AND "height" AND "eccen"',
+	res['page-blocks'] = ([
+		'"lenght" AND "height" AND "eccen"',
 		'"area" AND "height" AND "lenght"',
 		'"blackpix" AND "area" AND "p_black"',
 		'"blackpix" AND "mean_tr" AND "wb_trans"',
 		'"blackand" AND "area" AND "p_and"'],
 		[])
 	res['hypothyroid'] = ([], ['"TT4" AND "T4U" AND "FTI"'])
+	res['baseball'] = (['"Hits" AND "At_bats" AND "Batting_average"'], 0)
 	real_test(test_id, res)
 
 

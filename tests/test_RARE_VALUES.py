@@ -16,7 +16,7 @@ synth_exceptions_cols = ['rare_vals most']
 
 def test_real():
 	res = build_default_results()
-	res['soybean'] = (0, ['data', 'area-damaged'])
+	res['soybean'] = (0, ['date', 'area-damaged'])
 	res['credit-approval'] = (0, ['A4', 'A5'])
 	res['splice'] = (0 , 45)
 	res['mushroom'] = (0, 9)

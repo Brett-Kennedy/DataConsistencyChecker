@@ -17,6 +17,7 @@ synth_exceptions_cols = ['rare_decimals_most']
 def test_real():
 	res = build_default_results()
 	res['isolet'] = (['f581', 'f582', 'f583'], [])
+	res['bioresponse'] = (11, 207)
 	res['SpeedDating'] = ([], 14)
 	res['segment'] = ([], ['short-line-density-2'])
 	res['jm1'] = ([], 10)

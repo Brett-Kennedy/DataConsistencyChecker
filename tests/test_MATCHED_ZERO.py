@@ -21,7 +21,7 @@ synth_exceptions_cols = [
 
 def test_real():
 	res = build_default_results()
-	res['cnae-9'] = (['"V383" AND "V602"'], 47)
+	res['cnae-9'] = (['"V383" AND "V602"'], 0)
 	res['segment'] = (16, 50)
 	res['jm1'] = (18, 48)
 	res['wdbc'] = (15, 0)

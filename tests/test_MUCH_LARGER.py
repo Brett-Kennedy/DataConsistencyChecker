@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'MUCH_LARGER'
 random.seed(0)
 
-synth_patterns_cols = ['"much larger all" AND "much larger rand"']
-synth_exceptions_cols = ['"much larger most" AND "much larger rand"']
+synth_patterns_cols = ['"much larger rand" AND "much larger all"']
+synth_exceptions_cols = ['"much larger rand" AND "much larger most"']
 
 def test_real():
 	res = build_default_results()
@@ -19,14 +19,14 @@ def test_real():
 	res['eucalyptus'] = (8, 16)
 	res['gas-drift'] = (0, 588)
 	res['adult'] = (1, 0)
-	res['anneal'] = (0, ['"width" AND "thick"'])
+	res['anneal'] = (0, ['"thick" AND "width"'])
 	res['credit-g'] = (4, 0)
 	res['blood-transfusion-service-center'] = (1, 0)
 	res['qsar-biodeg'] = (0, 2)
 	res['wdbc'] = (132, 11)
 	res['diabetes'] = (1, 0)
 	res['ozone-level-8hr'] = (80, 80)
-	res['climate-model-simulation-crashes'] = (1, 0)
+	res['climate-model-simulation-crashes'] = (1, ['"V8" AND "V3"', '"V11" AND "V3"', '"V16" AND "V3"'])
 	res['ilpd'] = (3, 1)
 	res['electricity'] = (0, 5)
 	res['MagicTelescope'] = (0, 5)

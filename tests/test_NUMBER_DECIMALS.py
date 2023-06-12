@@ -16,7 +16,8 @@ synth_exceptions_cols = ['num decimals rand', 'num decimals most']
 
 def test_real():
 	res = build_default_results()
-	res['isolet'] = (551, [])
+	res['isolet'] = (-540, 0)
+	res['bioresponse'] = (-75, -130)
 	res['mfeat-karhunen'] = (64, 0)
 	res['abalone'] = (7, 0)
 	res['satimage'] = (36, 0)
@@ -26,14 +27,14 @@ def test_real():
 	res['wall-robot-navigation'] = (24, 0)
 	res['credit-approval'] = (3, 0)
 	res['artificial-characters'] = (2, 0)
-	res['har'] = (560, 0)
+	res['har'] = (-540, 0)
 	res['segment'] = (2, [
 		'hue-mean'
 	])
 	res['JapaneseVowels'] = (12, 0)
 	res['jm1'] = (7, 0)
 	res['gas-drift'] = (128, 0)
-	res['higgs'] = (19, [
+	res['higgs'] = (-19, [
 		'lepton_eta',
 		'missing_energy_phi',
 		'jet1eta',

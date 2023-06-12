@@ -11,12 +11,19 @@ test_id = 'SIMILAR_WRT_DIFF'
 random.seed(0)
 
 synth_patterns_cols = ['"sim wrt diff rand" AND "sim wrt diff all"']
-synth_exceptions_cols = ['"sim wrt diff rand" AND "sim wrt diff most"',
-                         '"sim wrt diff all" AND "sim wrt diff most"']
+synth_exceptions_cols = [
+	'"sim wrt diff rand" AND "sim wrt diff most"',
+	'"sim wrt diff all" AND "sim wrt diff most"'
+]
 
 
 def test_real():
 	res = build_default_results()
+	res['vehicle'] = (['"KURTOSIS_ABOUT_MINOR" AND "HOLLOWS_RATIO"'], 0)
+	res['eeg-eye-state'] = (0, 70)
+	res['nomao'] = (['"V44" AND "V46"'], 6)
+	res['cardiotocography'] = (['"V4" AND "V5"'], 0)
+	res['steel-plates-fault'] = (['"V3" AND "V4"'], 0)
 	real_test(test_id, res)
 
 

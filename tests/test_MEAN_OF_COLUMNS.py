@@ -11,12 +11,14 @@ test_id = 'MEAN_OF_COLUMNS'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"mean_of_cols rand_b" AND "mean_of_cols rand_a" AND "mean_of_cols rand_c" AND "mean_of_cols all" AND "mean_of_cols most"']
+synth_exceptions_cols = [
+	'"mean_of_cols all" AND "mean_of_cols rand_a" AND "mean_of_cols rand_b" AND "mean_of_cols rand_c" AND "mean_of_cols most"'
+]
 
 
 def test_real():
 	res = build_default_results()
-	res['namao'] =(1, 0)
+	res['nomao'] = (['"V82" AND "V83" AND "V84" AND "V85" AND "V86" AND "V81"'], 0)  # This is actually 4 columns with mostly zeros, so a trivial pattern.
 	real_test(test_id, res)
 
 
