@@ -32,15 +32,15 @@ def test_synthetic_one_row_nulls():
 	synth_test(
 		test_id,
 		'one-row',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		2)
 
 
 def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
+		0,
 		synth_exceptions_cols)
 
 
@@ -48,7 +48,7 @@ def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
+		0,
 		synth_exceptions_cols)
 
 
@@ -56,7 +56,7 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
+		0,
 		synth_exceptions_cols)
 
 

@@ -18,6 +18,8 @@ TEST_SYNTHETIC = True
 TEST_SYNTHETIC_NONES = True
 TEST_SYNTHETIC_ALL_COLUMNS = False
 
+PRINT_OUTPUT = True
+
 cache_folder = "dc_cache"
 
 
@@ -110,16 +112,20 @@ def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_c
 	dc.check_data_quality(execute_list=execute_list)
 
 	patterns_df = dc.get_patterns_summary(short_list=False)
-	print()
-	print("add_nones:", add_nones)
-	print("len(patterns_df)", len(patterns_df))
-	print("abs(expected_patterns_cols)", expected_patterns_cols)
+	if PRINT_OUTPUT:
+		print()
+		print("add_nones:", add_nones)
+		print("len(patterns_df)", len(patterns_df))
 	if type(expected_patterns_cols) == int:
+		if PRINT_OUTPUT:
+			print("expected_patterns_cols", expected_patterns_cols)
 		if expected_patterns_cols < 0:
 			assert len(patterns_df) >= abs(expected_patterns_cols)
 		else:
 			assert len(patterns_df) == expected_patterns_cols
 	else:
+		if PRINT_OUTPUT:
+			print("len(expected_patterns_cols)", len(expected_patterns_cols))
 		if allow_more:
 			assert len(patterns_df) >= len(expected_patterns_cols)
 		else:
@@ -128,23 +134,29 @@ def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_c
 			assert col in patterns_df['Column(s)'].values
 
 	exceptions_df = dc.get_exceptions_summary()
-	print("len(exceptions_df)", len(exceptions_df))
-	print("abs(expected_exceptions_cols)", expected_exceptions_cols)
+	if PRINT_OUTPUT:
+		print("len(exceptions_df)", len(exceptions_df))
 	if type(expected_exceptions_cols) == int:
+		if PRINT_OUTPUT:
+			print("expected_exceptions_cols", expected_exceptions_cols)
 		if expected_exceptions_cols < 0:
 			assert len(exceptions_df) >= abs(expected_exceptions_cols)
 		else:
 			assert len(exceptions_df) == expected_exceptions_cols
 	else:
+		if PRINT_OUTPUT:
+			print("len(expected_exceptions_cols)", len(expected_exceptions_cols))
 		if allow_more:
 			assert len(exceptions_df) >= len(expected_exceptions_cols)
 		else:
 			assert len(exceptions_df) == len(expected_exceptions_cols)
 		for col in expected_exceptions_cols:
+			if PRINT_OUTPUT and col not in exceptions_df['Column(s)'].values:
+				print("Missing column: ", col)
 			assert col in exceptions_df['Column(s)'].values
 
 
-def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exceptions_cols):
+def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exceptions_cols, allow_more=False):
 	if not TEST_SYNTHETIC:
 		return
 	if not TEST_SYNTHETIC_ALL_COLUMNS:
@@ -167,27 +179,35 @@ def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exc
 	dc.check_data_quality(execute_list=[test_id])
 
 	patterns_df = dc.get_patterns_summary(short_list=False)
-	print("len(patterns_df)", len(patterns_df))
-	print("abs(expected_patterns_cols)",abs(expected_patterns_cols))
+	if PRINT_OUTPUT:
+		print()
+		print("add_nones:", add_nones)
+		print("len(patterns_df)", len(patterns_df))
+
 	if type(expected_patterns_cols) == int:
+		if PRINT_OUTPUT:
+			print("abs(expected_patterns_cols)", abs(expected_patterns_cols))
 		if expected_patterns_cols < 0:
-			# print("len(patterns_df)", len(patterns_df))
-			# print("abs(expected_patterns_cols)",abs(expected_patterns_cols))
 			assert len(patterns_df) >= abs(expected_patterns_cols)
 		else:
 			assert len(patterns_df) == expected_patterns_cols
 	else:
+		if PRINT_OUTPUT:
+			print("len(expected_patterns_cols)", len(expected_patterns_cols))
 		for col in expected_patterns_cols:
 			assert col in patterns_df['Column(s)'].values
 
 	exceptions_df = dc.get_exceptions_summary()
 	print("len(exceptions_df)", len(exceptions_df))
-	print("abs(expected_exceptions_cols)",abs(expected_exceptions_cols))
 	if type(expected_exceptions_cols) == int:
+		if PRINT_OUTPUT:
+			print("abs(expected_exceptions_cols)", abs(expected_exceptions_cols))
 		if expected_exceptions_cols < 0:
 			assert len(exceptions_df) >= abs(expected_exceptions_cols)
 		else:
 			assert len(exceptions_df) == expected_exceptions_cols
 	else:
+		if PRINT_OUTPUT:
+			print("len(expected_exceptions_cols)", len(expected_exceptions_cols))
 		for col in expected_exceptions_cols:
 			assert col in exceptions_df['Column(s)'].values
