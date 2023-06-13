@@ -968,11 +968,11 @@ class DataConsistencyChecker:
         # Create a sample of the full data, which may be used for early stopping for expensive tests.
         # The sample_df will tend to not contain Null values.
         if len(trimmed_orig_df) > 50:
-            self.sample_df = trimmed_orig_df.dropna().sample(n=min(len(trimmed_orig_df.dropna()), 50))
+            self.sample_df = trimmed_orig_df.dropna().sample(n=min(len(trimmed_orig_df.dropna()), 50), random_state=0)
         elif len(self.orig_df.dropna()) > 50:
-            self.sample_df = self.orig_df.dropna().sample(n=50)
+            self.sample_df = self.orig_df.dropna().sample(n=50, random_state=0)
         else:
-            self.sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50))
+            self.sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50), random_state=0)
 
         # Similar to numeric_vals_filled, fill in this for the sample_df
         for col_name in self.numeric_cols:
@@ -1021,6 +1021,7 @@ class DataConsistencyChecker:
         self.nunique_dict = None
         self.count_most_freq_value_dict = None
         self.words_list_dict = None
+        self.word_counts_dict = None
 
     def generate_synth_data(self, all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none"):
         """
@@ -1041,9 +1042,12 @@ class DataConsistencyChecker:
         """
         assert add_nones in ['none', 'one-row', 'in-sync', 'random', '80-percent']
 
-        random.seed(seed)
         self.synth_df = pd.DataFrame()
         for test_id in self.test_dict.keys():
+            # Set the seed for each test, to ensure the synthetic data is the same regardless which other synthetic
+            # columns are included.
+            random.seed(seed)
+            np.random.seed(seed)
             if all_cols or \
                     ((execute_list is None and exclude_list is None) or
                      (execute_list and test_id in execute_list) or
@@ -1912,7 +1916,7 @@ class DataConsistencyChecker:
             # If there are no values flagged for this test in this feature, there will not be a column in
             # test_results_df. In this case, return any values.
             if not is_patterns and results_col_name not in self.test_results_df.columns:
-                return self.orig_df[col_name].sample(n=n_examples)
+                return self.orig_df[col_name].sample(n=n_examples, random_state=0)
 
             df = None
             if test_id in ['BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES', 'BINARY_AND', 'BINARY_OR',
@@ -2070,14 +2074,14 @@ class DataConsistencyChecker:
                 start_point = np.random.randint(0, len(df)-n_examples)
                 return df.iloc[start_point: start_point + n_examples]
             else:
-                return df.sample(n=min(len(df), n_examples))
+                return df.sample(n=min(len(df), n_examples), random_state=0)
         else:
             good_indexes = [1] * self.num_rows
             for test_id in self.get_test_list():
                 results_col_name = self.get_results_col_name(test_id, col_name)
                 if results_col_name in self.test_results_df.columns:
                     good_indexes = good_indexes & (self.test_results_df[results_col_name] == 0)
-            return self.orig_df.loc[good_indexes][col_name].sample(n=n_examples)
+            return self.orig_df.loc[good_indexes][col_name].sample(n=n_examples, random_state=0)
 
     ##################################################################################################################
     # Private helper methods to support outputting the results of the analysis in various ways
@@ -3476,6 +3480,20 @@ class DataConsistencyChecker:
             self.words_list_dict[col_name] = self.orig_df[col_name].astype(str).apply(replace_special_with_space).str.split().values
         return self.words_list_dict
 
+    def get_word_counts_dict(self):
+        """
+        This counts null values as having 0 words.
+        """
+        if self.word_counts_dict:
+            return self.get_word_counts_dict
+        self.word_counts_dict = {}
+        for col_name in self.string_cols:
+            col_vals = self.orig_df[col_name].fillna("").astype(str).apply(replace_special_with_space)
+            word_counts_arr = [0 if x is None else len(x) for x in col_vals.str.split()]
+            self.word_counts_dict[col_name] = word_counts_arr
+        return self.word_counts_dict
+
+
     ##################################################################################################################
     # Internal methods to get columns or sets of columns
     ##################################################################################################################
@@ -3903,7 +3921,7 @@ class DataConsistencyChecker:
             # the pattern is simple and for speed. We skip the first set of rows, as they do not have the lag values.
             # The sample is set smaller than the synthetic data size to provide increased testing.
             df_sample = df.iloc[look_back_range:].copy()
-            df_sample = df_sample.sample(n=min(len(df_sample), 900))
+            df_sample = df_sample.sample(n=min(len(df_sample), 900), random_state=0)
 
             n_unique_vals = self.orig_df[col_name].nunique()
 
@@ -4430,7 +4448,7 @@ class DataConsistencyChecker:
 
         # For this test, we do not use self.sample_df, as it has the extreme values removed, which may be preferable
         # to keep for this test
-        sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50))
+        sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50), random_state=0)
 
         # Determine and cache the fraction of the column of the most frequent value per column
         most_freq_per_col = {}
@@ -4893,6 +4911,10 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('few neighbors most', [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000) for _ in range(99)] + [5000])
 
     def __check_few_neighbors(self, test_id):
+        """
+        Handling Null values: Null values do not establish or violate a pattern.
+        """
+
         # This test does not identify patterns, but does identify rows that are distant from both the nearest point
         # before and point afterwards. This does not flag extreme values, only internal outliers.
 
@@ -4914,7 +4936,7 @@ class DataConsistencyChecker:
 
             if num_isolated_points > 0:
                 # Flag the correct rows. We currently have their indexes based on a sorted array.
-                vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y == True]
+                vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
                 self.__process_analysis_binary(
                     test_id,
@@ -4923,7 +4945,7 @@ class DataConsistencyChecker:
                     test_series,
                     (f"The test marked any values more than {diff_threshold:.3f} away from both the next smallest and "
                      "next largest values in the column"),
-                     allow_patterns=False
+                    allow_patterns=False
                 )
 
     def __generate_few_within_range(self):
@@ -4947,6 +4969,9 @@ class DataConsistencyChecker:
         within a range on either side. To do this efficiently, it divides the column into 50 equal-width bins.
         It is concerned with bins of width 1/10 the full data range, but to do this in a more robust manner, it
         uses 50 bins, and considers sets of 7 bins.
+
+        Handling null values: Null values do not add to the count within any bin. Null values will not be flagged as
+        having few within a range.
         """
 
         num_bins = 50
@@ -6411,7 +6436,7 @@ class DataConsistencyChecker:
             if num_same > (self.num_rows * 0.9):
                 continue
 
-            # todo: exlude pairs where the medians are different. We should maybe get the number of digits in each
+            # todo: exclude pairs where the medians are different. We should maybe get the number of digits in each
             #   column above, create a feature at the class level to store this, then in this loop skip any columns
             #   where more than contamination_level values have diff # digits.
 
@@ -7237,7 +7262,7 @@ class DataConsistencyChecker:
         # Try all subsets where it's median is less than this column's, but more than 1/20 of it.
         # For each target column, try all subsets whose minimum values match this column.
 
-        two_rows_np = self.sample_df[self.numeric_cols].sample(n=2).values
+        two_rows_np = self.sample_df[self.numeric_cols].sample(n=2, random_state=0).values
         larger_dict = self.get_larger_pairs_with_bool_dict()
 
         for col_idx, col_name in enumerate(self.numeric_cols):
@@ -7365,7 +7390,7 @@ class DataConsistencyChecker:
         # Try all subsets where it's median is less than this column's, but more than 1/10 of it.
         # For each target column, try all subsets whose minimum values match this column.
 
-        two_rows_np = self.sample_df[self.numeric_cols].sample(n=2).values
+        two_rows_np = self.sample_df[self.numeric_cols].sample(n=2, random_state=0).values
         larger_dict = self.get_larger_pairs_with_bool_dict()
 
         for col_idx, col_name in enumerate(self.numeric_cols):
@@ -7770,7 +7795,7 @@ class DataConsistencyChecker:
         zero and frequently non-zero. We then find the subsets of these columns that are consistently zero and
         non-zero together.
 
-        Handling null values:
+        Handling null values: Null is treated as a non-zero value.
         """
         # todo: when list non-flagged, give both cases
         # todo: in the pattern string, give the number of rows with & without zero for both columns
@@ -7872,7 +7897,7 @@ class DataConsistencyChecker:
                     continue
                 found_any = True
 
-                # todo: check if there already is a pattern. if so, just add these columns to the set.
+                # todo: check if there already is a pattern. if so, add these columns to the set.
                 #   look for: found_existing_pattern
 
                 self.__process_analysis_binary(
@@ -7976,7 +8001,7 @@ class DataConsistencyChecker:
 
             # A simple model should be derivable from a small number of records. We train on 900 rows for robustness
             # and speed
-            train_y = train_y.sample(min(900, len(train_y)))
+            train_y = train_y.sample(min(900, len(train_y)), random_state=0)
             train_x_data = x_data.loc[train_y.index]
 
             regr.fit(train_x_data, train_y)
@@ -8121,7 +8146,7 @@ class DataConsistencyChecker:
 
             # A simple model should be derivable from a small number of records. We train on 900 rows for robustness
             # and speed
-            train_y = train_y.sample(min(900, len(train_y)))
+            train_y = train_y.sample(min(900, len(train_y)), random_state=0)
             train_x_data = x_data.loc[train_y.index]
 
             try:
@@ -8188,7 +8213,6 @@ class DataConsistencyChecker:
                      f'regression\nformula: {regression_formula}'),
                     display_info={'Pred': pd.Series(y_pred)}
                 )
-                # todo: also save the results of the linear regresion and plot this against the actual values
 
     def __generate_small_vs_corr_cols(self):
         """
@@ -8234,7 +8258,7 @@ class DataConsistencyChecker:
                         curr_set.add(j)
             return curr_set
 
-        sub_df = self.orig_df[self.numeric_cols].sample(n=min(self.num_rows, 2000))
+        sub_df = self.orig_df[self.numeric_cols].sample(n=min(self.num_rows, 2000), random_state=0)
         corr_matrix = sub_df.corr(method='spearman')
         correlated_sets_arr=[]
         pair = get_next_corr_pair(corr_matrix, correlated_sets_arr)
@@ -8915,7 +8939,7 @@ class DataConsistencyChecker:
         # If the dataset is large, test on a 2nd sample
         sample_1000_df = None
         if self.num_rows > 10_000:
-            sample_1000_df = self.orig_df[self.binary_cols].sample(n=1000)
+            sample_1000_df = self.orig_df[self.binary_cols].sample(n=1000, random_state=0)
 
         num_pairs, pairs = self.__get_binary_column_pairs_unique(same_vocabulary=True)
         if num_pairs > self.max_combinations:
@@ -9455,7 +9479,7 @@ class DataConsistencyChecker:
             one_zero_df = self.orig_df[list(similar_cols)].copy()
             for c in one_zero_df.columns:
                 one_zero_df[c] = one_zero_df[c].map({col_vals_tuple[0]: 0, col_vals_tuple[1]: 1}).fillna(0).astype(int)
-            sample_one_zero_df = one_zero_df.sample(n=min(self.num_rows, 50))
+            sample_one_zero_df = one_zero_df.sample(n=min(self.num_rows, 50), random_state=0)
             sample_one_zero_np = sample_one_zero_df.values
 
             found_any = False
@@ -10374,33 +10398,46 @@ class DataConsistencyChecker:
 
     def __generate_first_char_small_set(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'first_char_small_set_all' consistently start with a, b, or c
+        Patterns with exception: 'first_char_small_set_most' consistently start with a, b, or c, with one exception
         """
-        self.__add_synthetic_column('first_char_small_set_rand', [[''.join(random.choice(alphanumeric) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('first_char_small_set_all',  [[''.join(random.choice(['a', 'b', 'c']) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('first_char_small_set_most', [[''.join(random.choice(['a', 'b', 'c']) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['xabcde'])
+        self.__add_synthetic_column(
+            'first_char_small_set_rand',
+            [[''.join(random.choice(alphanumeric) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'first_char_small_set_all',
+            [[''.join(random.choice(['A', 'B', 'C']) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'first_char_small_set_most',
+            [[''.join(random.choice(['A', 'B', 'C']) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['xabcde'])
 
     def __check_first_char_small_set(self, test_id):
+        """
+        This test applies to ID and code values, where the first characters may have a specific meaning.
+        """
+
         for col_name in self.string_cols:
             # todo: Skip columns that have only one character for all values
-
-            test_series = self.orig_df[col_name].astype(str).str.slice(0, 1)  # Get the first letter of each value
 
             # Skip columns that have few distinct values
             if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
                 continue
 
-            counts_series = test_series.value_counts(normalize=False) # Get the counts for each first letter
+            test_series = pd.Series([str(x)[:1] if not y else None for x, y in zip(self.orig_df[col_name], self.orig_df[col_name].isna())])
+            num_non_null_vals = self.orig_df[col_name].notna().sum()
+
+            counts_series = test_series.value_counts(normalize=False)  # Get the counts for each first letter
+
             # Check if there's a small set of characters that make up the bulk of the values
-            count_most_common = np.where(counts_series.sort_values(ascending=False).cumsum() > (self.num_rows - self.contamination_level))[0][0]
+            count_most_common = np.where(
+                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.contamination_level))[0][0]
             if count_most_common <= 5:
                 common_first_chars = list(counts_series.sort_values(ascending=False)[:count_most_common+1].index)
                 rare_first_chars = []
                 for c in counts_series.index:
                     if c not in common_first_chars:
                         rare_first_chars.append(c)
-                results_col = test_series.isin(common_first_chars)
+                results_col = test_series.isin(common_first_chars) | self.orig_df[col_name].isna()
                 self.__process_analysis_binary(
                     test_id,
                     col_name,
@@ -10480,8 +10517,8 @@ class DataConsistencyChecker:
 
     def __generate_last_char_small_set(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'last_char_small_set_all' consistently ends with one of a, b, c
+        Patterns with exception: 'last_char_small_set_most' consistently ends with one of a, b, c, with one exception
         """
         self.__add_synthetic_column('last_char_small_set_rand', [[''.join(random.choice(alphanumeric)
             for _ in range(5))][0] for _ in range(self.num_synth_rows)])
@@ -10491,25 +10528,30 @@ class DataConsistencyChecker:
             for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcde'])
 
     def __check_last_char_small_set(self, test_id):
+        """
+        This test applies to ID and code values, where the first characters may have a specific meaning.
+        """
+
         for col_name in self.string_cols:
 
             # It may be trivially true that a column ends with a small set of characters if there are few unique
             # values in the column.
-            if self.orig_df[col_name].nunique() < 20:
+            if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
                 continue
 
-            test_series = self.orig_df[col_name].astype(str).str[-1:]
+            test_series = pd.Series([str(x)[-1] if not y else None for x, y in zip(self.orig_df[col_name], self.orig_df[col_name].isna())])
+            num_non_null_vals = self.orig_df[col_name].notna().sum()
             counts_series = test_series.value_counts(normalize=False)
             # Check if there's a small set of character that make up the bulk of the values
             count_most_common = np.where(
-                counts_series.sort_values(ascending=False).cumsum() > (self.num_rows - self.contamination_level))[0][0]
+                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.contamination_level))[0][0]
             if count_most_common <= 5:
                 common_last_chars = list(counts_series.sort_values(ascending=False)[:count_most_common+1].index)
                 rare_last_chars = []
                 for c in counts_series.index:
                     if c not in common_last_chars:
                         rare_last_chars.append(c)
-                results_col = test_series.isin(common_last_chars)
+                results_col = test_series.isin(common_last_chars) | self.orig_df[col_name].isna()
                 self.__process_analysis_binary(
                     test_id,
                     col_name,
@@ -10689,7 +10731,11 @@ class DataConsistencyChecker:
             [[''.join(random.choice(letters) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcdef'])
 
     def __check_number_alpha_chars(self, test_id):
-        # todo: all these tests, don't flag None or NaN.
+        """
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
         nunique_dict = self.get_nunique_dict()
         for col_name in self.string_cols:
             # Skip columns with very few unique values
@@ -10702,7 +10748,8 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 test_series,
-                "The column contains values with consistently ", "alphabetic characters")
+                "The column contains values with consistently ",
+                "alphabetic characters")
 
     def __generate_number_numeric_chars(self):
         """
@@ -10721,13 +10768,18 @@ class DataConsistencyChecker:
             [['z'.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['432'])
 
     def __check_number_numeric_chars(self, test_id):
+        """
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
         nunique_dict = self.get_nunique_dict()
         for col_name in self.string_cols:
             # Skip columns with very few unique values
             if nunique_dict[col_name] < 5:
                 continue
 
-            test_series = self.orig_df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isdigit()]))
+            test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if e.isdigit()]))
             self.__process_analysis_counts(
                 test_id,
                 col_name,
@@ -10735,7 +10787,7 @@ class DataConsistencyChecker:
                 test_series,
                 "The column contains values with consistently",
                 " numeric characters",
-                allow_patterns= (test_series.max() != 0)
+                allow_patterns=(test_series.max() != 0)
             )
 
     def __generate_number_alphanumeric_chars(self):
@@ -10751,6 +10803,11 @@ class DataConsistencyChecker:
             for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['$432'])
 
     def __check_number_alphanumeric_chars(self, test_id):
+        """
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
         nunique_dict = self.get_nunique_dict()
         for col_name in self.string_cols:
             # Skip columns with very few unique values
@@ -10776,13 +10833,18 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('non-alphanumeric most', [['@'.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['$432'])
 
     def __check_number_non_alphanumeric_chars(self, test_id):
+        """
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
         nunique_dict = self.get_nunique_dict()
         for col_name in self.string_cols:
             # Skip columns with very few unique values
             if nunique_dict[col_name] < 5:
                 continue
 
-            test_series = self.orig_df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
+            test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
             self.__process_analysis_counts(
                 test_id,
                 col_name,
@@ -10809,6 +10871,11 @@ class DataConsistencyChecker:
             [['A'.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['$432'])
 
     def __check_number_chars(self, test_id):
+        """
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
         nunique_dict = self.get_nunique_dict()
         for col_name in self.string_cols:
             # Skip columns with very few unique values
@@ -10838,7 +10905,7 @@ class DataConsistencyChecker:
 
     def __check_many_chars(self, test_id):
         for col_name in self.string_cols:
-            val_lens = self.orig_df[col_name].astype(str).str.len()
+            val_lens = self.orig_df[col_name].fillna("").astype(str).str.len()
             q1 = val_lens.quantile(0.25)
             q3 = val_lens.quantile(0.75)
             upper_limit = q3 + (self.iqr_limit * (q3 - q1))
@@ -11135,7 +11202,7 @@ class DataConsistencyChecker:
         characters.
 
         This tests only string columns that have short strings, but not single characters, and many unique values.
-        
+
         Handling null values: patterns are not considered violated if any cells contain null values.
         """
 
@@ -11184,8 +11251,8 @@ class DataConsistencyChecker:
 
     def __generate_first_word(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'first_word all' consistently begins with the word 'abc'
+        Patterns with exception: 'first_word most' consistently begins with the word 'abc', with one exception.
         """
         self.__add_synthetic_column('first_word rand', [''.join(np.random.choice(['a', 'b' ' '], 10)) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('first_word all', ["abc-" + np.random.choice(list(string.ascii_letters)) for _ in range(self.num_synth_rows)])
@@ -11195,18 +11262,19 @@ class DataConsistencyChecker:
     def __check_first_word(self, test_id):
         """
         Here we define words as strings separated by whitespace or common separator characters such as hyphens.
+        This test skips columns that are primarily one word or have few unique values.
         """
         for col_name in self.string_cols:
             col_vals = self.orig_df[col_name].astype(str).apply(replace_special_with_space)
 
             # Skip columns that are primarily 1 word
             word_arr = col_vals.str.split()
-            num_words_arr = [len(x) for x in word_arr]
+            num_words_arr = [len(x) for x, y in zip(word_arr, self.orig_df[col_name].isna()) if not y]
             if pd.Series(num_words_arr).quantile(0.5) <= 1:
                 continue
 
             # Skip columns that have few unique values
-            if self.orig_df[col_name].nunique() < 10:
+            if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
                 continue
 
             first_words = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
@@ -11217,7 +11285,7 @@ class DataConsistencyChecker:
                     common_values.append(v)
             if len(common_values) > self.contamination_level:
                 continue
-            test_series = [x in common_values for x in first_words]
+            test_series = [x in common_values for x in first_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
                 col_name,
@@ -11246,12 +11314,12 @@ class DataConsistencyChecker:
 
             # Skip columns that are primarily 1 word
             word_arr = col_vals.str.split()
-            num_words_arr = [len(x) for x in word_arr]
-            if pd.Series(num_words_arr).quantile(0.1) <= 1:
+            num_words_arr = [len(x) for x, y in zip(word_arr, self.orig_df[col_name].isna()) if not y]
+            if pd.Series(num_words_arr).quantile(0.5) <= 1:
                 continue
 
             # Skip columns that have few unique values
-            if self.orig_df[col_name].nunique() < 10:
+            if self.orig_df[col_name].nunique() < math.sqrt(self.num_rows):
                 continue
 
             last_words = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
@@ -11262,7 +11330,7 @@ class DataConsistencyChecker:
                     common_values.append(v)
             if len(common_values) > self.contamination_level:
                 continue
-            test_series = [x in common_values for x in last_words]
+            test_series = [x in common_values for x in last_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
                 col_name,
@@ -11272,32 +11340,38 @@ class DataConsistencyChecker:
 
     def __generate_num_words(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: None. allow_patterns is set False.
+        Patterns with exception: 'num_words most' consistently has 1 to 5 words, with one exception with many more
+            words.
         """
         self.__add_synthetic_column('num_words all',
                                     [[''.join(random.choice(string.ascii_letters[:10] + ' ')
                                               for _ in range(np.random.randint(1, 20)))][0]
                                      for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('num_words most', self.synth_df['num_words all'])
-        self.synth_df.loc[999, 'num_words all'] = 'a b c a b c a b c a b c a b c a b c a b c a b c a b c a b c '
+        self.synth_df.loc[999, 'num_words most'] = 'a b c a b c a b c a b c a b c a b c a b c a b c a b c a b c '
         pass
 
     def __check_num_words(self, test_id):
+        """
+        This flags values with unusually many words. Words are defined here as string separated by whitespace or any
+        non-alphanumeric characters, so may count tokens within words.
+        """
+
+        word_counts_dict = self.get_word_counts_dict()
+
         for col_name in self.string_cols:
-            col_vals = self.orig_df[col_name].astype(str).apply(replace_special_with_space)
-            word_arr = col_vals.str.split()
-            word_counts_arr = pd.Series([len(x) for x in word_arr])
+            word_counts_arr = pd.Series(word_counts_dict[col_name])
             q1 = word_counts_arr.quantile(0.25)
             q3 = word_counts_arr.quantile(0.75)
             upper_limit = q3 + (self.iqr_limit * (q3 - q1))
-            test_series = [x < upper_limit for x in word_counts_arr]
+            test_series = [x < upper_limit for x in word_counts_arr] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
                 col_name,
                 [col_name],
                 test_series,
-                (f'The values in column "{col_name}" have word count with 25th percentile {q1} characters and 75th '
+                (f'The values in column "{col_name}" have word count with 25th percentile {q1} words and 75th '
                  f'percentile {q3} words'),
                 f' Flagging any values with over {upper_limit} words.',
                 allow_patterns=False
@@ -11442,9 +11516,9 @@ class DataConsistencyChecker:
                                                         ['bbb'] * group_b_len +
                                                         ['ccc'] * (group_c_len - 1) + ['aaa'])
 
-    def __check_grouped_stings_column(self, test_id, sort_col, col_name, col_values):
+    def __check_grouped_strings_column(self, test_id, sort_col, col_name, col_values):
         """
-        This does not currently work well with many Null values.
+        Handling null values: this does not currently support many null values.
         """
 
         # Skip if there are any rare values
@@ -11507,7 +11581,6 @@ class DataConsistencyChecker:
             pattern_cols,
             test_series,
             f'The values in "{col_name}" are consistently grouped together. The overall order is: {groups_str}'
-            # f'{col_df[col_df["Same"] == False][col_name].tolist()} {groups_str}'
         )
 
     def __check_grouped_strings(self, test_id):
@@ -11519,7 +11592,7 @@ class DataConsistencyChecker:
                 continue
             df = self.orig_df.copy()
             col_series = df[col_name]
-            self.__check_grouped_stings_column(test_id, None, col_name, col_series)
+            self.__check_grouped_strings_column(test_id, None, col_name, col_series)
 
     ##################################################################################################################
     # Data consistency checks for pairs of non-numeric columns
@@ -11837,7 +11910,7 @@ class DataConsistencyChecker:
 
     def __check_rare_pair_first_word_val(self, test_id):
         first_words_dict = {}
-        word_count_dict = {}
+        word_count_dict = {}  # todo: call self.get_word_counts_dict()
         for col_name in self.string_cols:
             col_vals = self.orig_df[col_name].astype(str).apply(replace_special_with_space)
             first_words_dict[col_name] = pd.Series([x[0] if len(x) > 0 else "" for x in col_vals.str.split()])
@@ -11930,6 +12003,7 @@ class DataConsistencyChecker:
         for col_idx_1 in range(len(self.string_cols)-1):
             col_name_1 = self.string_cols[col_idx_1]
             col_vals = self.orig_df[col_name_1].astype(str).apply(replace_special_with_space)
+            # todo: call self.get_word_counts_dict()
             word_counts = [0 if x is None else len(x) for x in col_vals.str.split()]
             if max(word_counts) > 1:
                 continue
@@ -12012,7 +12086,7 @@ class DataConsistencyChecker:
 
     def __check_similar_words(self, test_id):
         # todo: we can probably put this in process_data(). this is also used in __check_similar_num_words()
-        word_counts_dict = {}
+        word_counts_dict = {} # todo: call self.get_word_counts_dict()
         word_counts_medians = {}
         for col_name in self.string_cols:
             word_counts_dict[col_name] = pd.Series([len(x.split()) if (not is_missing(x)) else 0 for x in self.orig_df[col_name]])
@@ -12069,7 +12143,7 @@ class DataConsistencyChecker:
 
     def __check_similar_num_words(self, test_id):
         # todo: handle where one column or the other has None or Nan values but otherwise similar
-        word_counts_dict = {}
+        word_counts_dict = {}  # todo: call self.get_word_counts_dict()
         word_counts_medians = {}
         for col_name in self.string_cols:
             word_counts_dict[col_name] = pd.Series([len(x.split()) if (not is_missing(x)) else 0 for x in self.orig_df[col_name]])
@@ -12529,11 +12603,8 @@ class DataConsistencyChecker:
                 continue
 
             # todo: test on a sample first
-            try:
-                test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[:len(x)]))
-                               for x, y in zip(self.orig_df[col_name_1].astype(str), self.orig_df[col_name_2].astype(str))]
-            except:
-                x = 9
+            test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[:len(x)]))
+                           for x, y in zip(self.orig_df[col_name_1].astype(str), self.orig_df[col_name_2].astype(str))]
             test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
             self.__process_analysis_binary(
                 test_id,
@@ -12580,7 +12651,7 @@ class DataConsistencyChecker:
 
             # todo: test on a sample first
             test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[-len(x):]))
-                           for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])]
+                           for x, y in zip(self.orig_df[col_name_1].astype(str), self.orig_df[col_name_2].astype(str))]
             test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
             self.__process_analysis_binary(
                 test_id,
@@ -12995,7 +13066,7 @@ class DataConsistencyChecker:
             col_vals = self.orig_df[col_name_1].astype(str).apply(replace_special_with_space)
 
             # Check the column's values are usually more than 1 word
-            word_arr = col_vals.str.split()
+            word_arr = col_vals.str.split() # todo: call self.get_word_counts_dict()
             word_counts_arr = pd.Series([len(x) for x in word_arr])
             if word_counts_arr.quantile(0.75) <= 1:
                 continue
@@ -13129,7 +13200,7 @@ class DataConsistencyChecker:
             col_vals = self.orig_df[col_name_1].astype(str).apply(replace_special_with_space)
 
             # Check the column's values are usually more than 1 word
-            word_arr = col_vals.str.split()
+            word_arr = col_vals.str.split() # todo: call self.get_word_counts_dict()
             word_counts_arr = pd.Series([len(x) for x in word_arr])
             if word_counts_arr.quantile(0.75) <= 1:
                 continue
@@ -13226,7 +13297,7 @@ class DataConsistencyChecker:
             'num_grp_str all': ['a'] * group_a_len + ['b'] * group_b_len + ['c'] * group_c_len,
             'num_grp_str most': ['a'] * group_a_len + ['b'] * group_b_len + ['c'] * (group_c_len - 1) + ['a']
         })
-        df = df.sample(n=len(df))  # shuffle the dataframe
+        df = df.sample(n=len(df), random_state=0)  # shuffle the dataframe
         df = df.reset_index(drop=True)
         for col_name in df.columns:
             self.__add_synthetic_column(col_name, df[col_name])
@@ -13234,11 +13305,15 @@ class DataConsistencyChecker:
     def __check_grouped_strings_by_numeric(self, test_id):
         """
         This is similar to GROUPED_STRINGS, but checks where the string/binary values are grouped when sorted by a
-        numeric or date column, as opposed to the given order of the table.
+        numeric or date column, as opposed to the row order of the table.
+
+        Handling null values: null values are treated as any other value and so if interspersed through the column
+        will negate any grouping.
         """
         for col_idx, col_name_1 in enumerate(self.numeric_cols + self.date_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
-                print(f"  Examining column {col_idx} of {len(self.numeric_cols) + len(self.date_cols)} numeric and date columns")
+                print((f"  Examining column {col_idx} of {len(self.numeric_cols) + len(self.date_cols)} numeric and "
+                       f"date columns"))
 
             if self.orig_df[col_name_1].nunique() < (self.num_valid_rows[col_name_1] - self.contamination_level):
                 continue
@@ -13248,7 +13323,7 @@ class DataConsistencyChecker:
                 df = self.orig_df.copy()
                 df = df.sort_values(col_name_1)
                 col_series = df[col_name_2]
-                self.__check_grouped_stings_column(test_id, col_name_1, col_name_2, col_series)
+                self.__check_grouped_strings_column(test_id, col_name_1, col_name_2, col_series)
 
     ##################################################################################################################
     # Data consistency checks for two string and one numeric column
@@ -13284,8 +13359,8 @@ class DataConsistencyChecker:
 
     def __check_large_given_pair(self, test_id):
         """
-        With many Null values, the count of each pair of values in the 2 string columns may be too low to execute this
-        test.
+        Handling null values: with many Null values, the count of each pair of values in the 2 string columns may be
+        too low to execute this test.
         """
 
         # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
@@ -13699,8 +13774,10 @@ class DataConsistencyChecker:
 
     def __generate_dt_classifier(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'dt cls. 2' may be predicted from 'dt cls. 1a' and 'dt cls. 1b', and optionally
+            'dt cls. 3'
+        Patterns with exception: 'dt cls. 3' may be predicted from 'dt cls. 1a' and 'dt cls. 1b', and optionally
+            'dt cls. 2', with exceptions.
         """
         self.__add_synthetic_column('dt cls. 1a', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('dt cls. 1b', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
@@ -13722,8 +13799,6 @@ class DataConsistencyChecker:
             self.synth_df.at[999, 'dt cls. 3'] = 'B'
         else:
             self.synth_df.at[999, 'dt cls. 3'] = 'A'
-
-
 
     def __check_dt_classifier(self, test_id):
         """"
@@ -13803,7 +13878,7 @@ class DataConsistencyChecker:
                         if c_name_prefix in rule:
                             part_a, part_b = rule.split(c_name_prefix)
                             val_name = part_b.split()[0]
-                            for v in self.orig_df[c_name].unique():
+                            for v in self.orig_df[c_name].unique().astype(str):
                                 if val_name.startswith(v):
                                     val_name = v
                                     break
@@ -14428,7 +14503,7 @@ class DataConsistencyChecker:
              "values across all or most numeric columns. This flags any rows with an average percentile of "
              f"{lower_limit:.3f} or lower"),
             allow_patterns=False,
-            display_info={"percentiles": rand_df['Avg Percentile'].sample(n=min(len(rand_df), 1000)),
+            display_info={"percentiles": rand_df['Avg Percentile'].sample(n=min(len(rand_df), 1000), random_state=0),
                           "flagged_vals": flagged_vals}
         )
 
@@ -14469,7 +14544,7 @@ class DataConsistencyChecker:
              "values across all or most numeric columns. This flags any rows with an average percentile of "
              f"{upper_limit:.3f} or higher"),
             allow_patterns=False,
-            display_info={"percentiles": rank_df['Avg Percentile'].sample(n=min(len(rank_df), 1000)),
+            display_info={"percentiles": rank_df['Avg Percentile'].sample(n=min(len(rank_df), 1000), random_state=0),
                           "flagged_vals": flagged_vals}
         )
 
