@@ -90,3 +90,14 @@ All outlier detectors require some tuning, and any that return binary labels req
 While exceptions to patterns necessarily require decisions related to thresholds, paterns without exceptions are more straight-forward. In most cases, the pattern clearly exists or does not. For example a numeric column is monotonically increasing or it is not. With exceptions, some decisions must be made about the nature of the exceptions, but in most cases, this is simply a case of specifiying the number of exceptions permitted such that we recognize a pattern as still existing, albeit with exceptions. This is configurable, though with, we believe, a sensible default of 0.5%, used equally for all tests. 
 
 This performs enough tests that it's reasonably likely to find something of interest, and there is some meaning in the fact that it does not when it does not.  
+
+## Synthetic Data
+The tool provides an API to generate synthetic data, which has been designed to provide columns that will be flagged by the tests, such that each test flags at least one column or set of columns. This may be useful for new users to help understand the tests, as they provide useful examples, and may be altered to determine when specifically the tests flag or do not flag patterns. The synthetic data is also used by the unit tests to help ensure consistent behaviour as the tests are expanded and improved. 
+
+## Unit Tests
+The unit tests are organized such that each test .py file tests one DataQualityChecker test, both on real and synthetic data. 
+
+### Synthetic data with null values
+As null values are common in real-world data, each test must be able to handle null values in a defined manner. For most tests, the null values do not support or violate the patterns discovered. 
+
+### Synthetic data on all columns vs those specific to the tests
