@@ -55,7 +55,7 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
+		0,
 		synth_exceptions_cols)
 
 

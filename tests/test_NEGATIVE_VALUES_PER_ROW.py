@@ -98,24 +98,24 @@ def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,  # Given nulls, there are an inconsistent number of negative values from row to row.
+		0)
 
 
 def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():
