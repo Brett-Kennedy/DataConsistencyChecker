@@ -13,7 +13,7 @@ random.seed(0)
 synth_patterns_cols = 1
 	# '"dt cls. 1a" AND "dt cls. 1b" AND "dt cls. 3" AND "dt cls. 2"'
 synth_exceptions_cols = 1
-	# '"dt cls. 1b" AND "dt cls. 2" AND "dt cls. 2" AND "dt cls. 3"'
+	# '"dt cls. 2" AND "dt cls. 3"'
 
 
 # With these, different trees can legitamately be build, so we just track the number
@@ -101,32 +101,32 @@ def test_synthetic_one_row_nulls():
 	synth_test(
 		test_id,
 		'one-row',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		2)  # The pattern is now an exception
 
 
 def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():

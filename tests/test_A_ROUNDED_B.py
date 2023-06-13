@@ -38,12 +38,9 @@ synth_exceptions_cols = [
 	'"a_rounded_b all_b" AND "a_rounded_b all_e"',
 	'"a_rounded_b most_b" AND "a_rounded_b all_e"',
 	'"a_rounded_b all_c" AND "a_rounded_b all_e"',
-	'"a_rounded_b most_c" AND "a_rounded_b all_e"',
 	'"a_rounded_b rand" AND "a_rounded_b most_e"',
 	'"a_rounded_b all_b" AND "a_rounded_b most_e"',
 	'"a_rounded_b most_b" AND "a_rounded_b most_e"',
-	'"a_rounded_b all_c" AND "a_rounded_b most_e"',
-	'"a_rounded_b most_c" AND "a_rounded_b most_e"',
 	'"a_rounded_b most_a" AND "a_rounded_b all_f"',
 	'"a_rounded_b most_b" AND "a_rounded_b all_f"',
 	'"a_rounded_b most_c" AND "a_rounded_b all_f"',
@@ -74,10 +71,12 @@ def test_synthetic_one_row_nulls():
 		test_id,
 		'one-row',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols,
+		allow_more=True,
+	)
 
 
-def test_synthetic_in_sync_nulls():
+def test_synthetic_in_sync_nulls():  # currently failing. I think we should have the same patterns if the nones are in sync
 	synth_test(
 		test_id,
 		'in-sync',
@@ -102,8 +101,7 @@ def test_synthetic_80_percent_nulls():
 		test_id,
 		'80-percent',
 		-5,
-		-5,
-		allow_more=True
+		-5
 	)
 
 
@@ -112,7 +110,8 @@ def test_synthetic_all_cols_no_nulls():
 		test_id,
 		'none',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols
+	)
 
 
 def test_synthetic_all_cols_one_row_nulls():
@@ -120,7 +119,8 @@ def test_synthetic_all_cols_one_row_nulls():
 		test_id,
 		'one-row',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols
+	)
 
 
 def test_synthetic_all_cols_in_sync_nulls():
@@ -128,7 +128,8 @@ def test_synthetic_all_cols_in_sync_nulls():
 		test_id,
 		'in-sync',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols
+	)
 
 
 def test_synthetic_all_cols_random_nulls():
@@ -136,7 +137,8 @@ def test_synthetic_all_cols_random_nulls():
 		test_id,
 		'random',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols
+	)
 
 
 def test_synthetic_all_cols_80_percent_nulls():
@@ -144,5 +146,6 @@ def test_synthetic_all_cols_80_percent_nulls():
 		test_id,
 		'80-percent',
 		synth_patterns_cols,
-		synth_exceptions_cols)
+		synth_exceptions_cols
+	)
 

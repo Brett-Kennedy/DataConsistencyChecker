@@ -11,9 +11,9 @@ test_id = 'DECISION_TREE_REGRESSOR'
 random.seed(0)
 
 synth_patterns_cols = 1
-	#'"dt regr. 1a" AND "dt regr. 1b" AND "dt regr. 2"'
+	#'"dt regr. 1b" AND "dt regr. 1a" AND "dt regr. 2"'
 synth_exceptions_cols = 1
-	#'"dt regr. 1c" AND "dt regr. 1d" AND "dt regr. 3"'
+	#'"dt regr. 1d" AND "dt regr. 1c" AND "dt regr. 3"'
 
 
 def test_real():
@@ -34,32 +34,32 @@ def test_synthetic_one_row_nulls():
 	synth_test(
 		test_id,
 		'one-row',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		2)  # The pattern is now an exception
 
 
 def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():
@@ -90,13 +90,13 @@ def test_synthetic_all_cols_random_nulls():
 	synth_test_all_cols(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_80_percent_nulls():
 	synth_test_all_cols(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)

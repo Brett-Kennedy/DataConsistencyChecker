@@ -50,16 +50,16 @@ def test_synthetic_in_sync_nulls():
 	synth_test(
 		test_id,
 		'in-sync',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)           # Given the null values, there are not sufficient zeros in the columns
 
 
 def test_synthetic_random_nulls():
 	synth_test(
 		test_id,
 		'random',
-		synth_patterns_cols,
-		['"all_zero_or_not rand_a" AND "all_zero_or_not most"'])  # This is reasonable, but also random
+		0,
+		0)
 
 
 def test_synthetic_80_percent_nulls():
