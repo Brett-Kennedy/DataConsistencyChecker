@@ -18,7 +18,7 @@ def test_real():
 	res = build_default_results()
 	res['jm1'] = (0, ['"v" AND "d" AND "e"', '"d" AND "i" AND "v"'])
 	res['kc2'] = (0, ['"v" AND "d" AND "e"'])
-	res['page_blocks'] = ([
+	res['page-blocks'] = ([
 			'"height" AND "lenght" AND "area"',
 			'"height" AND "eccen" AND "lenght"',
 			'"mean_tr" AND "wb_trans" AND "blackpix"'

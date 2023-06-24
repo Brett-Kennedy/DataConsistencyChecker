@@ -14,6 +14,7 @@ synth_patterns_cols = ['"larger all" AND "larger rand"']
 synth_exceptions_cols = ['"larger most" AND "larger rand"']
 
 
+# !!!! I've updated check_larger since this to exclude cases where the 2 columns are almost the same.
 def test_real():
 	res = build_default_results()
 	res['abalone'] = (2, 8)

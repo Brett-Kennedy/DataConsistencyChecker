@@ -10,9 +10,11 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'MEAN_OF_COLUMNS'
 random.seed(0)
 
-synth_patterns_cols = []
+synth_patterns_cols = [
+	'"mean_of_cols rand_a" AND "mean_of_cols rand_b" AND "mean_of_cols rand_c" AND "mean_of_cols all"'
+]
 synth_exceptions_cols = [
-	'"mean_of_cols all" AND "mean_of_cols rand_a" AND "mean_of_cols rand_b" AND "mean_of_cols rand_c" AND "mean_of_cols most"'
+	'"mean_of_cols rand_a" AND "mean_of_cols rand_b" AND "mean_of_cols rand_c" AND "mean_of_cols most"'
 ]
 
 
