@@ -11,9 +11,9 @@ test_id = 'DECISION_TREE_CLASSIFIER'
 random.seed(0)
 
 synth_patterns_cols = 1
-	# '"dt cls. 1a" AND "dt cls. 1b" AND "dt cls. 3" AND "dt cls. 2"'
+	# '"dt cls. 1a" AND "dt cls. 1b" AND "dt cls. 2"'
 synth_exceptions_cols = 1
-	# '"dt cls. 2" AND "dt cls. 3"'
+	# '"dt cls. 1a" AND "dt cls. 1b" AND "dt cls. 3""'
 
 
 # With these, different trees can legitamately be build, so we just track the number

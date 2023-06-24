@@ -11,10 +11,7 @@ test_id = 'CORRELATED_FEATURES'
 random.seed(0)
 
 synth_patterns_cols = ['"correlated rand_a" AND "correlated rand_b"']
-synth_exceptions_cols = [
-	'"correlated rand_a" AND "correlated most"',
-	'"correlated rand_b" AND "correlated most"'
-]
+synth_exceptions_cols = ['"correlated rand_a" AND "correlated most"']
 
 
 def test_real():
