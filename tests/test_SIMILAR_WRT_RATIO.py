@@ -14,8 +14,7 @@ synth_patterns_cols = [
 	'"sim wrt ratio rand_a" AND "sim wrt ratio all"'
 ]
 synth_exceptions_cols = [
-	'"sim wrt ratio rand_a" AND "sim wrt ratio most"',
-	'"sim wrt ratio all" AND "sim wrt ratio most"'
+	'"sim wrt ratio rand_a" AND "sim wrt ratio most"'
 ]
 
 

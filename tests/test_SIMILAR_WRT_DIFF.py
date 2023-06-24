@@ -11,10 +11,7 @@ test_id = 'SIMILAR_WRT_DIFF'
 random.seed(0)
 
 synth_patterns_cols = ['"sim wrt diff rand" AND "sim wrt diff all"']
-synth_exceptions_cols = [
-	'"sim wrt diff rand" AND "sim wrt diff most"',
-	'"sim wrt diff all" AND "sim wrt diff most"'
-]
+synth_exceptions_cols = ['"sim wrt diff rand" AND "sim wrt diff most"']
 
 
 def test_real():

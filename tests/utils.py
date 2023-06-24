@@ -13,7 +13,7 @@ from check_data_consistency import DataConsistencyChecker
 from list_real_files import real_files
 
 # Settings. Adjust these before running the tests to run a reduced set of tests.
-TEST_REAL = False
+TEST_REAL = True
 TEST_SYNTHETIC = True
 TEST_SYNTHETIC_NONES = True
 TEST_SYNTHETIC_ALL_COLUMNS = False
