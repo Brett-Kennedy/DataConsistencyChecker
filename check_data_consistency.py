@@ -39,14 +39,6 @@ warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 # Uncomment to debug any warnings.
 # warnings.filterwarnings("error")
 
-# Display options. There are relevant only when running this in a debugger or notebook.
-# Note: these can significantly slow down Jupyter in some environments
-# todo: only set these in non-jupyter
-pd.set_option('display.width', 32000)
-pd.set_option('display.max_columns', 3000)
-pd.set_option('display.max_colwidth', 3000)
-pd.set_option('display.max_rows', 5000)
-
 # Constants used to generate synthetic data
 letters = string.ascii_letters
 digits = string.digits
@@ -165,9 +157,19 @@ class DataConsistencyChecker:
         self.DEBUG_MSG = True
         self.num_exceptions = 0
 
+        # Display options. There are relevant only when running this in a debugger or notebook.
+        # Note: these can significantly slow down Jupyter in some environments, and so is set only for debugger
+        # environments.
+        if not is_notebook():
+            pd.set_option('display.width', 32000)
+            pd.set_option('display.max_columns', 3000)
+            pd.set_option('display.max_colwidth', 3000)
+            pd.set_option('display.max_rows', 5000)
+
         # A dictionary describing each test. For each, we have the ID, description, method to test for the pattern
         # and exceptions, a method to generate synthetic data to demonstrate the test, and in indicator if the
-        # pattern is in the patterns short list, the patterns listed by default in a call to get_patterns().
+        # pattern is in the patterns short list (ie, the patterns listed by default in a call to get_patterns()),
+        # and other properties of the tests. See the list of enums above.
         self.test_dict = {
 
             # Tests on single columns of any type
@@ -277,7 +279,7 @@ class DataConsistencyChecker:
             'LARGER':                   ('Check if one column is consistently larger than another.',
                                          self.__check_larger, self.__generate_larger,
                                          False, True, False),
-            'MUCH_LARGER':              (('Check if one column is consistently at least 1 order of magnitude larger '
+            'MUCH_LARGER':              (('Check if one column is consistently at least one order of magnitude larger '
                                           'than another.'),
                                          self.__check_much_larger, self.__generate_much_larger,
                                          False, True, False),
@@ -845,6 +847,11 @@ class DataConsistencyChecker:
         self.numeric_cols = []
         self.date_cols = []
         self.string_cols = []
+
+        # As this is called before check_data_quality, self.contamination_level is not yet set. We use here the
+        # default value in order to determine numberic columns with some non-numeric values.
+        default_contamination_level = self.num_rows * 0.005
+
         for col_name in self.orig_df.columns:
             if self.orig_df[col_name].nunique() == 2:
                 self.binary_cols.append(col_name)
@@ -852,7 +859,7 @@ class DataConsistencyChecker:
                 self.date_cols.append(col_name)
             elif pandas_types.is_numeric_dtype(self.orig_df[col_name]) or \
                     self.orig_df[col_name].astype(str).str.replace('-', '', regex=False).str.\
-                            replace('.', '', regex=False).str.isdigit().tolist().count(False) < self.contamination_level:
+                            replace('.', '', regex=False).str.isdigit().tolist().count(False) < default_contamination_level:
                 self.numeric_cols.append(col_name)
             else:
                 try:
@@ -1101,7 +1108,9 @@ class DataConsistencyChecker:
         Args:
             df: the dataframe containing all data to be assessed
 
-            todo: move comments for execute & exclude list here
+            execute_list: todo: fill in
+
+            exclude_list:  todo: fill in
 
             test_start_id: Each test has a unique number. Specifying a value greater than 0 will skip the initial tests.
                 This may be specified to continue a previous execution that was incomplete.
@@ -1113,7 +1122,7 @@ class DataConsistencyChecker:
                 to still be in place. If set as an integer, this defines the maximum number of rows, as opposed to the
                 fraction.
 
-            run_parallel: fill in!!!!!!!
+            run_parallel: todo: fill in
 
         Returns:
             This returns the exceptions_summary dataframe.
@@ -1182,10 +1191,18 @@ class DataConsistencyChecker:
             print("No valid tests specified.")
             return None
 
-        # Initialize variables related to the run
+        # Initialize the variables related to the run
         self.n_tests_executed = 0
         self.execution_times = {}
         self.num_exceptions = 0
+
+        # Initialize the variables related to the results found
+        self.patterns_arr = []
+        self.patterns_df = None
+        self.results_summary_arr = []
+        self.exceptions_summary_df = None
+        self.test_results_df = None
+        self.test_results_by_column_np = np.zeros((self.num_rows, len(self.orig_df.columns)), dtype=float)
 
         # Get the test index of each test
         test_idx_dict = {x: y for x, y in
@@ -1239,9 +1256,12 @@ class DataConsistencyChecker:
         self.exceptions_summary_df['Issue ID'] = list(range(len(self.exceptions_summary_df)))
 
         # Save safe versions of the exceptions found, to support restore_issues() if called
-        self.safe_exceptions_summary_df = self.exceptions_summary_df.copy()
-        self.safe_test_results_df = self.test_results_df.copy()
-        self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
+        if self.exceptions_summary_df is not None:
+            self.safe_exceptions_summary_df = self.exceptions_summary_df.copy()
+        if self.test_results_df is not None:
+            self.safe_test_results_df = self.test_results_df.copy()
+        if self.test_results_by_column_np is not None:
+            self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
 
         # Display summary statistics
         self.__output_stats()
@@ -1252,13 +1272,29 @@ class DataConsistencyChecker:
     # Public methods to output information about the tool, unrelated to any specific dataset or test execution
     ##################################################################################################################
     def get_test_list(self):
+        """
+        Returns a python list, listing each test available by ID.
+        """
+
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]]
 
     def get_test_descriptions(self):
+        """
+        Returns a python dictionary, with each test ID as key, matched with a short text explanation of the test.
+        """
+
         return {x: self.test_dict[x][TEST_DEFN_DESC]
                 for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
 
     def print_test_descriptions(self, long_desc=False):
+        """
+        Prints to screen a prettified list of tests and their descriptions.
+
+        :param long_desc
+            If True, longer descriptions will be displayed for tests where available. If False, the short descriptions
+            only will be dislayed.
+        """
+
         for test_id in self.test_dict.keys():
             text = self.test_dict[test_id][TEST_DEFN_DESC]
             if long_desc:
@@ -1332,8 +1368,35 @@ class DataConsistencyChecker:
     # Public methods to output the results of the analysis in various ways
     ##################################################################################################################
 
-    # todo: change short_list to show_short_list as in display_detailed_
-    def get_patterns_summary(self, test_exclude_list=None, column_exclude_list=None, short_list=True):
+    def get_test_ids_with_results(self, include_patterns=True, include_exceptions=True):
+        """
+        Gets a list of test ids, which may be used, for example, to loop through tests calling other APIs such as
+        display_detailed_results()
+
+        :param: include_patterns: bool
+        If True, the returned list will include all test ids for tests that flagged at least one pattern without
+        exceptions
+
+        :param: include_exceptions: bool
+        If True, the returned list will include all test ids for tests that flagged at least one pattern with
+        exceptions
+
+        :return:
+        Returns an array of test ids, where each test found at least one pattern, with or without exceptions, as
+        specified
+        """
+
+        ret_list = []
+        if include_patterns:
+            ret_list = self.patterns_df['Test ID'].unique()
+
+        if include_exceptions:
+            ret_list += self.exceptions_summary_df['Test ID'].unique()
+
+        ret_list = list(set(ret_list))
+        return ret_list
+
+    def get_patterns_summary(self, test_exclude_list=None, column_exclude_list=None, show_short_list=True):
         """
         This returns a dataframe containing a list of all, or some, of the identified patterns that had no exceptions.
         Which patterns are included is controlled by the parameters. Each row of the returned dataframe represents
@@ -1347,7 +1410,7 @@ class DataConsistencyChecker:
         column_exclude_list: list
         If set, rows related to these columns will be excluded.
 
-        short_list: bool
+        show_short_list: bool
         If True, only the tests that are most relevant (least noisy) will be returned. If False, all identified
         patterns matching the other parameters will be returned.
         """
@@ -1361,14 +1424,14 @@ class DataConsistencyChecker:
         if self.patterns_df is None:
             return None
 
-        if test_exclude_list is None and column_exclude_list is None and not short_list:
+        if test_exclude_list is None and column_exclude_list is None and not show_short_list:
             return self._clean_column_names(self.patterns_df.drop(columns=['Display Information']))
         df = self.patterns_df.copy()
         if test_exclude_list:
             df = df[~df['Test ID'].isin(test_exclude_list)]
         if column_exclude_list:
             df = df[~df['Column(s)'].isin(column_exclude_list)]
-        if short_list:
+        if show_short_list:
             df = df[df['Test ID'].isin(self.get_patterns_shortlist())]
         return self._clean_column_names(df.drop(columns=['Display Information']))
 
@@ -1720,14 +1783,15 @@ class DataConsistencyChecker:
                         print("Pattern found (without exceptions)")
                         print(sub_patterns.iloc[0]['Description of Pattern'])
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
-                        self.display_examples(
-                            test_id,
-                            cols,
-                            columns_set,
-                            is_patterns=True,
-                            display_info=sub_patterns.iloc[0]['Display Information'])
+                        if include_examples:
+                            self.__display_examples(
+                                test_id,
+                                cols,
+                                columns_set,
+                                is_patterns=True,
+                                display_info=sub_patterns.iloc[0]['Display Information'])
                         if plot_results:
-                            self.draw_results_plots(
+                            self.__draw_results_plots(
                                 test_id,
                                 cols,
                                 columns_set,
@@ -1782,7 +1846,7 @@ class DataConsistencyChecker:
                         # Display examples not flagged
                         result_col_name = self.get_results_col_name(test_id, columns_set)
                         cols = self.col_to_original_cols_dict[result_col_name]
-                        self.display_examples(
+                        self.__display_examples(
                             test_id,
                             cols,
                             columns_set,
@@ -1792,7 +1856,7 @@ class DataConsistencyChecker:
                         print()
                         print("Examples of flagged values:")
                         display_cols = list(self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)])
-                        flagged_df = self.get_rows_flagged(test_id, columns_set).head(10)
+                        flagged_df = self.__get_rows_flagged(test_id, columns_set).head(10)
                         if flagged_df is None:
                             continue
                         self.__draw_sample_dataframe(
@@ -1810,13 +1874,17 @@ class DataConsistencyChecker:
                             print()
                             print(("Showing the first flagged example with the 5 rows before and 5 rows after (if "
                                    "available):"))
-                            self.__draw_sample_set_rows(flagged_df[display_cols])
+                            self.__draw_sample_set_rows(
+                                flagged_df[display_cols],
+                                test_id,
+                                cols,
+                                display_info=sub_summary.iloc[0]['Display Information'])
 
                     # For some tests, we display one or more plots to make the exceptions more clear
                     if plot_results:
                         result_col_name = self.get_results_col_name(test_id, columns_set)
                         cols = self.col_to_original_cols_dict[result_col_name]
-                        self.draw_results_plots(
+                        self.__draw_results_plots(
                             test_id,
                             cols,
                             columns_set,
@@ -1866,10 +1934,11 @@ class DataConsistencyChecker:
         s.set_title("Distribution of Scores per Row")
         plt.show()
 
-        plt.subplots(figsize=(5, 3))
-        s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
-        s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
-        plt.show()
+        if final_scores_df['FINAL SCORE'].nunique() > 2:
+            plt.subplots(figsize=(5, 3))
+            s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
+            s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
+            plt.show()
 
     def plot_final_scores_distribution_by_feature(self):
         """
@@ -1887,6 +1956,10 @@ class DataConsistencyChecker:
         """
         Display a bar plot representing the distribution of final scores by test.
         """
+        if len(self.exceptions_summary_df) == 0:
+            print("No exceptions found")
+            return
+
         scores_by_test = pd.DataFrame(self.exceptions_summary_df.groupby('Test ID')['Number of Exceptions'].sum().sort_values())
         scores_by_test['Test ID'] = scores_by_test.index
 
@@ -1942,7 +2015,38 @@ class DataConsistencyChecker:
             else:
                 print(df)
 
-    def get_rows_flagged(self, test_id, col_name):
+    def full_report(self):
+        """
+        A convenience method, which calls several other APIs, to give an overview of the results in a single API.
+        """
+        def display_api_results(df, title):
+            print("\n\n\n")
+            print(title + ":")
+            if is_notebook():
+                display(df)
+            else:
+                print(df)
+
+
+        display_api_results(self.get_patterns_summary(), 'Patterns Summary (short list only)')
+        display_api_results(self.summarize_patterns_by_test_and_feature(), 'Patterns by Test and Feature')
+        display_api_results(self.get_exceptions_summary(), 'Exceptions Summary')
+        display_api_results(self.summarize_exceptions_by_test_and_feature(), 'Exceptions Summary by Test and Feature')
+        display_api_results(self.summarize_exceptions_by_test(), 'Exceptions Summary by Test')
+        display_api_results(self.summarize_patterns_and_exceptions(), 'Summary of Patterns and Exceptions')
+        self.plot_final_scores_distribution_by_row()
+        self.plot_final_scores_distribution_by_feature()
+        self.plot_final_scores_distribution_by_test()
+
+        print("\n\n\n")
+        print("Detailed Results (without examples):")
+        self.display_detailed_results(include_examples=False, plot_results=True)
+
+    ##################################################################################################################
+    # Private helper methods to support outputting the results of the analysis in various ways
+    ##################################################################################################################
+
+    def __get_rows_flagged(self, test_id, col_name):
         """
         Return the subset of the original data where the specified test flagged an issue in the specified column
         """
@@ -1956,7 +2060,478 @@ class DataConsistencyChecker:
         row_idxs = df.index
         return self.orig_df.loc[row_idxs]
 
-    def get_sample_not_flagged(self, test_id, col_name, n_examples=10, group_results=False, is_patterns=False):
+    def _clean_column_names(self, df):
+        clean_df = df.copy()
+        idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all columns'
+        idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
+                                            'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all numeric columns'
+        return clean_df
+
+    def __display_rows_with_tests(self, sorted_df, nrows, check_score=False):
+        """
+        Display a set of dataframes, one per row in the original data, up to nrows rows, each including the original row
+        and the issues found in it, across all tests on all features.
+
+        sorted_df: a sorted version of self.test_results_df
+        nrows: the maximum number of rows from the original data to display
+        check_score: if True, only rows with scores above zero will be displayed
+        """
+
+        # todo: this misses where a test checks 2 or 3 columns. -- need to flag all columns
+        flagged_idx_arr = sorted_df.index[:10]
+        for row_idx in flagged_idx_arr[:nrows]:
+            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
+                print(f"The remaining rows have no flagged issues: cannot display {nrows} flagged rows.")
+                return
+
+            # Get the row as it appears in the original data
+            orig_row = self.orig_df.loc[row_idx:row_idx]
+
+            # Insert a column to indicate the IDs of the tests that have flagged this row
+            orig_row.insert(0, 'Test ID', '')
+
+            colour_cells = [False] * len(self.orig_df.columns)
+
+            # Loop through all tests, and add a row to the output for any that have flagged this row
+            for test_id in self.get_test_list():
+                test_row = [test_id] + [""] * len(self.orig_df.columns)
+
+                # There may be multiple columns / column sets which have flagged this row.
+                for column_set in self.exceptions_summary_df['Column(s)'].unique():
+                    result_col_name = self.get_results_col_name(test_id, column_set)
+                    if result_col_name not in self.test_results_df.columns:
+                        continue
+                    for column_name in self.col_to_original_cols_dict[result_col_name]:
+                        if self.test_results_df[result_col_name][row_idx]:
+                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
+                            test_row[column_idx+1] = u'\u2714'
+                            colour_cells[column_idx] = True
+                if test_row.count(u'\u2714'):
+                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
+            orig_row = orig_row.reset_index()
+            orig_row = orig_row.drop(columns=['index'])
+
+            # Display the dataframe representing this row from the original data
+            print()
+            if is_notebook():
+                display(Markdown(f"**Row: {row_idx} " + u'\u2014' + f" Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
+                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
+            else:
+                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
+                print(orig_row.to_string(index=False))
+            print()
+
+    def __plot_distribution(self, test_id, col_name, show_exceptions):
+        fig, ax = plt.subplots(figsize=(5, 3))
+        s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100)
+
+        # Ensure there are not too many tick labels to be readable
+        num_ticks = len(ax.xaxis.get_ticklabels())
+        if num_ticks > 10:
+            max_ticks = 10
+            mod = num_ticks // max_ticks
+            for label_idx, label in enumerate(ax.xaxis.get_ticklabels()):
+                if label_idx % mod != 0:
+                    label.set_visible(False)
+        fig.autofmt_xdate()
+
+        if show_exceptions:
+            s.set_title(f"Distribution of {col_name} (Flagged values in red)")
+        else:
+            s.set_title(f"Distribution of {col_name}")
+
+        # Find the flagged values and identify them on the plot
+        if show_exceptions:
+            results_col_name = self.get_results_col_name(test_id, col_name)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_vals = self.orig_df.loc[flagged_idxs, col_name].values
+            for v in flagged_vals:
+                s.axvline(v, color='red')
+        plt.show()
+
+    def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
+        def plot_one(ax):
+            if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
+                df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
+                                   col_name_2: self.numeric_vals_filled[col_name_2]})
+            else:
+                df = self.orig_df[[col_name_1, col_name_2]].copy()
+
+            if show_exceptions:
+                results_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[results_col_name]
+                df['Flagged'] = results_col
+
+            xylim = None
+            xlim = None
+            ylim = None
+            if (col_name_1 in self.numeric_cols):
+                xlim = (df[col_name_1].min(), df[col_name_1].max())
+                rng = xlim[1] - xlim[0]
+                xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
+
+            if (col_name_2 in self.numeric_cols):
+                ylim = (df[col_name_2].min(), df[col_name_2].max())
+                rng = ylim[1] - ylim[0]
+                ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
+
+            if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
+                xylim = (min(df[col_name_1].min(), df[col_name_2].min()), max(df[col_name_1].max(), df[col_name_2].max()))
+
+            if show_exceptions:
+                s = sns.scatterplot(
+                    data=df[df['Flagged'] == 0],
+                    x=col_name_1,
+                    y=col_name_2,
+                    color='blue',
+                    alpha=0.2,
+                    ax=ax,
+                    label='Normal'
+                )
+                s = sns.scatterplot(
+                    data=df[df['Flagged'] == 1],
+                    x=col_name_1,
+                    y=col_name_2,
+                    color='red',
+                    alpha=1.0,
+                    ax=ax,
+                    label='Flagged'
+                )
+
+                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
+                if test_id in ['LARGER'] and \
+                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
+                        xylim is not None:
+                    ax.set_xlim(xylim)
+                    ax.set_ylim(xylim)
+                else:
+                    if xlim is not None:
+                        ax.set_xlim(xlim)
+                    if ylim is not None:
+                        ax.set_ylim(ylim)
+                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            else:
+                s = sns.scatterplot(data=self.orig_df,
+                                    x=col_name_1,
+                                    y=col_name_2,
+                                    color='blue',
+                                    alpha=0.2,
+                                    ax=ax)
+                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
+                if test_id in ['LARGER'] and \
+                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
+                        xylim is not None:
+                    ax.set_xlim(xylim)
+                    ax.set_ylim(xylim)
+
+            # Hide some y tick labels as necessary
+            num_labels = len(ax.get_yticklabels())
+            max_ticks = 10
+            if num_labels > max_ticks:
+                step_shown = num_labels // max_ticks
+                for label_idx, label in enumerate(ax.get_yticklabels()):
+                    if label_idx % step_shown != 0:
+                        label.set_visible(False)
+
+            if col_name_1 in self.date_cols:
+                fig.autofmt_xdate()
+            else:
+                num_labels = len(ax.get_xticklabels())
+                if num_labels > max_ticks:
+                    step_shown = num_labels // max_ticks
+                    for label_idx, label in enumerate(ax.get_xticklabels()):
+                        if label_idx % step_shown != 0:
+                            label.set_visible(False)
+                plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
+
+            # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
+            if test_id in ['RARE_COMBINATION']:
+                for v in display_info['bins_1']:
+                    if v not in [-np.inf, np.inf]:
+                        ax.axvline(v, color='green', linewidth=1, alpha=0.3)
+                for v in display_info['bins_2']:
+                    if v not in [-np.inf, np.inf]:
+                        ax.axhline(v, color='green', linewidth=1, alpha=0.3)
+
+        col_name_1, col_name_2 = cols
+        fig, ax = plt.subplots(figsize=(5, 5))
+        plot_one(ax=ax)
+        plt.tight_layout()
+        plt.show()
+
+    def __plot_count_plot(self, column_name):
+        plt.subplots(figsize=(4, 4))
+        s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
+        s.set_title(f"Counts of unique values in {column_name}")
+        plt.show()
+
+    def __plot_heatmap(self, test_id, cols):
+        col_name_1, col_name_2 = cols
+        plt.subplots(figsize=(4, 4))
+
+        # todo: we may wish to include null as well, but need special handling below
+        vals1 = self.orig_df[col_name_1].dropna().unique()
+        vals2 = self.orig_df[col_name_2].dropna().unique()
+        counts_arr = []
+        for v1 in vals1:
+            row_arr = []
+            for v2 in vals2:
+                row_arr.append(len(self.orig_df[(self.orig_df[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]))
+            counts_arr.append(row_arr)
+        df = pd.DataFrame(counts_arr, index=vals1, columns=vals2)
+        s = sns.heatmap(df, cmap='Blues', linewidths=1.1, linecolor='black', annot=True, fmt="d")
+        s.set_title(f"Counts of unique values in {col_name_1} and {col_name_2}")
+        s.set_xlabel(col_name_2)
+        s.set_ylabel(col_name_1)
+        plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
+        plt.show()
+
+    def __draw_row_rank_plot(self, test_id, col_name, show_exceptions):
+        fig, ax = plt.subplots(figsize=(4, 4))
+        vals = self.orig_df[col_name]
+        if col_name in self.date_cols:
+            vals = [pd.to_datetime(x) for x in self.orig_df[col_name]]
+        s = sns.scatterplot(x=self.orig_df.index, y=vals, color='blue', alpha=0.2, label='Not Flagged')
+        if show_exceptions:
+            s.set_title(f'Distribution of "{col_name}" (Flagged values in red)')
+        else:
+            s.set_title(f'Distribution of "{col_name}"')
+
+        # Find the flagged values and identify them on the plot
+        if show_exceptions:
+            results_col_name = self.get_results_col_name(test_id, col_name)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_vals = self.orig_df.loc[flagged_idxs][col_name].values
+            s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged")
+        s.set_xlabel("Row Number")
+        ax.tick_params(axis='x', labelrotation=45)
+        plt.legend().remove()
+        plt.show()
+
+    def __draw_box_plots(self, test_id, cols, columns_set):
+        # The first column is the string/binary value and the second is the numeric/date value
+        # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is kludgy.
+        # results_col_name = self.get_results_col_name(test_id, columns_set)
+        # col_names = self.col_to_original_cols_dict[results_col_name]
+        fig, ax = plt.subplots(figsize=(4, 4))
+        s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
+        plt.show()
+
+        # Also draw a histogram of the relevant classes.
+        results_col_name = self.get_results_col_name(test_id, columns_set)
+        results_col = self.test_results_df[results_col_name]
+        flagged_idxs = np.where(results_col)
+        flagged_df = self.orig_df.loc[flagged_idxs]
+        vals = flagged_df[cols[0]].unique()
+        nvals = len(vals)
+        fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
+        for v_idx, v in enumerate(vals):
+            sub_df = self.orig_df[self.orig_df[cols[0]] == v]
+            sub_flagged_df = flagged_df[flagged_df[cols[0]] == v]
+            if nvals == 1:
+                curr_ax = ax
+            else:
+                curr_ax = ax[v_idx]
+            s = sns.histplot(data=sub_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
+            flagged_vals = sub_flagged_df[cols[1]].values
+            for fv in flagged_vals:
+                s.axvline(fv, color='red')
+            s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
+        plt.tight_layout()
+        plt.show()
+
+    def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
+        """
+        Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
+        Many tests have additional columns which can make the pattern between the columns more clear.
+
+        Parameters:
+        df: the dataframe of the rows to display. Typically 10 rows.
+        test_id: the id of the test that flagged these rows
+        cols: one set of columns flagged by this test
+        display_info: dictionary of information specific to these columns for this test. Also used to display plots.
+        is_patterns: boolean. Indicates if this
+        """
+
+        col_name, col_name_1, col_name_2, col_set = "", "", "", ""
+
+        if len(cols) == 1:
+            col_name = cols[0]
+        if len(cols) == 2:
+            col_name_1, col_name_2 = cols
+        if len(cols) == 3:
+            col_name_1, col_name_2, col_name_3 = cols
+        if len(cols) >= 3:
+            col_set = cols
+            source_cols = col_set[:-1]
+
+        # Add the additional columns to explain the relationship
+        df = df.copy()
+        if test_id in ['LARGER_THAN_SUM', 'CONSTANT_SUM', 'BINARY_MATCHES_SUM']:
+            vals1 = convert_to_numeric(df[col_name_1], 0)
+            vals2 = convert_to_numeric(df[col_name_2], 0)
+            df['SUM'] = (vals1 + vals2).values
+        elif test_id in ['RARE_VALUES']:
+            df["Count of Value"] = [display_info['counts'][x] for x in df[col_name].astype(str)]
+        elif test_id in ['NUMBER_DECIMALS']:
+            df['Number decimals'] = [-1 if is_missing(x) else get_num_digits(x) for x in df[col_name]]
+            df[col_name] = df[col_name].astype(str)
+        elif test_id in ['ROUNDING']:
+            vals = df[col_name].fillna(-9595959484)
+            vals = convert_to_numeric(vals, 0)
+            vals = vals.astype(int)
+            vals = vals.astype(str)
+            vals = vals.replace('-9595959484', np.nan)
+            s = vals.str.replace('.0', '', regex=False).str.len() - \
+                vals.str.replace('.0', '', regex=False).str.strip('0').str.len()
+            df['Number Zeros'] = s.values
+        elif test_id in ['SUM_OF_COLUMNS']:
+            if display_info and display_info['operation'] == "plus":
+                df[f"SUM PLUS {display_info['amount']}"] = df[source_cols].sum(axis=1) + display_info['amount']
+            elif display_info and display_info['operation'] == "times":
+                df[f"SUM TIMES {display_info['amount']}"] = df[source_cols].sum(axis=1) * display_info['amount']
+            else:
+                df['SUM'] = df[source_cols].sum(axis=1)
+        elif test_id in ['SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'CONSTANT_DIFF']:
+            df['ABSOLUTE DIFFERENCE'] = abs(df[col_name_1] - df[col_name_2])
+        elif test_id in ['SIMILAR_TO_PRODUCT', 'CONSTANT_PRODUCT']:
+            vals1 = convert_to_numeric(df[col_name_1], 0)
+            vals2 = convert_to_numeric(df[col_name_2], 0)
+            df['PRODUCT'] = (vals1 * vals2).values
+        elif test_id in ['SIMILAR_TO_RATIO', 'CONSTANT_RATIO', 'EVEN_MULTIPLE']:
+            vals1 = convert_to_numeric(df[col_name_1], 0)
+            vals2 = convert_to_numeric(df[col_name_2], 0)
+            df['DIVISION RESULTS'] = [safe_div(x, y) for x, y in zip(vals1, vals2)]
+        elif test_id in ['MEAN_OF_COLUMNS']:
+            df['MEAN'] = df[source_cols].mean(axis=1)
+        elif test_id in ['MIN_OF_COLUMNS']:
+            df['MIN'] = df[source_cols].min(axis=1)
+        elif test_id in ['MAX_OF_COLUMNS']:
+            df['MAX'] = df[source_cols].max(axis=1)
+        elif test_id in ['RARE_PAIRS_FIRST_WORD_VAL', 'LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
+            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
+            df[f'{col_name_1} FIRST WORD'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+        elif test_id in ['LEADING_WHITESPACE']:
+            df['NUM LEADING SPACES'] = df[col_name].astype(str).str.len() - df[col_name].astype(str).str.lstrip(' ').str.len()
+        elif test_id in ['TRAILING_WHITESPACE']:
+            df['NUM TRAILING SPACES'] = df[col_name].astype(str).str.len() - df[col_name].astype(str).str.rstrip(' ').str.len()
+        elif test_id in ['MULTIPLE_OF_CONSTANT']:
+            if is_patterns:
+                df['NUM MULTIPLES'] = round(df[col_name] / display_info['value'])
+            else:
+                df['NUM MULTIPLES'] = df[col_name] / display_info['value']
+        elif test_id in ['UNUSUAL_DAY_OF_WEEK']:
+            df['Day of Week'] = pd.to_datetime(df[col_name]).dt.strftime('%A')
+        elif test_id in ['UNUSUAL_DAY_OF_MONTH']:
+            df['Day of Month'] = pd.to_datetime(df[col_name]).dt.day
+        elif test_id in ['UNUSUAL_MONTH']:
+            df['Month'] = pd.to_datetime(df[col_name]).dt.month
+        elif test_id in ['UNUSUAL_HOUR_OF_DAY']:
+            df['Hour'] = pd.to_datetime(df[col_name]).dt.hour
+        elif test_id in ['UNUSUAL_MINUTES']:
+            df['Minutes'] = pd.to_datetime(df[col_name]).dt.minute
+        elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
+            df['Gap'] = pd.to_datetime(df[col_name_2]) - pd.to_datetime(df[col_name_1])
+        elif test_id in ['NUMBER_ALPHA_CHARS']:
+            df['Num Alpha Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalpha()]))
+        elif test_id in ['NUMBER_NUMERIC_CHARS']:
+            df['Num Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isdigit()]))
+        elif test_id in ['NUMBER_ALPHANUMERIC_CHARS']:
+            df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalnum()]))
+        elif test_id in ['NUMBER_NON-ALPHANUMERIC_CHARS']:
+            df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
+        elif test_id in ['NUMBER_CHARS', 'MANY_CHARS', 'FEW_CHARS']:
+            df['Num Chars'] = df[col_name].astype(str).str.len()
+        elif test_id in ['FIRST_CHAR_ALPHA', 'FIRST_CHAR_NUMERIC', 'FIRST_CHAR_SMALL_SET', 'FIRST_CHAR_UPPERCASE',
+                         'FIRST_CHAR_LOWERCASE']:
+            df['First Char'] = df[col_name].astype(str).str.lstrip().str.slice(0,1)
+        elif test_id in ['LAST_CHAR_SMALL_SET']:
+            df['Last Char'] = df[col_name].astype(str).str.rstrip().str[-1:]
+        elif test_id in ['FIRST_WORD_SMALL_SET']:
+            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
+            df['First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+        elif test_id in ['LAST_WORD_SMALL_SET']:
+            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
+            df['Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
+        elif test_id in ['NUMBER_WORDS']:
+            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
+            word_arr = col_vals.str.split()
+            df['Num Words'] = [len(x) for x in word_arr]
+        elif test_id in ['LONGEST_WORDS']:
+            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
+            word_arr = col_vals.str.split()
+            word_lens_arr = [[len(w) for w in x] for x in word_arr]
+            df['Longest Word Len'] = [max(x) if len(x) > 0 else 0 for x in word_lens_arr]
+        elif test_id in ['RARE_PAIRS_FIRST_CHAR', 'SAME_FIRST_CHARS']:
+            df[f'{col_name_1} First Char'] = df[col_name_1].astype(str).str[:1]
+            df[f'{col_name_2} First Char'] = df[col_name_2].astype(str).str[:1]
+        elif test_id in ['RARE_PAIRS_FIRST_WORD', 'SAME_FIRST_WORD']:
+            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
+            df[f'{col_name_1} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
+            df[f'{col_name_2} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+        elif test_id in ['SAME_LAST_WORD']:
+            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
+            df[f'{col_name_1} Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
+            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
+            df[f'{col_name_2} Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
+        elif test_id in ['SIMILAR_NUM_CHARS']:
+            df[f'{col_name_1} Num Chars'] = df[col_name_1].astype(str).str.len()
+            df[f'{col_name_2} Num Chars'] = df[col_name_2].astype(str).str.len()
+        elif test_id in ['SIMILAR_NUM_WORDS']:
+            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
+            word_arr = col_vals.str.split()
+            df[f'{col_name_1} Num Words'] = [len(x) for x in word_arr]
+            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
+            word_arr = col_vals.str.split()
+            df[f'{col_name_2} Num Words'] = [len(x) for x in word_arr]
+        elif test_id in ['SMALL_VS_CORR_COLS', 'LARGE_VS_CORR_COLS']:
+            for c in display_info['cluster']:
+                df[c] = self.orig_df[c].loc[df.index]
+            df = df[list(df.columns[1:]) + [df.columns[0]]]  # Ensure the relevant column is the rightmost
+        elif test_id in ['MISSING_VALUES_PER_ROW']:
+            df['Number Missing Values'] = df.isna().sum(axis=1)
+        elif test_id in ['ZERO_VALUES_PER_ROW']:
+            df['Number Zero Values'] = df.applymap(lambda x: (x is None) or (x == 0)).sum(axis=1)
+        elif test_id in ['UNIQUE_VALUES_PER_ROW']:
+            df['Number Unique Values'] = df.apply(lambda x: len(set(x)), axis=1)
+        elif test_id in ['NEGATIVE_VALUES_PER_ROW']:
+            df['Number Negative Values'] = df.applymap(lambda x: isinstance(x, numbers.Number) and x < 0).sum(axis=1)
+        elif test_id in ['DECISION_TREE_CLASSIFIER', 'DECISION_TREE_REGRESSOR', 'PREV_VALUES_DT', 'LINEAR_REGRESSION']:
+            df["PREDICTION"] = display_info['Pred'].loc[df.index]
+        elif test_id in ['CORRELATED_FEATURES']:
+            df['Column 1 Percentile'] = display_info['col_1_percentiles'].loc[df.index]
+            df['Column 2 Percentile'] = display_info['col_2_percentiles'].loc[df.index]
+        elif test_id in ['UNUSUAL_NUMERIC']:
+            df['ORDER OF MAGNITUDE'] = display_info['order of magnitude'][df.index]
+        elif test_id in ['RUNNING_SUM']:
+            df['RUNNING SUM'] = display_info['RUNNING SUM'][df.index]
+
+        df = df.sort_index()
+        if is_notebook():
+            display(df)
+        else:
+            print(df)
+
+    def __draw_sample_set_rows(self, df, test_id, cols, display_info):
+        row_id = df.index[0]
+        row_start = max(0, row_id-5)
+        row_end = min(self.num_rows, row_id+5)
+        neighborhood_df = self.orig_df.iloc[row_start:row_end][df.columns]
+        self.__draw_sample_dataframe(
+            neighborhood_df,
+            test_id,
+            cols,
+            display_info=display_info,
+            is_patterns=False)
+
+    def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, group_results=False, is_patterns=False):
         """
         Return a random set of n_examples values from the specified columns that were not flagged by the
         specified test in the specified columns. This handles specific tests by balancing the the rows displayed
@@ -2113,7 +2688,7 @@ class DataConsistencyChecker:
             # create a df simply trying to reduce the number of Null values.
             if (df is None) or (len(df) == 0):
                 # Test that test_results_df does not have duplicate values in the index
-                assert len(self.test_results_df.index) == len(set(self.test_results_df.index))
+                assert (self.test_results_df is None) or (len(self.test_results_df.index) == len(set(self.test_results_df.index)))
                 cols = list(cols)  # Ensure cols is not in tuple format
                 df = self.orig_df[cols]
                 for col in cols:
@@ -2147,456 +2722,7 @@ class DataConsistencyChecker:
                     good_indexes = good_indexes & (self.test_results_df[results_col_name] == 0)
             return self.orig_df.loc[good_indexes][col_name].sample(n=n_examples, random_state=0)
 
-    ##################################################################################################################
-    # Private helper methods to support outputting the results of the analysis in various ways
-    ##################################################################################################################
-
-    def _clean_column_names(self, df):
-        clean_df = df.copy()
-        idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
-        for idx in idxs:
-            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all columns'
-        idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
-                                            'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
-        for idx in idxs:
-            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all numeric columns'
-        return clean_df
-
-    def __display_rows_with_tests(self, sorted_df, nrows, check_score=False):
-        """
-        Display a set of dataframes, one per row in the original data, up to nrows rows, each including the original row
-        and the issues found in it, across all tests on all features.
-
-        sorted_df: a sorted version of self.test_results_df
-        nrows: the maximum number of rows from the original data to display
-        check_score: if True, only rows with scores above zero will be displayed
-        """
-
-        # todo: this misses where a test checks 2 or 3 columns. -- need to flag all columns
-        flagged_idx_arr = sorted_df.index[:10]
-        for row_idx in flagged_idx_arr[:nrows]:
-            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
-                print(f"The remaining rows have no flagged issues: cannot display {nrows} flagged rows.")
-                return
-
-            # Get the row as it appears in the original data
-            orig_row = self.orig_df.loc[row_idx:row_idx]
-
-            # Insert a column to indicate the IDs of the tests that have flagged this row
-            orig_row.insert(0, 'Test ID', '')
-
-            colour_cells = [False] * len(self.orig_df.columns)
-
-            # Loop through all tests, and add a row to the output for any that have flagged this row
-            for test_id in self.get_test_list():
-                test_row = [test_id] + [""] * len(self.orig_df.columns)
-
-                # There may be multiple columns / column sets which have flagged this row.
-                for column_set in self.exceptions_summary_df['Column(s)'].unique():
-                    result_col_name = self.get_results_col_name(test_id, column_set)
-                    if result_col_name not in self.test_results_df.columns:
-                        continue
-                    for column_name in self.col_to_original_cols_dict[result_col_name]:
-                        if self.test_results_df[result_col_name][row_idx]:
-                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
-                            test_row[column_idx+1] = u'\u2714'
-                            colour_cells[column_idx] = True
-                if test_row.count(u'\u2714'):
-                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
-            orig_row = orig_row.reset_index()
-            orig_row = orig_row.drop(columns=['index'])
-
-            # Display the dataframe representing this row from the original data
-            print()
-            if is_notebook():
-                display(Markdown(f"**Row: {row_idx} " + u'\u2014' + f" Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
-                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
-            else:
-                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
-                print(orig_row.to_string(index=False))
-            print()
-
-    def __plot_distribution(self, test_id, col_name, show_exceptions):
-        fig, ax = plt.subplots(figsize=(5, 3))
-        s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100)
-
-        # Ensure there are not too many tick labels to be readable
-        num_ticks = len(ax.xaxis.get_ticklabels())
-        if num_ticks > 10:
-            max_ticks = 10
-            mod = num_ticks // max_ticks
-            for label_idx, label in enumerate(ax.xaxis.get_ticklabels()):
-                if label_idx % mod != 0:
-                    label.set_visible(False)
-        fig.autofmt_xdate()
-
-        if show_exceptions:
-            s.set_title(f"Distribution of {col_name} (Flagged values in red)")
-        else:
-            s.set_title(f"Distribution of {col_name}")
-
-        # Find the flagged values and identify them on the plot
-        if show_exceptions:
-            results_col_name = self.get_results_col_name(test_id, col_name)
-            results_col = self.test_results_df[results_col_name]
-            flagged_idxs = np.where(results_col)
-            flagged_vals = self.orig_df.loc[flagged_idxs, col_name].values
-            for v in flagged_vals:
-                s.axvline(v, color='red')
-        plt.show()
-
-    def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
-        def plot_one(ax):
-            if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
-                df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
-                                   col_name_2: self.numeric_vals_filled[col_name_2]})
-            else:
-                df = self.orig_df[[col_name_1, col_name_2]].copy()
-
-            if show_exceptions:
-                results_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[results_col_name]
-                df['Flagged'] = results_col
-
-            xylim = None
-            xlim = None
-            ylim = None
-            if (col_name_1 in self.numeric_cols):
-                xlim = (df[col_name_1].min(), df[col_name_1].max())
-                rng = xlim[1] - xlim[0]
-                xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
-
-            if (col_name_2 in self.numeric_cols):
-                ylim = (df[col_name_2].min(), df[col_name_2].max())
-                rng = ylim[1] - ylim[0]
-                ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
-
-            if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
-                xylim = (min(df[col_name_1].min(), df[col_name_2].min()), max(df[col_name_1].max(), df[col_name_2].max()))
-
-            if show_exceptions:
-                # color_dict = {0: 'blue', False: 'blue', 1: 'red', True: 'red'}
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 0],
-                    x=col_name_1,
-                    y=col_name_2,
-                    color='blue',
-                    alpha=0.2,
-                    ax=ax,
-                    label='Normal'
-                )
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 1],
-                    x=col_name_1,
-                    y=col_name_2,
-                    color='red',
-                    alpha=1.0,
-                    ax=ax,
-                    label='Flagged'
-                )
-
-                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
-                if test_id in ['LARGER'] and \
-                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                        xylim is not None:
-                    ax.set_xlim(xylim)
-                    ax.set_ylim(xylim)
-                else:
-                    if xlim is not None:
-                        ax.set_xlim(xlim)
-                    if ylim is not None:
-                        ax.set_ylim(ylim)
-                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            else:
-                s = sns.scatterplot(data=self.orig_df,
-                                    x=col_name_1,
-                                    y=col_name_2,
-                                    color='blue',
-                                    alpha=0.2,
-                                    #label='Not Flagged',
-                                    ax=ax)
-                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
-                if test_id in ['LARGER'] and \
-                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                        xylim is not None:
-                    ax.set_xlim(xylim)
-                    ax.set_ylim(xylim)
-
-            if col_name_1 in self.date_cols:
-                fig.autofmt_xdate()
-
-            # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
-            if test_id in ['RARE_COMBINATION']:
-                for v in display_info['bins_1']:
-                    if v not in [-np.inf, np.inf]:
-                        ax.axvline(v, color='green', linewidth=1, alpha=0.3)
-                for v in display_info['bins_2']:
-                    if v not in [-np.inf, np.inf]:
-                        ax.axhline(v, color='green', linewidth=1, alpha=0.3)
-
-        col_name_1, col_name_2 = cols
-        fig, ax = plt.subplots(figsize=(4, 4))
-        plot_one(ax=ax)
-        plt.tight_layout()
-        plt.show()
-
-    def __plot_count_plot(self, column_name):
-        plt.subplots(figsize=(4, 4))
-        s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
-        s.set_title(f"Counts of unique values in {column_name}")
-        plt.show()
-
-    def __plot_heatmap(self, test_id, cols):
-        col_name_1, col_name_2 = cols
-        plt.subplots(figsize=(4, 4))
-
-        # todo: we may wish to include null as well, but need special handling below
-        vals1 = self.orig_df[col_name_1].dropna().unique()
-        vals2 = self.orig_df[col_name_2].dropna().unique()
-        counts_arr = []
-        for v1 in vals1:
-            row_arr = []
-            for v2 in vals2:
-                row_arr.append(len(self.orig_df[(self.orig_df[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]))
-            counts_arr.append(row_arr)
-        df = pd.DataFrame(counts_arr, index=vals1, columns=vals2)
-        s = sns.heatmap(df, cmap='Blues', linewidths=1.1, linecolor='black', annot=True, fmt="d")
-        s.set_title(f"Counts of unique values in {col_name_1} and {col_name_2}")
-        s.set_xlabel(col_name_2)
-        s.set_ylabel(col_name_1)
-        plt.show()
-
-    def __draw_row_rank_plot(self, test_id, col_name, show_exceptions):
-        fig, ax = plt.subplots(figsize=(4, 4))
-        vals = self.orig_df[col_name]
-        if col_name in self.date_cols:
-            vals = [pd.to_datetime(x) for x in self.orig_df[col_name]]
-        s = sns.scatterplot(x=self.orig_df.index, y=vals, color='blue', alpha=0.2, label='Not Flagged')
-        if show_exceptions:
-            s.set_title(f'Distribution of "{col_name}" (Flagged values in red)')
-        else:
-            s.set_title(f'Distribution of "{col_name}"')
-
-        # Find the flagged values and identify them on the plot
-        if show_exceptions:
-            results_col_name = self.get_results_col_name(test_id, col_name)
-            results_col = self.test_results_df[results_col_name]
-            flagged_idxs = np.where(results_col)
-            flagged_vals = self.orig_df.loc[flagged_idxs][col_name].values
-            s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged")
-        s.set_xlabel("Row Number")
-        ax.tick_params(axis='x', labelrotation=45)
-        plt.legend().remove()
-        plt.show()
-
-    def __draw_box_plots(self, test_id, cols, columns_set):
-        # The first column is the string/binary value and the second is the numeric/date value
-        # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is kludgy.
-        # results_col_name = self.get_results_col_name(test_id, columns_set)
-        # col_names = self.col_to_original_cols_dict[results_col_name]
-        fig, ax = plt.subplots(figsize=(4, 4))
-        s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
-        plt.show()
-
-        # Also draw a histogram of the relevant classes.
-        results_col_name = self.get_results_col_name(test_id, columns_set)
-        results_col = self.test_results_df[results_col_name]
-        flagged_idxs = np.where(results_col)
-        flagged_df = self.orig_df.loc[flagged_idxs]
-        vals = flagged_df[cols[0]].unique()
-        nvals = len(vals)
-        fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
-        for v_idx, v in enumerate(vals):
-            sub_df = self.orig_df[self.orig_df[cols[0]] == v]
-            sub_flagged_df = flagged_df[flagged_df[cols[0]] == v]
-            if nvals == 1:
-                curr_ax = ax
-            else:
-                curr_ax = ax[v_idx]
-            s = sns.histplot(data=sub_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
-            flagged_vals = sub_flagged_df[cols[1]].values
-            for fv in flagged_vals:
-                s.axvline(fv, color='red')
-            s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
-        plt.tight_layout()
-        plt.show()
-
-    def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
-        """
-        Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
-        Many tests have additional columns which can make the pattern between the columns more clear.
-
-        Parameters:
-        df: the dataframe of the rows to display. Typically 10 rows.
-        test_id: the id of the test that flagged these rows
-        cols: one set of columns flagged by this test
-        display_info: dictionary of information specific to these columns for this test. Also used to display plots.
-        is_patterns: boolean. Indicates if this
-        """
-
-        col_name, col_name_1, col_name_2, col_set = "", "", "", ""
-
-        if len(cols) == 1:
-            col_name = cols[0]
-        if len(cols) == 2:
-            col_name_1, col_name_2 = cols
-        if len(cols) == 3:
-            col_name_1, col_name_2, col_name_3 = cols
-        if len(cols) >= 3:
-            col_set = cols
-            source_cols = col_set[:-1]
-
-        # Add the additional columns to explain the relationship
-        df = df.copy()
-        if test_id in ['LARGER_THAN_SUM', 'CONSTANT_SUM', 'BINARY_MATCHES_SUM']:
-            df['SUM'] = df[col_name_1] + df[col_name_2]
-        elif test_id in ['RARE_VALUES']:
-            df["Count of Value"] = [display_info['counts'][x] for x in df[col_name].astype(str)]
-        elif test_id in ['NUMBER_DECIMALS']:
-            df['Number decimals'] = [-1 if is_missing(x) else get_num_digits(x) for x in df[col_name]]
-            df[col_name] = df[col_name].astype(str)
-        elif test_id in ['ROUNDING']:
-            vals = df[col_name].fillna(-9595959484)
-            vals = convert_to_numeric(vals, 0)
-            vals = vals.astype(int)
-            vals = vals.astype(str)
-            vals = vals.replace('-9595959484', np.nan)
-            s = vals.str.replace('.0', '', regex=False).str.len() - \
-                vals.str.replace('.0', '', regex=False).str.strip('0').str.len()
-            df['Number Zeros'] = s.values
-        elif test_id in ['SUM_OF_COLUMNS']:
-            if display_info and display_info['operation'] == "plus":
-                df[f"SUM PLUS {display_info['amount']}"] = df[source_cols].sum(axis=1) + display_info['amount']
-            elif display_info and display_info['operation'] == "times":
-                df[f"SUM TIMES {display_info['amount']}"] = df[source_cols].sum(axis=1) * display_info['amount']
-            else:
-                df['SUM'] = df[source_cols].sum(axis=1)
-        elif test_id in ['SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'CONSTANT_DIFF']:
-            df['ABSOLUTE DIFFERENCE'] = abs(df[col_name_1] - df[col_name_2])
-        elif test_id in ['SIMILAR_TO_PRODUCT', 'CONSTANT_PRODUCT']:
-            df['PRODUCT'] = df[col_name_1] * df[col_name_2]
-        elif test_id in ['SIMILAR_TO_RATIO', 'CONSTANT_RATIO', 'EVEN_MULTIPLE']:
-            df['DIVISION RESULTS'] = df[col_name_1] / df[col_name_2]
-        elif test_id in ['MEAN_OF_COLUMNS']:
-            df['MEAN'] = df[source_cols].mean(axis=1)
-        elif test_id in ['MIN_OF_COLUMNS']:
-            df['MIN'] = df[source_cols].min(axis=1)
-        elif test_id in ['MAX_OF_COLUMNS']:
-            df['MAX'] = df[source_cols].max(axis=1)
-        elif test_id in ['RARE_PAIRS_FIRST_WORD_VAL', 'LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
-            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
-            df[f'{col_name_1} FIRST WORD'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-        elif test_id in ['LEADING_WHITESPACE']:
-            df['NUM LEADING SPACES'] = df[col_name].astype(str).str.len() - df[col_name].astype(str).str.lstrip(' ').str.len()
-        elif test_id in ['TRAILING_WHITESPACE']:
-            df['NUM TRAILING SPACES'] = df[col_name].astype(str).str.len() - df[col_name].astype(str).str.rstrip(' ').str.len()
-        elif test_id in ['MULTIPLE_OF_CONSTANT']:
-            if is_patterns:
-                df['NUM MULTIPLES'] = round(df[col_name] / display_info['value'])
-            else:
-                df['NUM MULTIPLES'] = df[col_name] / display_info['value']
-        elif test_id in ['UNUSUAL_DAY_OF_WEEK']:
-            df['Day of Week'] = pd.to_datetime(df[col_name]).dt.strftime('%A')
-        elif test_id in ['UNUSUAL_DAY_OF_MONTH']:
-            df['Day of Month'] = pd.to_datetime(df[col_name]).dt.day
-        elif test_id in ['UNUSUAL_MONTH']:
-            df['Month'] = pd.to_datetime(df[col_name]).dt.month
-        elif test_id in ['UNUSUAL_HOUR_OF_DAY']:
-            df['Hour'] = pd.to_datetime(df[col_name]).dt.hour
-        elif test_id in ['UNUSUAL_MINUTES']:
-            df['Minutes'] = pd.to_datetime(df[col_name]).dt.minute
-        elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
-            df['Gap'] = pd.to_datetime(df[col_name_2]) - pd.to_datetime(df[col_name_1])
-        elif test_id in ['NUMBER_ALPHA_CHARS']:
-            df['Num Alpha Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalpha()]))
-        elif test_id in ['NUMBER_NUMERIC_CHARS']:
-            df['Num Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isdigit()]))
-        elif test_id in ['NUMBER_ALPHANUMERIC_CHARS']:
-            df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalnum()]))
-        elif test_id in ['NUMBER_NON-ALPHANUMERIC_CHARS']:
-            df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
-        elif test_id in ['NUMBER_CHARS', 'MANY_CHARS', 'FEW_CHARS']:
-            df['Num Chars'] = df[col_name].astype(str).str.len()
-        elif test_id in ['FIRST_CHAR_ALPHA', 'FIRST_CHAR_NUMERIC', 'FIRST_CHAR_SMALL_SET', 'FIRST_CHAR_UPPERCASE',
-                         'FIRST_CHAR_LOWERCASE']:
-            df['First Char'] = df[col_name].astype(str).str.lstrip().str.slice(0,1)
-        elif test_id in ['LAST_CHAR_SMALL_SET']:
-            df['Last Char'] = df[col_name].astype(str).str.rstrip().str[-1:]
-        elif test_id in ['FIRST_WORD_SMALL_SET']:
-            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
-            df['First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-        elif test_id in ['LAST_WORD_SMALL_SET']:
-            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
-            df['Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
-        elif test_id in ['NUMBER_WORDS']:
-            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
-            word_arr = col_vals.str.split()
-            df['Num Words'] = [len(x) for x in word_arr]
-        elif test_id in ['LONGEST_WORDS']:
-            col_vals = df[col_name].astype(str).apply(replace_special_with_space)
-            word_arr = col_vals.str.split()
-            word_lens_arr = [[len(w) for w in x] for x in word_arr]
-            df['Longest Word Len'] = [max(x) if len(x) > 0 else 0 for x in word_lens_arr]
-        elif test_id in ['RARE_PAIRS_FIRST_CHAR', 'SAME_FIRST_CHARS']:
-            df[f'{col_name_1} First Char'] = df[col_name_1].astype(str).str[:1]
-            df[f'{col_name_2} First Char'] = df[col_name_2].astype(str).str[:1]
-        elif test_id in ['RARE_PAIRS_FIRST_WORD', 'SAME_FIRST_WORD']:
-            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
-            df[f'{col_name_1} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
-            df[f'{col_name_2} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-        elif test_id in ['SAME_LAST_WORD']:
-            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
-            df[f'{col_name_1} Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
-            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
-            df[f'{col_name_2} Last Word'] = [x[-1] if len(x) > 0 else "" for x in col_vals.str.split()]
-        elif test_id in ['SIMILAR_NUM_CHARS']:
-            df[f'{col_name_1} Num Chars'] = df[col_name_1].astype(str).str.len()
-            df[f'{col_name_2} Num Chars'] = df[col_name_2].astype(str).str.len()
-        elif test_id in ['SIMILAR_NUM_WORDS']:
-            col_vals = df[col_name_1].astype(str).apply(replace_special_with_space)
-            word_arr = col_vals.str.split()
-            df[f'{col_name_1} Num Words'] = [len(x) for x in word_arr]
-            col_vals = df[col_name_2].astype(str).apply(replace_special_with_space)
-            word_arr = col_vals.str.split()
-            df[f'{col_name_2} Num Words'] = [len(x) for x in word_arr]
-        elif test_id in ['SMALL_VS_CORR_COLS', 'LARGE_VS_CORR_COLS']:
-            for c in display_info['cluster']:
-                df[c] = self.orig_df[c].loc[df.index]
-            df = df[list(df.columns[1:]) + [df.columns[0]]]  # Ensure the relevant column is the rightmost
-        elif test_id in ['MISSING_VALUES_PER_ROW']:
-            df['Number Missing Values'] = df.isna().sum(axis=1)
-        elif test_id in ['ZERO_VALUES_PER_ROW']:
-            df['Number Zero Values'] = df.applymap(lambda x: (x is None) or (x == 0)).sum(axis=1)
-        elif test_id in ['UNIQUE_VALUES_PER_ROW']:
-            df['Number Unique Values'] = df.apply(lambda x: len(set(x)), axis=1)
-        elif test_id in ['NEGATIVE_VALUES_PER_ROW']:
-            df['Number Negative Values'] = df.applymap(lambda x: isinstance(x, numbers.Number) and x < 0).sum(axis=1)
-        elif test_id in ['DECISION_TREE_CLASSIFIER', 'DECISION_TREE_REGRESSOR', 'PREV_VALUES_DT', 'LINEAR_REGRESSION']:
-            df["PREDICTION"] = display_info['Pred'].loc[df.index]
-        elif test_id in ['CORRELATED_FEATURES']:
-            df['Column 1 Percentile'] = display_info['col_1_percentiles'].loc[df.index]
-            df['Column 2 Percentile'] = display_info['col_2_percentiles'].loc[df.index]
-        elif test_id in ['UNUSUAL_NUMERIC']:
-            df['ORDER OF MAGNITUDE'] = display_info['order of magnitude'][df.index]
-
-        df = df.sort_index()
-        if is_notebook():
-            display(df)
-        else:
-            print(df)
-
-    def __draw_sample_set_rows(self, df):
-        row_id = df.index[0]
-        row_start = max(0, row_id-5)
-        row_end = min(self.num_rows, row_id+5)
-        neighborhood_df = self.orig_df.iloc[row_start:row_end][df.columns]
-        if is_notebook():
-            display(neighborhood_df)
-        else:
-            print(neighborhood_df)
-
-    def display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
+    def __display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
         # Do not show examples for some tests
         if is_patterns and test_id in ['UNIQUE_VALUES']:
             print("Examples are not shown for this pattern.")
@@ -2621,12 +2747,12 @@ class DataConsistencyChecker:
             print(f"Examples of values not flagged{consecutive_str}:")
 
         if show_consecutive:
-            vals = self.get_sample_not_flagged(test_id, columns_set, group_results=True, is_patterns=is_patterns)
+            vals = self.__get_sample_not_flagged(test_id, columns_set, group_results=True, is_patterns=is_patterns)
         else:
-            vals = self.get_sample_not_flagged(test_id, columns_set, group_results=False, is_patterns=is_patterns)
+            vals = self.__get_sample_not_flagged(test_id, columns_set, group_results=False, is_patterns=is_patterns)
         self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns)
 
-    def draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
+    def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
         def draw_scatter(df, x_col, y_col):
             fig, ax = plt.subplots(figsize=(4, 4))
             min_range = min(df[x_col].min(), df[y_col].min())
@@ -3083,7 +3209,7 @@ class DataConsistencyChecker:
                     ax[nrows-1][i].set_visible(False)
 
         if self.exceptions_summary_df is None or len(self.exceptions_summary_df) == 0:
-            print("No exceptions to plot.")
+            print("No exceptions found.")
             return
 
         df = self.orig_df.copy()
@@ -3216,8 +3342,9 @@ class DataConsistencyChecker:
             print((f"{self.exceptions_summary_df['Test ID'].nunique()} tests "
                    f"({self.exceptions_summary_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
                    f"flagged at least one exception each."))
-            print((f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at "
-                   f"least one exception."))
+            if self.test_results_df is not None:
+                print((f"Flagged {len(self.test_results_df[self.test_results_df['FINAL SCORE'] > 0]):,} row(s) with at "
+                       f"least one exception."))
             print(f"Flagged {(self.test_results_by_column_np.sum(axis=0) > 0).sum()} column(s) with at least one exception.")
 
     def __update_results_by_column(self, results_col, original_cols):
@@ -4084,7 +4211,7 @@ class DataConsistencyChecker:
             df = pd.DataFrame()
             df[col_name] = self.orig_df[col_name]
             if col_name in self.numeric_cols:
-                df[col_name] = df[col_name].astype(float).fillna(sys.maxsize)
+                df[col_name] = self.numeric_vals_filled[col_name].astype(float).fillna(sys.maxsize)
 
             # todo: if we can create a good DT with 10 lags, see if can with less. Loop until use as few lags as possible.
 
@@ -5613,11 +5740,17 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        larger_pairs_with_bool_dict = self.get_larger_pairs_with_bool_dict()
+
         for cols_idx, (col_name_1, col_name_2) in enumerate(col_pairs):
             if self.verbose >= 2 and cols_idx > 0 and cols_idx % 10_000 == 0:
                 print(f"  Examining pair {cols_idx:,} of {len(col_pairs):,} pairs of numeric columns")
 
             if self.column_medians[col_name_1] < ((self.column_medians[col_name_2]) * 5):
+                continue
+
+            # Check the column is at least larger if not an order of magnitude larger
+            if not larger_pairs_with_bool_dict[(col_name_1, col_name_2)]:
                 continue
 
             # Test on a sample
@@ -6515,19 +6648,20 @@ class DataConsistencyChecker:
 
             # This is more robust than checking the cumulative sum, which can be thrown off by missing or
             # inaccurate values.
-            vals_arr_1 = convert_to_numeric(self.orig_df[col_name_1], self.column_medians[col_name_1])
-            vals_arr_2 = convert_to_numeric(self.orig_df[col_name_2], self.column_medians[col_name_2])
+            vals_arr_1 = self.numeric_vals_filled[col_name_1]
+            vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = vals_arr_1.shift(1) + vals_arr_2
             test_series = self.orig_df[col_name_1] == test_series_a
             test_series.loc[0] = True  # The first row can not be tested for running totals.
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_1].shift(1).isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
-                [col_name_1, col_name_2],
+                self.get_col_set_name([col_name_2, col_name_1]),
+                [col_name_2, col_name_1],
                 test_series,
                 f'Column "{col_name_1}" consistently contains a running sum of "{col_name_2}"',
-                ''
+                '',
+                display_info={'RUNNING SUM': test_series_a}
             )
 
     def __generate_a_rounded_b(self):
@@ -7053,12 +7187,18 @@ class DataConsistencyChecker:
         Patterns with exception: 'larger_sum most' is consistently larger than the sum of 'larger_sum rand_a' and
             'larger_sum rand_b', with exceptions.
         """
-        self.__add_synthetic_column('larger_sum rand_a', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('larger_sum rand_b', [random.randint(1000, 2000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'larger_sum rand_a',
+            [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'larger_sum rand_b',
+            [random.randint(1000, 2000) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column(
             'larger_sum all',
             self.synth_df['larger_sum rand_b'] + self.synth_df['larger_sum rand_a'] + random.randint(1, 10))
-        self.__add_synthetic_column('larger_sum most', self.synth_df['larger_sum all'])
+        self.__add_synthetic_column(
+            'larger_sum most',
+            self.synth_df['larger_sum all'])
         self.synth_df.at[999, 'larger_sum most'] = self.synth_df.at[999, 'larger_sum most'] * 0.2
 
     def __check_larger_than_sum(self, test_id):
@@ -7078,7 +7218,7 @@ class DataConsistencyChecker:
             if num_not_matching > 1:
                 return False
 
-            test_series = self.orig_df[col_c] > (self.orig_df[col_a] + self.orig_df[col_b])
+            test_series = self.numeric_vals_filled[col_c] > (self.numeric_vals_filled[col_a] + self.numeric_vals_filled[col_b])
             test_series = test_series | self.orig_df[col_a].isna() | self.orig_df[col_b].isna() | self.orig_df[col_c].isna()
             if test_series.tolist().count(False) < self.contamination_level:
                 self.__process_analysis_binary(
@@ -7312,12 +7452,10 @@ class DataConsistencyChecker:
             if (self.numeric_vals_filled[col_name] >= 0).tolist().count(False) < self.contamination_level:
                 column_pos_arr.append(col_name)
 
-        for col_idx, col_name in enumerate(column_pos_arr):
-            if self.verbose >= 2 and col_idx >0 and col_idx % 10 == 0:
-                print(f"  Processing column: {col_idx} of {len(column_pos_arr)} positive numeric columns)")
-
-            # Identify the columns with a similar range
-            printed_subset_size_msg = False
+        # Identify the set of similar columns for each positive numeric column
+        similar_cols_dict = {}
+        calc_size = 0
+        for col_name in column_pos_arr:
             similar_cols = []
             for c in self.numeric_cols:
                 if c == col_name:
@@ -7329,6 +7467,40 @@ class DataConsistencyChecker:
                     corr = self.pearson_corr.loc[col_name, c]
                     if corr > 0.4:
                         similar_cols.append(c)
+            similar_cols_dict[col_name] = similar_cols
+            calc_size += int(math.pow(2, len(similar_cols)))
+
+        # Check if there are too many combinations to execute this test
+        limit_subset_sizes = False
+        max_subset_size = -1
+        if calc_size > self.max_combinations:
+
+            # Try limiting the sizes of the subsets
+            for max_subset_size in range(5, 1, -1):
+                calc_size_limited = 0
+                for col_name in column_pos_arr:
+                    num_cols = len(similar_cols_dict[col_name])
+                    for subset_size in range(2, max_subset_size + 1):
+                        calc_size_limited += math.comb(num_cols, subset_size)
+                if calc_size_limited < self.max_combinations:
+                    limit_subset_sizes = True
+                    break
+
+            if self.verbose >= 2:
+                if limit_subset_sizes:
+                    print((f"  Due to the potential number of combinations, limiting test to subsets of size "
+                           f"{max_subset_size}."))
+                else:
+                    print((f"  Skipping test. Given the number of similar columns for each positive numeric "
+                           f"column, there are {calc_size_limited:,} combinations, even limiting testing to subsets "
+                           f"2 columns. max_combinations is currently set to {self.max_combinations:,}."))
+                    return
+
+        for col_idx, col_name in enumerate(column_pos_arr):
+            if (self.verbose == 2 and col_idx > 0 and col_idx % 10 == 0) or (self.verbose >= 3):
+                print(f"  Processing column: {col_idx} of {len(column_pos_arr)} positive numeric columns)")
+
+            similar_cols = similar_cols_dict[col_name]
             if len(similar_cols) == 0:
                 continue
 
@@ -7337,23 +7509,19 @@ class DataConsistencyChecker:
             # For any subsets whose sum is too small to match col_name, there is no use trying any smaller subsets.
             know_failed_subsets = {}
 
-            for subset_size in range(len(similar_cols), 1, -1):
+            starting_size = len(similar_cols)
+            if limit_subset_sizes:
+                starting_size = min(starting_size, max_subset_size)
+            for subset_size in range(starting_size, 1, -1):
                 if found_any:
                     break
 
-                calc_size = math.comb(len(similar_cols), subset_size)
-                skip_subsets = calc_size > self.max_combinations
-                if skip_subsets:
-                    if self.verbose >= 2 and not printed_subset_size_msg:
-                        print((f"    Skipping subsets of size {subset_size}. There are {calc_size:,} subsets. "
-                               f"max_combinations is currently set to {self.max_combinations:,}."))
-                        printed_subset_size_msg = True
-                    continue
-
                 subsets = list(combinations(similar_cols, subset_size))
-                if self.verbose >= 2 and len(similar_cols) > 15:
+                if self.verbose >= 3 and len(similar_cols) > 15:
                     print(f"    Examining subsets of size {subset_size}. There are {len(subsets):,} subsets.")
-                for subset in subsets:
+                for subset_idx, subset in enumerate(subsets):
+                    if self.verbose >= 3 and len(similar_cols) > 15 and subset_idx > 0 and subset_idx % 10_000 == 0:
+                        print(f"    Examining subset {subset_idx:,}")
 
                     # Check if this subset is a subset of any subsets previously tried which were too small.
                     subset_matches = True
@@ -7372,70 +7540,95 @@ class DataConsistencyChecker:
                     if sum_of_medians > (self.column_medians[col_name] * 1.1):
                         continue
 
-                    # todo: test all these on a sample first
-
                     subset = list(subset)
-                    df = self.orig_df[subset]
-                    col_sums = df.sum(axis=1)
-                    diffs_series = self.orig_df[col_name] - col_sums
-                    col_values = diffs_series == 0
-                    col_values = self.check_results_for_null(col_values, col_name, subset)
-                    if col_values.tolist().count(False) < self.contamination_level:
-                        self.__process_analysis_binary(
-                            test_id,
-                            self.get_col_set_name(subset + [col_name]),
-                            subset + [col_name],
-                            col_values,
-                            f'The column "{col_name}" is consistently equal to the sum of the values in the columns {subset}',
-                            "",
-                            display_info={"Sum": col_sums, "operation": ''}
-                        )
-                        found_any = True
-                        break
-                    too_small_arr = self.orig_df[col_name] > col_sums
-                    if too_small_arr.tolist().count(True) > self.contamination_level:
-                        know_failed_subsets[tuple(subset)] = True
+
+                    # Check all 3 sub-tests on a sample first
+                    sample_df = self.sample_df[subset]
+                    col_sums = sample_df.sum(axis=1)
+                    sample_diffs_series = self.sample_df[col_name] - col_sums
+                    sample_col_values = sample_diffs_series == 0
+                    subtest_1_okay = sample_col_values.tolist().count(False) <= 1
+
+                    # Check on a sample for 2nd sub-test
+                    median_diff = sample_diffs_series.median()
+                    sample_col_values = [math.isclose(x, median_diff) for x in sample_diffs_series]
+                    subtest_2_okay = sample_col_values.count(False) <= 1
+
+                    # Check on a sample for 3rd sub-test
+                    ratios_series = self.sample_df[col_name] / col_sums
+                    median_ratio = ratios_series.median()
+                    sample_col_values = [math.isclose(x, median_ratio) for x in ratios_series]
+                    subtest_3_okay = sample_col_values.count(False) <= 1
+
+                    # Check if col_name is the sum of subset
+                    if subtest_1_okay or subtest_2_okay or subtest_3_okay:
+                        df = self.orig_df[subset]
+                        col_sums = df.sum(axis=1)
+                        diffs_series = self.orig_df[col_name] - col_sums
+                        col_values = diffs_series == 0
+                        col_values = self.check_results_for_null(col_values, col_name, subset)
+                        if col_values.tolist().count(False) < self.contamination_level:
+                            self.__process_analysis_binary(
+                                test_id,
+                                self.get_col_set_name(subset + [col_name]),
+                                subset + [col_name],
+                                col_values,
+                                f'The column "{col_name}" is consistently equal to the sum of the values in the columns {subset}',
+                                "",
+                                display_info={"Sum": col_sums, "operation": ''}
+                            )
+                            found_any = True
+                            break
+                        too_small_arr = self.orig_df[col_name] > col_sums
+                        if too_small_arr.tolist().count(True) > self.contamination_level:
+                            know_failed_subsets[tuple(subset)] = True
+                    else:
+                        too_small_arr = self.sample_df[col_name] > col_sums
+                        if too_small_arr.tolist().count(True) > 1:
+                            know_failed_subsets[tuple(subset)] = True
 
                     # Check if there is a constant difference between the column sums and the values in col_name. If so,
                     # column col_name is the sum of the columns plus a constant. We determine if the median value in
                     # the differences is this constant.
-                    median_diff = diffs_series.median()
-                    col_values = [math.isclose(x, median_diff) for x in diffs_series]
-                    col_values = self.check_results_for_null(col_values, col_name, subset)
-                    if col_values.tolist().count(False) < self.contamination_level:
-                        self.__process_analysis_binary(
-                            test_id,
-                            self.get_col_set_name(subset + [col_name]),
-                            subset + [col_name],
-                            np.array(col_values),
-                            (f'The column "{col_name}" is consistently equal to the sum of the values in the columns '
-                             f"{subset} plus {median_diff}"),
-                            "",
-                            display_info={"Sum": col_sums, "operation": "plus", "amount": median_diff}
-                        )
-                        found_any = True
-                        break
+                    if subtest_2_okay:
+                        median_diff = diffs_series.median()
+                        col_values = [math.isclose(x, median_diff) for x in diffs_series]
+                        col_values = self.check_results_for_null(col_values, col_name, subset)
+                        if col_values.tolist().count(False) < self.contamination_level:
+                            self.__process_analysis_binary(
+                                test_id,
+                                self.get_col_set_name(subset + [col_name]),
+                                subset + [col_name],
+                                np.array(col_values),
+                                (f'The column "{col_name}" is consistently equal to the sum of the values in the columns '
+                                 f"{subset} plus {median_diff}"),
+                                "",
+                                display_info={"Sum": col_sums, "operation": "plus", "amount": median_diff}
+                            )
+                            found_any = True
+                            break
 
                     # Check if there is a constant ratio between the column sums and the values in col_name. If so,
                     # column col_name is the sum of the columns times a constant. We determine if the median value in
                     # the differences is this constant.
-                    ratios_series = self.orig_df[col_name] / col_sums
-                    median_ratio = ratios_series.median()
-                    col_values = [math.isclose(x, median_ratio) for x in ratios_series]
-                    col_values = self.check_results_for_null(col_values, col_name, subset)
-                    if col_values.tolist().count(False) < self.contamination_level:
-                        self.__process_analysis_binary(
-                            test_id,
-                            self.get_col_set_name(subset + [col_name]),
-                            subset + [col_name],
-                            np.array(col_values),
-                            (f"The column {col_name} is consistently equal to the sum of the values in the columns "
-                             f" {subset} times {median_ratio}"),
-                            "",
-                            display_info={"Sum": col_sums, "operation": "times", "amount": median_ratio}
-                        )
-                        found_any = True
-                        break
+                    if subtest_3_okay:
+                        ratios_series = self.orig_df[col_name] / col_sums
+                        median_ratio = ratios_series.median()
+                        col_values = [math.isclose(x, median_ratio) for x in ratios_series]
+                        col_values = self.check_results_for_null(col_values, col_name, subset)
+                        if col_values.tolist().count(False) < self.contamination_level:
+                            self.__process_analysis_binary(
+                                test_id,
+                                self.get_col_set_name(subset + [col_name]),
+                                subset + [col_name],
+                                np.array(col_values),
+                                (f"The column {col_name} is consistently equal to the sum of the values in the columns "
+                                 f" {subset} times {median_ratio}"),
+                                "",
+                                display_info={"Sum": col_sums, "operation": "times", "amount": median_ratio}
+                            )
+                            found_any = True
+                            break
 
     def __generate_min_of_columns(self):
         """
@@ -9023,23 +9216,32 @@ class DataConsistencyChecker:
     def __generate_large_given_date(self):
         """
         Patterns without exceptions: This method identifies exceptions, but not patterns.
-        Patterns with exception: 'large_given_date all' is well correlated with the date and has no exceptions.
-            'large_given_date most' has one value in the last date bin which is very large, even for that bin.
+        Patterns with exception: 'large_given_date all' is well correlated with the date column and has no exceptions.
+            'large_given_date most' has one value in the last date bin which is very for that bin, though is normal
+            relative to the full column.
         # todo: should test with a largish value in one of the early rows.
         """
         test_date1 = datetime.datetime.strptime("01-7-2022", "%d-%m-%Y")
-        self.__add_synthetic_column('large_given_date rand', pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
-        self.__add_synthetic_column('large_given_date all',  [x for x in range(self.num_synth_rows)])
-        self.__add_synthetic_column('large_given_date most', [x for x in range(self.num_synth_rows - 1)] + [1_000_000])
+        self.__add_synthetic_column(
+            'large_given_date rand', pd.date_range(test_date1, periods=self.num_synth_rows, freq='D'))
+        self.__add_synthetic_column(
+            'large_given_date all',  sorted([x for x in range(self.num_synth_rows)], reverse=True))
+        self.__add_synthetic_column(
+            'large_given_date most', sorted([x for x in range(self.num_synth_rows - 1)], reverse=True) + [990])
 
     def __check_large_given_date(self, test_id):
+
+        # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
+        upper_limits_dict = self.get_columns_iqr_upper_limit()
+
         for date_idx, date_col in enumerate(self.date_cols):
             if self.verbose >= 2:
                 print(f"  Examining column {date_idx} of {len(self.date_cols)} date columns")
 
-            # Create 10 equal-width bins for the dates
             if self.orig_df[date_col].nunique() < 10:
                 continue
+
+            # Create 10 equal-width bins for the dates in the current date column
             bin_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             bin_assignments = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels)
             if bin_assignments.isna().sum() > 0:
@@ -9047,33 +9249,56 @@ class DataConsistencyChecker:
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
             bin_row_idxs = {}
             sub_dfs_arr_dict = {}
+
+            # Create a dictionary, keyed by the bin ids, containing a dataframe covering the rows represented by each
+            # bin.
             for bin_id in bin_labels:
                 bin_row_idxs[bin_id] = np.where(bin_assignments == bin_id)
                 sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
-                test_series = pd.Series()
+                test_series = [True] * self.num_rows
                 for bin_id in bin_labels:
+                    # Get the upper limit (based on IQR), given the full column
+                    upper_limit, col_q2, col_q3 = upper_limits_dict[num_col]
+
+                    # Get the stats for the numeric column for the subset
                     sub_df = sub_dfs_arr_dict[bin_id]
-                    num_vals = pd.Series([float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
+                    num_vals = pd.Series(
+                        [float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
                     q1 = num_vals.quantile(0.25)
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
                     threshold = q3 + (iqr * self.iqr_limit)
 
+                    # We are only concerned in this test with subsets that tend to have smaller values in the
+                    # numeric column, and flag large values in this case. We do not flag values in subsets that
+                    # have any values that are large relative to the subset; these are flagged by other tests.
+                    res_1 = num_vals > upper_limit
+                    if res_1.tolist().count(True) > 0:
+                        continue
+
+                    # Check this subset is small compared to the full column
+                    if (med >= col_q2) or (q3 >= col_q3):
+                        continue
+
                     # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
                     # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
-                    sub_test_series = pd.Series(num_vals_all > threshold)
-                    sub_test_series.index = list(bin_row_idxs[bin_id])
-                    test_series = pd.concat([test_series, sub_test_series])
-                test_series = test_series.sort_index()
+                    sub_test_series = pd.Series(num_vals_all <= threshold)
+
+                    if 0 < sub_test_series.tolist().count(False) <= self.contamination_level:
+                        index_of_large = \
+                            [x for x, y in zip(list(bin_row_idxs[bin_id][0]), list(sub_test_series.values)) if not y]
+                        for i in index_of_large:
+                            test_series[i] = False
+
                 self.__process_analysis_binary(
                     test_id,
                     f'"{date_col}" AND "{num_col}"',
                     [date_col, num_col],
-                    ~test_series,
+                    test_series,
                     f'"{num_col}" is unusually large given the date column: "{date_col}"',
                     f"",
                     allow_patterns=False
@@ -9091,13 +9316,17 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('small_given_date most', [x for x in range(self.num_synth_rows - 1)] + [2])
 
     def __check_small_given_date(self, test_id):
+
+        lower_limits_dict = self.get_columns_iqr_lower_limit()
+
         for date_idx, date_col in enumerate(self.date_cols):
             if self.verbose >= 2:
                 print(f"  Examining column {date_idx} of {len(self.date_cols)} date columns")
 
-            # Create 10 equal-width bins for the dates
             if self.orig_df[date_col].nunique() < 10:
                 continue
+
+            # Create 10 equal-width bins for the dates
             bin_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             bin_assignments = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels)
             if bin_assignments.isna().sum() > 0:
@@ -9105,33 +9334,56 @@ class DataConsistencyChecker:
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
             bin_row_idxs = {}
             sub_dfs_arr_dict = {}
+
+            # Create a dictionary, keyed by the bin ids, containing a dataframe covering the rows represented by each
+            # bin.
             for bin_id in bin_labels:
                 bin_row_idxs[bin_id] = np.where(bin_assignments == bin_id)
                 sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
-                test_series = pd.Series()
+                test_series = [True] * self.num_rows
                 for bin_id in bin_labels:
+                    # Get the lower limit (based on IQR), given the full column
+                    lower_limit, col_q1, col_q3 = lower_limits_dict[num_col]
+
+                    # Get the stats for the numeric column for the subset
                     sub_df = sub_dfs_arr_dict[bin_id]
-                    num_vals = pd.Series([float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
+                    num_vals = pd.Series(
+                        [float(x) for x in sub_df[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
                     q1 = num_vals.quantile(0.25)
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
                     threshold = q1 - (iqr * self.iqr_limit)
 
+                    # We are only concerned in this test with subsets that tend to have larger values in the
+                    # numeric column, and flag small values in this case. We do not flag values in subsets that
+                    # have any values that are small relative to the subset; these are flagged by other tests.
+                    res_1 = num_vals < lower_limit
+                    if res_1.tolist().count(True) > 0:
+                        continue
+
+                    # Check this subset is small compared to the full column
+                    if q1 <= col_q1:
+                        continue
+
                     # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
                     # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
-                    sub_test_series = pd.Series(num_vals_all < threshold)
-                    sub_test_series.index = list(bin_row_idxs[bin_id])
-                    test_series = pd.concat([test_series, sub_test_series])
-                test_series = test_series.sort_index()
+                    sub_test_series = pd.Series(num_vals_all >= threshold)
+
+                    if 0 < sub_test_series.tolist().count(False) <= self.contamination_level:
+                        index_of_small = \
+                            [x for x, y in zip(list(bin_row_idxs[bin_id][0]), list(sub_test_series.values)) if not y]
+                        for i in index_of_small:
+                            test_series[i] = False
+
                 self.__process_analysis_binary(
                     test_id,
                     f'"{date_col}" AND "{num_col}"',
                     [date_col, num_col],
-                    ~test_series,
+                    test_series,
                     f'"{num_col}" is unusually small given the date column: "{date_col}"',
                     f"",
                     allow_patterns=False
@@ -14552,7 +14804,7 @@ class DataConsistencyChecker:
             list(self.orig_df.columns),
             test_series,
             "The dataset consistently has",
-            " Null values per row"
+            "null values per row"
         )
 
     def __generate_zero_values_per_row(self):
@@ -14674,7 +14926,7 @@ class DataConsistencyChecker:
             list(self.orig_df.columns),
             test_series,
             "The dataset consistently has",
-            " negative values per row"
+            "negative values per row"
         )
 
     def __generate_small_avg_rank_per_row(self):
@@ -14761,6 +15013,12 @@ class DataConsistencyChecker:
 # General Methods outside the class
 ##################################################################################################################
 
+def safe_div(x, y):
+    if y == 0:
+        return 0
+    return x / y
+
+
 def is_number(s):
     try:
         float(s)
@@ -14808,10 +15066,6 @@ def styling_orig_row(x, row_idx, flagged_arr):
 
 
 def styling_flagged_rows(x, flagged_cells, flagged_arr):
-    print("flagged_arr: ", flagged_arr)
-    print("flagged_cells: ", flagged_cells)
-    print("flagged_cells: ", flagged_cells[0])
-
     df_styler = pd.DataFrame('background-color: #e5f8fa; color: black', index=x.index, columns=x.columns)
     for row_idx in x.index:
         for col_idx, col_name in enumerate(x.columns[:-1]):  # Do not check the 'FINAL SCORE' column
