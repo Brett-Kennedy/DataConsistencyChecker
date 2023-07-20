@@ -5,11 +5,13 @@ A python tool to examine datasets for consistency. It performs approximately 150
 
 The central idea of the tool is to automate the tests that would be done by a person examining a dataset and trying to determine the patterns within the columns, between the columns, and between the rows (in cases where there is some meaning to the order of the rows). That is, the tool essentially does what a person, studying a new dataset, would do, but automatically. This does not remove the need to do manual data exploration and, where the goal is identifying outliers, other forms of outlier detection, but does cover much of the work identifying the patterns in the data and the exceptions to these, with the idea that these are two of the principle tasks to understand a dataset. The tool allows users to perform this work quicker, more exhaustively, and covering more tests than would normally be done. 
 
-The tool executes a large set of tests over a dataset. For example, one test examines the number of decimal points typically found in a numeric column. If the data consistently contains, say, four decimal points, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column nearly always has four decimal digits, with a small number of expections (for example having eight decimal digits), this will be reported as a strong pattern with exceptions. In this example, this suggests the identified rows may have been collected or processed in a different manner than the other rows. And, while this may not be interesting in itself, where rows are flagged multiple times for this or other issues, users can be more confident the rows are somehow different. 
+The tool executes a large set of tests over a dataset. For example, one test examines the number of decimal digits typically found in a numeric column. If the data consistently contains, say, four decimal digits, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column nearly always has four decimal digits, with a small number of expections (for example having eight decimal digits), this will be reported as a strong pattern with exceptions. In this example, this suggests the identified rows may have been collected or processed in a different manner than the other rows. And, while this may not be interesting in itself, where rows are flagged multiple times for this or other issues, users can be more confident the rows are somehow different. 
 
-The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is usually larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum, or mean of another set of columns). 
+The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is consistently larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum, or mean of another set of columns). 
 
 The unusual data found may be due to data collection errors, to mixing different types of data together, or other issues that may be considered errors, or that may be informative. 
+
+While many of the individual tests are straight-forward, there are real advantages to running them within a single package, notably the ability to identify rows that are significantly different from the majority, even where this is only evident from multipe subtle deviations, and the ability to ammortize processing work over many tests. Much of the computation necessary for the tests is shared among two or more tests and consequently running many tests on the same dataset can result in increased performance, in terms of time per test. 
 
 ### EDA
 
@@ -51,6 +53,10 @@ dc.display_detailed_results()
 ```
 
 It is necessary to first instantiate a DataConsistencyChecker object, call init_data() with a pandas dataframe, and call check_data_quality(). After this is complete, there are a number of APIs available to examine the results and assess the findings, including APIs to summarize the patterns and exceptions by row, column, and test, to describe the most-flagged rows, and get the total score per row. In this example, display_detailed_results() is called, which displays each pattern and each exception found in detail, including examples of values for the relevant columns flagged and not flagged, and plots where appropriate. 
+
+## API Documentation
+
+For detailed description of the API, refer to the Read the Docs page: https://dataconsistencychecker.readthedocs.io/en/latest/
 
 ## Examples
 
