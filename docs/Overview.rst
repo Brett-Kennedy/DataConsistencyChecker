@@ -1,7 +1,7 @@
-Data Consistency Checker
+Overview
 ===================================
 
-DataConsistencyChecker
+Introduction
 ----------------------------
 
 A python tool to examine datasets for consistency. It performs approximately 150 tests, identifying patterns in the data and any exceptions to these. The tool provides useful analysis for any EDA (Exploratory Data Analysis) and may be useful for interpretable outlier detection.
@@ -27,7 +27,7 @@ Exploratory data analysis may be run for a variety of purposes, but generally mo
 
 Outlier Detection
 -------------------
-DataConsistencyChecker provides a large set of tests, each independent of the others and each higly interpretable. Running the tool, it's common for rows that are unusual to be flagged multiple times. This allows us to evaluate the outlier-ness of any given row based on the number of times it was flagged for issues relative to the other rows in the dataset. For example, if a row contains, for example, some values that are unusually large, as well as some strings with unusual characters, strings of unusual lengths, time values at unusual times of day, and rare values, the row will then be flagged multiple times, giving it a relatively high outlier score.
+DataConsistencyChecker provides a large set of tests, each independent of the others and each highly interpretable. Running the tool, it's common for rows that are unusual to be flagged multiple times. This allows us to evaluate the outlier-ness of any given row based on the number of times it was flagged for issues relative to the other rows in the dataset. For example, if a row contains, for example, some values that are unusually large, as well as some strings with unusual characters, strings of unusual lengths, time values at unusual times of day, and rare values, the row will then be flagged multiple times, giving it a relatively high outlier score.
 
 The majority of outlier detectors work on either strictly numeric data, or strictly categorical data, with numeric outlier detectors seeking to identify unusual rows as points in high-dimensional space far from the majority of other rows, and with categorical outlier detectors seeking to identify unusual combinations of values. These tests are very useful, but can be uninterpretable with a sufficient number of features: it can be difficult to confirm the rows are more unusual than the majority of rows or to even determine why they were flagged as outliers.
 
