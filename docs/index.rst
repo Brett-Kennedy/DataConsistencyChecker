@@ -14,4 +14,4 @@ Contents
 
    Overview
    Getting Started
-   API
+   check_data_consistency
