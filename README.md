@@ -3,41 +3,39 @@ A python tool to examine datasets for consistency. It performs approximately 150
 
 ## Background
 
-The central idea of the tool is to automate the tests that would be done by a person examining a dataset and trying to determine the patterns within the columns, between the columns, and between the rows (in cases where there is some meaning to the order of the rows). That is, the tool essentially does what a person, studying a new dataset, would do, but automatically. This does not remove the need to do manual data exploration and, where the goal is identifying outliers, other forms of outlier detection, but does cover much of the work identifying the patterns in the data and the exceptions to these, with the idea that these are two of the principle tasks to understand a dataset. The tool allows users to perform this work quicker, more exhaustively, and covering more tests than would normally be done. 
+The central idea of the tool is to automate the tests that would be done by a person examining a dataset and trying to determine the patterns within the columns, between the columns, and between the rows (in cases where there is some meaning to the order of the rows). That is, the tool essentially does what a person, studying a new dataset, would do, but automatically. This does not remove the need to do manual data exploration and, where the goal is identifying outliers, other forms of outlier detection, but does cover much of the work identifying the patterns in the data and the exceptions to these, with the idea that these are two of the principle tasks to understand a dataset. The tool allows users to perform this work quicker, more exhaustively and consistently, and covering more tests than would normally be done. 
 
-The tool executes a large set of tests over a dataset. For example, one test examines the number of decimal digits typically found in a numeric column. If the data consistently contains, say, four decimal digits, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column nearly always has four decimal digits, with a small number of expections (for example having eight decimal digits), this will be reported as a strong pattern with exceptions. In this example, this suggests the identified rows may have been collected or processed in a different manner than the other rows. And, while this may not be interesting in itself, where rows are flagged multiple times for this or other issues, users can be more confident the rows are somehow different. 
+The tool executes a large set of tests over a dataset. For example, one test examines the number of decimal digits typically found in a numeric column. If the data consistently contains, say, four decimal digits, with no exceptions, this will be reported as a strong pattern without exceptions; if the data in this column nearly always has four decimal digits, with a small number of expections (for example having eight decimal digits), this will be reported as a strong pattern with exceptions. In this example, this suggests the identified rows may have been collected or processed in a different manner than the other rows. And, while this may not be interesting in itself, where rows are flagged multiple times for this or other issues, users may become progressively more confident that the repeatedly-flagged rows are in some sense different. 
 
-The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is consistently larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum, or mean of another set of columns). 
+The tests run over single columns (for example, checking for rare, unsually small or large values, etc), pairs of columns (for example checking if one column is consistently larger than the other, contains similar characters (in the case of code or ID string values), etc.), or larger sets of columns (for example, checking if one column tends to be the sum, or mean, of another set of columns). 
 
-The unusual data found may be due to data collection errors, to mixing different types of data together, or other issues that may be considered errors, or that may be informative. 
+The unusual data found may be due to data collection errors, to mixing different types of data together, or other issues that may be considered errors, or that may be informative. Some may point to forms of feature engineering, which may be useful for downstream tasks. 
 
-While many of the individual tests are straight-forward, there are real advantages to running them within a single package, notably the ability to identify rows that are significantly different from the majority, even where this is only evident from multipe subtle deviations, and the ability to ammortize processing work over many tests. Much of the computation necessary for the tests is shared among two or more tests and consequently running many tests on the same dataset can result in increased performance, in terms of time per test. 
+While all of the individual tests are straight-forward (and therefore interpretable) there are real advantages to running them within a single package, notably the ability to identify rows that are significantly different from the majority, even where this is only evident from multipe subtle deviations, and the ability to ammortize processing work over many tests. Much of the computation necessary for the tests is shared among two or more tests and consequently running many tests on the same dataset can result in increased performance, in terms of time per test. 
 
 ### EDA
-
 DataConsistencyChecker may be used for exploratory data analsys simply by running the tool and examining the patterns, and exceptions to the patterns that are found.
 
-Exploratory data analysis may be run for a variety of purposes, but generally most relate to one of two high-level purposes: ensuring the data is of sufficient quality to build a model (or can be made to be of sufficient quality after removing or replacing any necessary values, rows, or columns), and gaining insights into the data in order to build appropriate models. This tool may be of assistence for both these purposes.  
+Exploratory data analysis may be run for a variety of purposes, but generally most relate to one of two high-level purposes: ensuring the data is of sufficient quality to build a model (or can be made to be of sufficient quality after removing any necessary rows or columns, or replacing any necessary individual values), and gaining insights into the data in order to help build appropriate models. This tool may be of assistence for both these purposes.  
 
 ### Outlier Detection
 
-DataConsistencyChecker provides a large set of tests, each independent of the others and each highly interpretable. Running the tool, it's common for rows that are unusual to be flagged multiple times. This allows us to evaluate the outlier-ness of any given row based on the number of times it was flagged for issues relative to the other rows in the dataset. For example, if a row contains, for example, some values that are unusually large, as well as some strings with unusual characters, strings of unusual lengths, time values at unusual times of day, and rare values, the row will then be flagged multiple times, giving it a relatively high outlier score. 
+DataConsistencyChecker provides a large set of tests, each independent of the others and each highly interpretable. Running the tool, it's common for rows that are unusual to be flagged multiple times. This allows users to evaluate the outlierness of any given row based on the number of times it was flagged for issues, relative to the other rows in the dataset. For example, if a row contains, for example, some values that are unusually large, as well as some strings with unusual characters, strings of unusual lengths, time values at unusual times of day, and rare values in categorical columns, the row will then be flagged multiple times, giving it a relatively high outlier score. 
 
-The majority of outlier detectors work on either strictly numeric data, or strictly categorical data, with numeric outlier detectors seeking to identify unusual rows as points in high-dimensional space far from the majority of other rows, and with categorical outlier detectors seeking to identify unusual combinations of values. These tests are very useful, but can be uninterpretable with a sufficient number of features: it can be difficult to confirm the rows are more unusual than the majority of rows or to even determine why they were flagged as outliers. 
+The majority of outlier detectors work on either strictly numeric data, or strictly categorical data, with numeric outlier detectors seeking to identify unusual rows as points in high-dimensional space far from the majority of other rows, and with categorical outlier detectors seeking to identify unusual combinations of values. These tests are very useful, but can be uninterpretable, especially with high-dimensional datasets: it can be difficult to confirm the rows are more unusual than the majority of rows or to even determine why they were flagged as outliers. 
 
-DataConsistencyChecker may flag a row, for example, for having a very large value in Column A, a value with an unsual number of digits in Column D, an unusually long string in Column C, and values with unusual rounding in Column D and Column G. As with any outlier detection scheme, it is difficult to gauge the outlier-ness of each of these, but DataConsistencyChecker does have the desirable property that each of these is simple to comprehend. 
+DataConsistencyChecker may flag a row, for example, for having a very large value in Column A, a value with an unsual number of digits in Column D, an unusually long string in Column C, and values with unusual rounding in Column D and Column G. As with any outlier detection scheme, it is difficult to gauge the outlierness of each of these issues, but DataConsistencyChecker does have the desirable property that each of these is simple to comprehend. 
 
 As this tool is limited to interpretable outlier detection methods, it does not test for the multi-dimensional outliers detected by other algorithms such as Isolation Forest. These outlier detection algorithms should generally also be executed to have a full understanding of the outliers present in the data. 
 
 ## Intallation
-The code consists of a single [python file](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/check_data_consistency.py) which may be downloaded and included in any projct. It does not rely on any other tools than numpy, pandas, scipy, matplotlib, seaborn, and other standard libraries. Once downloaded, it may be included as:
+The code consists of a single [python file](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/check_data_consistency.py) which may be downloaded and included in any project. It does not rely on any other packages than numpy, pandas, scipy, matplotlib, seaborn, and other standard libraries. Once downloaded, it may be included as:
 
 ```python
 from check_data_consistency import DataConsistencyChecker
 ```
 
 ## Getting Started
-
 ```python
 import pandas as pd
 import sklearn.datasets as datasets
@@ -52,23 +50,20 @@ dc.check_data_quality()
 dc.display_detailed_results()
 ```
 
-It is necessary to first instantiate a DataConsistencyChecker object, call init_data() with a pandas dataframe, and call check_data_quality(). After this is complete, there are a number of APIs available to examine the results and assess the findings, including APIs to summarize the patterns and exceptions by row, column, and test, to describe the most-flagged rows, and get the total score per row. In this example, display_detailed_results() is called, which displays each pattern and each exception found in detail, including examples of values for the relevant columns flagged and not flagged, and plots where appropriate. 
+It is necessary to first instantiate a DataConsistencyChecker object, call init_data() with a pandas dataframe, and call check_data_quality(). After this is complete, there are a number of additional APIs available to examine the results and assess the findings, including APIs to summarize the patterns and exceptions by row, column, and test, to describe the most-flagged rows, and get the total score per row. In this example, display_detailed_results() is called, which displays each pattern and each exception found in detail, including examples of values for the relevant columns flagged and not flagged, and plots where appropriate. 
 
 ## API Documentation
-
 For detailed description of the API, refer to the Read the Docs page: https://dataconsistencychecker.readthedocs.io/en/latest/
 
 ## Examples
-
-In this section we provide some examples of patterns identified in datasets available on OpenML. See the example notebooks as well for examples of working with datasets from OpenML and the toy sets provided with sklearn. 
+In this section we provide some examples of patterns identified in datasets available on OpenML. See the example notebooks as well for examples of working with datasets from OpenML and the toy datasets provided with sklearn. 
 
 ### Housing
 In the sklearn housing dataset, the tool identified that AveRooms and AveOccup are consistently above 1.0, with 2 and 3 exceptions respectively. It also flags population values of 3, 6, and 8, and AveOccup values in the hundreds or thousands.
 
-Note: in most cases, other patterns were also identified, which may or may not be interesting. There may be some step involved with examining the patterns to identify the relevant ones, but this is typically quite quick and worthwhile identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered.
+Note: in most cases, other patterns were also identified, which may or may not be interesting. There may be a step involved with examining the patterns to identify the relevant ones, but this is typically quite quick and worthwhile to identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered.
 
 ## Performance
-
 The tool typically runs in under a minute for small files, and under 30 minutes even for very large files, with hundreds of thousands of rows and/or hundreds of columns. However, it is often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
 
 - Exclude some tests. Some may be of less interest to your project or may be slower to execute.  
@@ -108,7 +103,9 @@ If there are, say, 10,000 rows in a dataset, then the default value of 0.5% exce
 
 ### Noting the Patterns not Found
 
-DataConsistencyChecker performs enough tests that it's reasonably likely to find something of interest in any non-trivial dataset, and there is some meaning in the fact that it does not when it does not. In general, what it does not flag can be of interest as well as what it does flag. For example, any rows with scores of zero may be reasonably considered to be very normal with respect to the dataset. As well, the tool provides interfaces to identify where patterns were not present. For example, if it may be expected that a column contains entirely positive values, then it is possible to see that it is not the case that it contains entirely positive values, or that it contains almost entirely positive values, with some exceptions.  
+DataConsistencyChecker performs sufficient tests that it's reasonably likely to find something of interest in any non-trivial dataset and, where it does not, there is real meaning in the fact that it does not -- this suggests a very consistent dataset. 
+
+In general, what it does not flag can be of interest as well as what it does flag. For example, any rows with scores of zero may be reasonably considered to be very normal with respect to the dataset. As well, the tool provides interfaces to identify where patterns were not present. For example, if it may be expected that a column contains entirely positive values, then it is possible to see that it is not the case that it contains entirely positive values, or that it contains almost entirely positive values, with some exceptions.  
 
 ## Synthetic Data
 The tool provides an API to generate synthetic data, which has been designed to provide columns that will be flagged by the tests, such that each test flags at least one column or set of columns. This may be useful for new users to help understand the tests, as they provide useful examples, and may be altered to determine when specifically the tests flag or do not flag patterns. The synthetic data is also used by the unit tests to help ensure consistent behaviour as the tests are expanded and improved. 
