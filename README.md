@@ -55,13 +55,21 @@ It is necessary to first instantiate a DataConsistencyChecker object, call init_
 ## API Documentation
 For detailed description of the API, refer to the Read the Docs page: https://dataconsistencychecker.readthedocs.io/en/latest/
 
-## Examples
-In this section we provide some examples of patterns identified in datasets available on OpenML. See the example notebooks as well for examples of working with datasets from OpenML and the toy datasets provided with sklearn. 
+## Example Notebooks
 
-### Housing
-In the sklearn housing dataset, the tool identified that AveRooms and AveOccup are consistently above 1.0, with 2 and 3 exceptions respectively. It also flags population values of 3, 6, and 8, and AveOccup values in the hundreds or thousands.
+**APIs Demo**
 
-Note: in most cases, other patterns were also identified, which may or may not be interesting. There may be a step involved with examining the patterns to identify the relevant ones, but this is typically quite quick and worthwhile to identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered.
+The [APIs Demo] notebook provides examples of many of the APIs provided with the tool, though many of more common APIs are covered by the California Housing and Breast Cancer demo notebooks, and are not covered here. 
+
+**California Housing Demo**
+
+**Breast Cancer Demo**
+
+**OpenML Demo**
+
+The [OpenML]() notebook runs DataConsistencyChecker on several datasets from OpenML, and displays a small number of findings for each. In most cases, other patterns were also identified, which may or may not be interesting. In general, there may be a step involved with examining the patterns discovered to identify the relevant ones, but this is typically quite quick and worthwhile to identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered, with examples in many of the other notebooks.
+
+This notebook, for each dataset, runs the checker for a small number of tests, then displays some subset of the results found, often filtering the results to show only a single issue, or the issues related to a single feature. Many more patterns are found in each of these, but the purpose of the notebook is to provide examples of some of the patterns that can be found fairly often. Some of the tests provided with the tool identify patterns in real datasets less frequently. 
 
 ## Performance
 The tool typically runs in under a minute for small files, and under 30 minutes even for very large files, with hundreds of thousands of rows and/or hundreds of columns. However, it is often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
