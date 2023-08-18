@@ -1358,17 +1358,32 @@ class DataConsistencyChecker:
         from analysis due to having only one unique value.
         """
         print()
-        print(f"String Columns:")
-        print(self.string_cols)
+        print_text(f"**String Columns**:")
+        if len(self.string_cols) > 0:
+            print_text(str(self.string_cols).replace('[', '').replace(']', ''))
+        else:
+            print_text("None")
+
         print()
-        print(f"Numeric Columns:")
-        print(self.numeric_cols)
+        print_text(f"**Numeric Columns**:")
+        if len(self.numeric_cols) > 0:
+            print_text(str(self.numeric_cols).replace('[', '').replace(']', ''))
+        else:
+            print_text("None")
+
         print()
-        print(f"Binary Columns:")
-        print(self.binary_cols)
+        print_text(f"**Binary Columns**:")
+        if len(self.binary_cols) > 0:
+            print_text(str(self.binary_cols).replace('[', '').replace(']', ''))
+        else:
+            print_text("None")
+
         print()
-        print(f"Date/Time Columns:")
-        print(self.date_cols)
+        print_text(f"**Date/Time Columns**:")
+        if len(self.date_cols) > 0:
+            print_text(str(self.date_cols).replace('[', '').replace(']', ''))
+        else:
+            print_text("None")
 
     def display_columns_types_table(self):
         var_types = []
@@ -1418,10 +1433,10 @@ class DataConsistencyChecker:
 
         ret_list = []
         if include_patterns:
-            ret_list = self.patterns_df['Test ID'].unique()
+            ret_list = self.patterns_df['Test ID'].unique().tolist()
 
         if include_exceptions:
-            ret_list += self.exceptions_summary_df['Test ID'].unique()
+            ret_list += self.exceptions_summary_df['Test ID'].unique().tolist()
 
         ret_list = list(set(ret_list))
         return ret_list
@@ -1711,6 +1726,7 @@ class DataConsistencyChecker:
                 return
 
             if is_notebook():
+                print(''.join(['.'] * 100))
                 display(Markdown(f"### {test_id}"))
             else:
                 print("\n\n\n")
@@ -1843,7 +1859,7 @@ class DataConsistencyChecker:
                         print_text("Pattern found (without exceptions)")
                         print()
                         print_text("**Description**:")
-                        print(sub_patterns.iloc[0]['Description of Pattern'])
+                        print_text(sub_patterns.iloc[0]['Description of Pattern'])
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
                         if include_examples:
                             self.__display_examples(
@@ -1957,6 +1973,16 @@ class DataConsistencyChecker:
                             columns_set,
                             show_exceptions=True,
                             display_info=sub_summary.iloc[0]['Display Information'])
+
+    def get_outlier_scores(self):
+        """
+        Returns an outlier score for each row, similar to most outlier detectors.
+        Returns an python array with an element for each row in the original data. All values are non-negative integer
+        values, with most rows containing zero for most datasets.
+        """
+        if self.test_results_df is not None and not self.test_results_df.empty:
+            return self.test_results_df['FINAL SCORE'].tolist()
+        return [0] * len(self.orig_df)
 
     def get_results_by_row_id(self, row_num):
         """
@@ -2081,7 +2107,7 @@ class DataConsistencyChecker:
             if is_notebook():
                 display(df.style.apply(styling_flagged_rows,
                                        flagged_cells=self.test_results_by_column_np,
-                                       flagged_arr=[True] * len(self.orig_df.columns), axis=None))
+                                       axis=None))
             else:
                 print(df)
 
@@ -2810,12 +2836,12 @@ class DataConsistencyChecker:
     def __display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
         # Do not show examples for some tests
         if is_patterns and test_id in ['UNIQUE_VALUES']:
-            print("Examples are not shown for this pattern.")
+            print_text("Examples are not shown for this pattern.")
             return
 
         if test_id in ['MISSING_VALUES_PER_ROW', 'ZERO_VALUES_PER_ROW',
                        'NEGATIVE_VALUES_PER_ROW', 'GROUPED_STRINGS']:
-            print("Examples are not shown for this pattern.")
+            print_text("Examples are not shown for this pattern.")
             return
 
         show_consecutive = test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC',
@@ -3122,8 +3148,12 @@ class DataConsistencyChecker:
                 for fv in flagged_vals:
                     s.axvline(fv, color='red')
                 s.set_title(f'Distribution of \n"{cols[2]}" where \n"{cols[0]}" is "{v0}" and \n"{cols[1]}" is "{v1}"')
-                num_ticks = len(ax[v_idx].xaxis.get_ticklabels())
-                for label_idx, label in enumerate(ax[v_idx].xaxis.get_ticklabels()):
+                if nvals == 1:
+                    ax_curr = ax
+                else:
+                    ax_curr = ax[v_idx]
+                num_ticks = len(ax_curr.xaxis.get_ticklabels())
+                for label_idx, label in enumerate(ax_curr.xaxis.get_ticklabels()):
                     if label_idx != (num_ticks - 1):
                         label.set_visible(False)
             plt.show()
@@ -8351,7 +8381,7 @@ class DataConsistencyChecker:
                     self.get_col_set_name(subset),
                     list(subset),
                     pos_matching_arr & neg_matching_arr,
-                    f"The columns in {subset} are consistently positive and negative together",
+                    f"The columns in {str(subset)[1:-1]} are consistently positive and negative together",
                     ""
                 )
 
@@ -8808,7 +8838,7 @@ class DataConsistencyChecker:
                     features_used + [col_name],
                     test_series,
                     (f'The column "{col_name}" contains values that are consistently predictable based on a linear '
-                     f'regression\nformula: {regression_formula}'),
+                     f'regression formula: \n{regression_formula}'),
                     display_info={'Pred': pd.Series(y_pred)}
                 )
 
@@ -11707,7 +11737,7 @@ class DataConsistencyChecker:
                 col_name,
                 [col_name],
                 test_series,
-                (f'Column "{col_name}" consistently contains values with the pattern {vc.index[0]} where "X" '
+                (f'Column "{col_name}" consistently contains values with the pattern "{vc.index[0]}", where "X" '
                  f'represents alpha-numeric characters'),
             )
 
@@ -15305,6 +15335,9 @@ def styling_flagged_rows(x, flagged_cells):
         for col_idx, col_name in enumerate(x.columns[:-1]):  # Do not check the 'FINAL SCORE' column
             if flagged_cells[row_idx, col_idx] > 0:
                 df_styler.loc[row_idx][x.columns[col_idx]] = 'background-color: #efecc3; color: black'
+    for row_idx in x.index:
+        col_idx = len(x.columns) - 1
+        df_styler.loc[row_idx][x.columns[col_idx]] = 'background-color: white; color: black'
     return df_styler
 
 
@@ -15329,6 +15362,7 @@ def print_text(s):
     General method to handle printing text to either console or notebook, in the form of markdown.
     """
     if is_notebook():
+        s = s.replace('\n', '<br>')
         display(Markdown(s))
     else:
         # Remove any characters that are specific to markdown
