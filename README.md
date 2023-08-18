@@ -62,6 +62,12 @@ It is necessary to first instantiate a DataConsistencyChecker object, call init_
 
 The [APIs Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_APIs.ipynb) notebook provides examples of many of the APIs provided with the tool, though many of more common APIs are covered by the California Housing and Breast Cancer demo notebooks, and are not covered here. This notebook goes through an example with the Boston Housing dataset. Note, in some cases the background coloring in the displayed notebooks will not render in github.
 
+Each of the notebooks provides examples of some of the plots available. 
+
+Example display of a row identified as an outler:
+
+![example](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/images/img1.jpg)
+
 <br>
 
 **California Housing Demo**
