@@ -59,15 +59,19 @@ For detailed description of the API, refer to the Read the Docs page: https://da
 
 **APIs Demo**
 
-The [APIs Demo] notebook provides examples of many of the APIs provided with the tool, though many of more common APIs are covered by the California Housing and Breast Cancer demo notebooks, and are not covered here. 
+The [APIs Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_APIs.ipynb) notebook provides examples of many of the APIs provided with the tool, though many of more common APIs are covered by the California Housing and Breast Cancer demo notebooks, and are not covered here. 
 
 **California Housing Demo**
 
+The [California Housing Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_California_Housing.ipynb) notebook...
+
 **Breast Cancer Demo**
+
+The [Breast Cancer Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_Real_Breast_Cancer.ipynb) notebook...
 
 **OpenML Demo**
 
-The [OpenML]() notebook runs DataConsistencyChecker on several datasets from OpenML, and displays a small number of findings for each. In most cases, other patterns were also identified, which may or may not be interesting. In general, there may be a step involved with examining the patterns discovered to identify the relevant ones, but this is typically quite quick and worthwhile to identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered, with examples in many of the other notebooks.
+The [OpenML](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_OpenML_Datasets.ipynb) notebook runs DataConsistencyChecker on several datasets from OpenML, and displays a small number of findings for each. In most cases, other patterns were also identified, which may or may not be interesting. In general, there may be a step involved with examining the patterns discovered to identify the relevant ones, but this is typically quite quick and worthwhile to identify the interesting patterns. APIs are provided to assist with processessing patterns where many are discovered, with examples in many of the other notebooks.
 
 This notebook, for each dataset, runs the checker for a small number of tests, then displays some subset of the results found, often filtering the results to show only a single issue, or the issues related to a single feature. Many more patterns are found in each of these, but the purpose of the notebook is to provide examples of some of the patterns that can be found fairly often. Some of the tests provided with the tool identify patterns in real datasets less frequently. 
 
