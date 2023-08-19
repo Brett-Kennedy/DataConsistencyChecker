@@ -90,6 +90,17 @@ This notebook, for each dataset, runs the checker for a small number of tests, t
 
 The tests are able to find instances where columns are correlated, where columns have identical values, where one column is equal, or approximately equal to the sum, product, ratio, or difference in two other coumns, where one column may be predicted from other columns using a linear regression or small decision tree, where columns are ordered with monotonically increasing values, or with cyclical patterns of values. 
 
+An example where two columns were found to be correlated with an exception:
+
+
+![example](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/images/img2.jpg)
+
+An example where one column was found to be the sum of two other columns with two exceptions:
+
+
+![example](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/images/img3.jpg)
+
+
 ## Performance
 The tool typically runs in under a minute for small files and under 30 minutes even for very large files, with hundreds of thousands of rows and hundreds of columns. However, it is often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
 
