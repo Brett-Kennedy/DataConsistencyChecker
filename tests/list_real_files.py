@@ -1,9 +1,3 @@
-# OpenML files specifically not used:
-# gina-agnostic - file not available on OpenML
-# amazon-commerce-reviews -- currently slow and needs to be sped up.
-# balance_scale - file not available on OpenML
-# synthetic-control  - file not available on OpenML
-# cjs - file not available on OpenML
 
 real_files = [
 	'isolet',
