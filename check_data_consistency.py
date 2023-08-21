@@ -63,24 +63,37 @@ class DataConsistencyChecker:
                  max_combinations=100_000,
                  verbose=1):
         """
-        execute_list: a list of test ids. If specified, only these tests will be executed.
-        exclude_list: a list of test ids. If specified, these tests will not be executed; all others will be.
-        iqr_limit: Inter-quartile range is used in several tests to find unusually small or large values. For example,
-                    to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
-                    inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
-                    is used here.
-        idr_limit: Inter-decile range is used in several tests, particularly to identify very small values, as IQR
-                    can work poorly where the values are strictly positive.
-        max_combinations: Several tests check many combinations of columns, which can be very slow to execute where
-                    there are many columns. For example, BIN_NUM_SAME will check subsets of the binary columns,
-                    testing different sizes of subsets. For some sizes of subsets, there may be a very large number of
-                    combinations. Setting max_combinations will restrict the number of combinations examined. This may
-                    result in missing some patterns, but allows execution time to be limited. This applies only to
-                    tests that check subsets of multiple sizes.
-        verbose:    If -1, no output at all will be displayed
-                    If 0, no output will be displayed until the tests are complete.
-                    If 1, the test names will be displayed as they execute.
-                    If 2, progress related to each of the more expensive tests will be displayed as well.
+        Initialize a DataConsistencyChecker object.
+
+        execute_list: a list of test ids.
+            If specified, only these tests will be executed.
+
+        exclude_list: a list of test ids.
+            If specified, these tests will not be executed; all others will be.
+
+        iqr_limit: float
+            Inter-quartile range is used in several tests to find unusually small or large values. For example,
+            to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
+            inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
+            is used here.
+
+        idr_limit: float
+            Interdecile range is used in several tests, particularly to identify very small values, as IQR can work
+            poorly where the values are strictly positive.
+
+        max_combinations: int
+            Several tests check many combinations of columns, which can be very slow to execute where there are many
+            columns. For example, BIN_NUM_SAME will check subsets of the binary columns, testing different sizes of
+            subsets. For some sizes of subsets, there may be a very large number of combinations. Setting
+            max_combinations will restrict the number of combinations examined. This may result in missing some
+            patterns, but allows execution time to be limited. This applies only to tests that check subsets of
+            multiple sizes.
+
+        verbose: int
+            If -1, no output at all will be displayed
+            If 0, no output will be displayed until the tests are complete.
+            If 1, the test names will be displayed as they execute.
+            If 2, progress related to each of the more expensive tests will be displayed as well.
         """
 
         # Set class variables from the parameters
@@ -805,8 +818,10 @@ class DataConsistencyChecker:
 
     def init_data(self, df, known_date_cols=None):
         """
-        Parameters:
-        known_date_cols: If specified, these, and only these, columns will be treated as date columns.
+        Must be called before calling check_data_quality(). Prepares the data for checking for anomalies.
+
+        known_date_cols: list of strings
+            If specified, these, and only these, columns will be treated as date columns.
         """
 
         self.orig_df = df
@@ -1047,18 +1062,29 @@ class DataConsistencyChecker:
         Generate a random synthetic dataset which may be used to demonstrate each of the tests.
 
         Parameters
-        all_cols:
-        If all_cols is False, this generates columns specifically only for the tests that are specified to run.
-        If all_cols is True, this generates columns related to all tests, even where that test is not specified to run.
+        all_cols: bool
+            If all_cols is False, this generates columns specifically only for the tests that are specified to run.
+            If all_cols is True, this generates columns related to all tests, even where that test is not specified to
+            run.
 
-        execute_list
+        execute_list: list of strings
+            If specified, only columns related to these tests will be generated.
 
-        exclude_list
+        exclude_list: list of strings
+            If specified, columns related to all tests other than these will be generated. It is not permitted to
+            specify both execute_list and exclude_list.
 
-        If add_nones is set to 'random', then each column will have a set of None values added randomly, covering 50%
-        the values.
-        If set to 'in-sync', this is similar, but all columns will have None set in the ame rows.
+        seed: int
+            If specified, this is used to initialize any random processes, which are involved in the creation of
+            most synthetic columns. If specified, the synthetic data creation will be repeatable.
+
+        add_nones: string
+            If add_nones is set to 'random', then each column will have a set of None values added randomly, covering
+            50% of the values. If set to 'in-sync', this is similar, but all columns will have None set in the ame rows.
+            If set to 'one-row', only one row will be given None values. If set to '80-percent', 80% of all values
+            will be set to None.
         """
+
         assert add_nones in ['none', 'one-row', 'in-sync', 'random', '80-percent']
 
         self.synth_df = pd.DataFrame()
@@ -1102,11 +1128,17 @@ class DataConsistencyChecker:
     def modify_real_data(self, df, num_modifications=5):
         """
         Given a real dataset, modify it slightly, in order to add what are likely inconsistencies to the data
-        :param df:
-        :param num_modifications: int
+
+        df: pandas dataframe
+            A real or synthetic dataset.
+
+        num_modifications: int
             The number of modifications to make. This should be small, so as not to change the overall distribution
             of the data
-        :return: the modified dataframe, a list of row numbers and column names, indicating the cells that were modified
+
+        Return:
+            the modified dataframe,
+            a list of row numbers and column names, indicating the cells that were modified
         """
 
         cell_list = []
@@ -1134,27 +1166,31 @@ class DataConsistencyChecker:
             contamination_level=0.005,
             run_parallel=False):
         """
-        Run the specified tests on the dataset specified here. The tests are specified in the constructor. This method
-        populates the patterns, results_summary, and results dataframes.
+        Run the specified tests on the dataset specified here. This method identifies the patterns and exceptions to
+        these found in the data. Some information is returned, but additional API calls may be made as well to access
+        this information
 
-        Args:
-            df: the dataframe containing all data to be assessed
+        execute_list: list of Test IDs
+            If specified, these and only these tests will be executed.
 
-            execute_list: todo: fill in
+        exclude_list:  list of Test IDs
+            If specified, all tests other than these will be executed. It is not permitted to specify both
+               execute_list and exclude_list.
 
-            exclude_list:  todo: fill in
+        test_start_id: int
+            Each test has a unique number. Specifying a value greater than 0 will skip the initial tests. This may be
+            specified to continue a previous execution that was incomplete.
 
-            test_start_id: Each test has a unique number. Specifying a value greater than 0 will skip the initial tests.
-                This may be specified to continue a previous execution that was incomplete.
+        fast_only: bool
+            If specified, only tests that operate on single columns will be executed. The slower tests check sets of
+            two or more columns, and are skipped if this is set True.
 
-            fast_only: If specified, only tests that operate on single columns will be executed. The slower tests check
-                sets of two or more columns, and are skipped if this is set True.
+        contamination_level: int or float
+            The maximum fraction of rows in violation of the pattern where we consider the pattern to still be in place.
+            If set as an integer, this defines the maximum number of rows, as opposed to the fraction.
 
-            contamination_level: The maximum fraction of rows in violation of the pattern where we consider the pattern
-                to still be in place. If set as an integer, this defines the maximum number of rows, as opposed to the
-                fraction.
-
-            run_parallel: todo: fill in
+        run_parallel: bool
+            If set True, the tests will be run in parallel, which can reduce overall execution time.
 
         Returns:
             This returns the exceptions_summary dataframe.
@@ -1320,9 +1356,9 @@ class DataConsistencyChecker:
         """
         Prints to screen a prettified list of tests and their descriptions.
 
-        :param long_desc
+        long_desc: bool
             If True, longer descriptions will be displayed for tests where available. If False, the short descriptions
-            only will be dislayed.
+            only will be displayed.
         """
 
         for test_id in self.test_dict.keys():
@@ -1343,8 +1379,9 @@ class DataConsistencyChecker:
         Returns an array with the IDs of the tests in the short list. These are the tests that will be presented by
         default when calling get_patterns() to list the patterns discovered.
         """
-        # The 3rd element for each item in test_dict indicates if that test is in the short-list for reporting
-        # discovered patterns
+
+        # The TEST_DEFN_SHORTLIST element for each item in test_dict indicates if that test is in the short-list for
+        # reporting discovered patterns
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_SHORTLIST]]
 
     ##################################################################################################################
@@ -1357,6 +1394,7 @@ class DataConsistencyChecker:
         types. This may be called to check the column types were identified correctly. This will skip columns removed
         from analysis due to having only one unique value.
         """
+
         print()
         print_text(f"**String Columns**:")
         if len(self.string_cols) > 0:
@@ -1386,6 +1424,11 @@ class DataConsistencyChecker:
             print_text("None")
 
     def display_columns_types_table(self):
+        """
+        Displays the first rows of the data, along with the identified column type in the first row. Similar to
+        calling display_columns_types_list(), this may be used to determine if the inferred column types are correct.
+        """
+
         var_types = []
         for col_name in self.orig_df.columns:
             if col_name in self.string_cols:
@@ -1418,17 +1461,17 @@ class DataConsistencyChecker:
         Gets a list of test ids, which may be used, for example, to loop through tests calling other APIs such as
         display_detailed_results()
 
-        :param: include_patterns: bool
-        If True, the returned list will include all test ids for tests that flagged at least one pattern without
-        exceptions
+        include_patterns: bool
+            If True, the returned list will include all test ids for tests that flagged at least one pattern without
+            exceptions
 
-        :param: include_exceptions: bool
-        If True, the returned list will include all test ids for tests that flagged at least one pattern with
-        exceptions
+        include_exceptions: bool
+            If True, the returned list will include all test ids for tests that flagged at least one pattern with
+            exceptions
 
-        :return:
-        Returns an array of test ids, where each test found at least one pattern, with or without exceptions, as
-        specified
+        Returns: array of test ids
+            Returns an array of test ids, where each test found at least one pattern, with or without exceptions, as
+            specified
         """
 
         ret_list = []
@@ -1448,27 +1491,19 @@ class DataConsistencyChecker:
         one pattern, which is one test over some set of rows. The dataframe specifies for each pattern: the test,
         the set of columns, and a description of the pattern.
 
-        Parameters:
         test_exclude_list: list
-        If set, rows related to these tests will be excluded.
+            If set, rows related to these tests will be excluded.
 
         column_exclude_list: list
-        If set, rows related to these columns will be excluded.
+            If set, rows related to these columns will be excluded.
 
         show_short_list_only: bool
-        If True, only the tests that are most relevant (least noisy) will be returned. If False, all identified
-        patterns matching the other parameters will be returned.
+            If True, only the tests that are most relevant (least noisy) will be returned. If False, all identified
+            patterns matching the other parameters will be returned.
         """
-
-        # todo: return the patterns in a denser format, or provide an option to do so. Some tests possibly don't
-        #   present by default, such as POSITIVE, LARGER, MUCH LARGER, etc. Just indicate not showing and explain
-        #   how to print if desired.
-        #   If we do display, for example, LARGER, then instead of listing every pair, for each column, list
-        #   the other columns it is larger than.
 
         if self.patterns_df is None:
             return None
-
         if test_exclude_list is None and column_exclude_list is None and not show_short_list_only:
             return self._clean_column_names(self.patterns_df.drop(columns=['Display Information']))
         df = self.patterns_df.copy()
@@ -1500,6 +1535,7 @@ class DataConsistencyChecker:
         Returns:
             pandas.DataFrame: DataFrame containing exceptions and final scores
         """
+
         return self.test_results_df
 
     def get_exceptions_by_column(self):
@@ -1510,6 +1546,7 @@ class DataConsistencyChecker:
         For example with a pattern covering 4 columns, any cells that are flagged will receive a score of 0.25 for
         this pattern. Each cell will have the sum of all patterns with exceptions where they are flagged.
         """
+
         return pd.DataFrame(self.test_results_by_column_np, columns=self.orig_df.columns)
 
     def summarize_patterns_by_test_and_feature(self, all_tests=False, heatmap=False):
@@ -1518,10 +1555,12 @@ class DataConsistencyChecker:
         cell has a 0 or 1, indicating if the pattern was found without exceptions in that feature. Note, some tests to
         not identify patterns, such as VERY_LARGE. The dataframe is returned, and optionally displayed as a heatmap.
 
-        all_tests: If all_tests is True, all tests are included in the output, even those that found no patterns. This
-        may be used specifically to check which found no patterns.
+        all_tests: bool
+            If all_tests is True, all tests are included in the output, even those that found no patterns. This may be
+            used specifically to check which found no patterns.
 
-        heatmap: If True, a heatmap will be displayed
+        heatmap: bool
+            If True, a heatmap will be displayed
         """
 
         if self.patterns_df is None:
@@ -1569,13 +1608,12 @@ class DataConsistencyChecker:
         at most contamination_level of the rows (0.5% by default) may be flagged for any test in any feature, as this
         checks for exceptions to well-established patterns.
 
-        Parameters:
         all_tests: bool
-        If all_tests is True, all tests are included in the output, even those that found no issues. This may be
-        used specifically to check which found no issues.
+            If all_tests is True, all tests are included in the output, even those that found no issues. This may be
+            used specifically to check which found no issues.
 
         heatmap: bool:
-        If set True, a heatmap of the dataframe will be displayed.
+            If set True, a heatmap of the dataframe will be displayed.
         """
 
         if self.exceptions_summary_df is None:
@@ -1618,7 +1656,8 @@ class DataConsistencyChecker:
         Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
         was found but also exceptions, 2) the number of issues total flagged (across all features and all rows).
 
-        heatmap: if True, a heatmap of the results are displayed
+        heatmap: bool
+            If True, a heatmap of the results are displayed
         """
 
         if self.exceptions_summary_df is None:
@@ -1647,23 +1686,23 @@ class DataConsistencyChecker:
             plt.show()
         return df
 
-    # todo: also have a method to summarize by feature, but first finalize how we save features for tests based on 2/3 features
-
     def summarize_patterns_and_exceptions(self, all_tests=False, heatmap=False):
         """
         Returns a dataframe with a row per test, indicating the number of patterns with and without exceptions that
         were found for each test. This may be used to quickly determine which pattens exist within the data, and
         to help focus specific calls to display_detailed_results() to return detailed information for specific tests.
 
-        Parameters:
-        all_tests: If True, a row will be included for all tests that executed. This will include tests where no
-            patterns were found. If False, a row will be included for all tests that found at least one pattern, with
-            or without exceptions.
+        all_tests: bool
+            If True, a row will be included for all tests that executed. This will include tests where no patterns were
+            found. If False, a row will be included for all tests that found at least one pattern, with or without
+            exceptions.
 
-        heatmap: If True, a heatmap of form of the table will be displayed.
+        heatmap: bool
+            If True, a heatmap of form of the table will be displayed.
         """
         # todo: respect the all_tests parameter
-        # todo: draw a heatmap use white for no pattern, blue for pattern with no exceptions, yellow for pattern with exceptions.
+        # todo: draw a heatmap use white for no pattern, blue for pattern with no exceptions, yellow for pattern
+        #  with exceptions.
         vals = []
         for test_id in self.get_test_list():
             if self.execute_list and test_id not in self.execute_list:
@@ -1694,26 +1733,48 @@ class DataConsistencyChecker:
             include_examples=True,
             plot_results=True):
         """
-        Go through each test, and each feature, and present a detailed description of each.
+        Loops through each test specified, and each feature specified, and presents a detailed description of each. If
+        filters are not specified, the set of identified patterns, with and without exceptions, can be very long in
+        some cases, and the method will not be able to display them. In this case, additional filters should be
+        specified.
 
-        :param test_id_list: Array of test IDs
-            If specified, only these will be displayed. If None, all tests for
-            which there is information to be display will be displayed.
+        test_id_list: Array of test IDs
+            If specified, only these will be displayed. If None, all tests for which there is information to be display
+            will be displayed.
 
-        :param col_name_list: Array of test column names, matching the column names in the passed dataframe.
+        col_name_list: Array of column names, matching the column names in the passed dataframe.
             If specified, only these will be displayed, though the display will include any patterns or exceptions that
             include these columns, regardless of the other columns. If None, all columns for which there is information
             to display will be displayed.
 
-        :param  issue_id_list: Array of Issue IDs
+        issue_id_list: Array of Issue IDs
             If specified, only these exceptions will be displayed. Does not apply to patterns.
 
-        :param show_short_list_only: Boolean.
+        row_id_list: Array of ints, representing row numbers in the original dataset
+            If specified, only patterns or exceptions found for these rows will be displayed.
+
+        show_pattersn: bool
+            If set True, patterns without exceptions will be displayed. If set False, these will not be displayed.
+
+        show_exceptions: bool
+            If set True, patterns with exceptions will be displayed. If set False, these will not be displayed.
+
+        show_short_list_only: bool.
             If False, all identified patterns matching the other parameters will be returned. If True, only the tests
             that are most relevant (least noisy) will be displayed as patterns. This does not affect the exceptions
             displayed.
 
-        todo: fill in the remaining parameters
+        include_examples: bool
+            If True, for any patterns found, examples of a random set of rows (other than cases where row order is
+            relevant, in which case a consecutive set of rows will be used), with the relevant set of columns, will
+            be display. As well, for any patterns found with exceptions, both a random set of rows that are not flagged
+            and that are flagged will be displayed, also with only the relevant columns. May be set False to save
+            time and space displaying the results.
+
+        plot_results: bool
+            If True, for any tests where plots are possible, one or more plots will be shown displaying the patterns.
+            If exceptions are found, they will typically be shown in red. May be  set False to save
+            time and space displaying the results.
         """
 
         def print_test_header(test_id):
@@ -1980,6 +2041,7 @@ class DataConsistencyChecker:
         Returns an python array with an element for each row in the original data. All values are non-negative integer
         values, with most rows containing zero for most datasets.
         """
+
         if self.test_results_df is not None and not self.test_results_df.empty:
             return self.test_results_df['FINAL SCORE'].tolist()
         return [0] * len(self.orig_df)
@@ -2014,6 +2076,7 @@ class DataConsistencyChecker:
         """
         Display a probability plot and histogram representing the distribution of final scores by row.
         """
+
         if self.test_results_df is None or self.test_results_df.empty:
             return
 
@@ -2040,6 +2103,7 @@ class DataConsistencyChecker:
         """
         Display a bar plot representing the distribution of final scores by feature.
         """
+
         final_scores_series = pd.Series(self.test_results_by_column_np.sum(axis=0)).sort_values(ascending=True).values
         final_scores_df = pd.DataFrame({'Feature': self.orig_df.columns,
                                         'Total Scores': final_scores_series})
@@ -2052,6 +2116,7 @@ class DataConsistencyChecker:
         """
         Display a bar plot representing the distribution of final scores by test.
         """
+
         if len(self.exceptions_summary_df) == 0:
             print("No exceptions found")
             return
@@ -2064,32 +2129,42 @@ class DataConsistencyChecker:
         s.set_title("Distribution of Scores per Test")
         plt.show()
 
-    def display_least_flagged_rows(self, with_results=True, nrows=10):
+    def display_least_flagged_rows(self, with_results=True, n_rows=10):
         """
-        This displays the nrows rows from the original data with the lowest scores. These are the rows with the least
-        flagged issues.
+        This displays the n_rows rows from the original data with the lowest scores. These are the rows with the least
+        flagged issues. This may be called to provide context for the flagged rows. In rare cases, some returned rows
+        may have non-zero scores, if all or most rows in the dataset are flagged at least once.
 
-        Parameters:
-        with_results: If with_results is False, this displays a single dataframe showing the appropriate subset
-        of the original data. If with_results is True, this displays a dataframe per original row, up to nrows. For
-        each, the original data is shown, along with all flagged issues, across all tests on all features.
+        with_results: bool
+            If with_results is False, this displays a single dataframe showing the appropriate subset of the original
+            data. If with_results is True, this displays a dataframe per original row, up to n_rows. For each, the
+            original data is shown, along with all flagged issues, across all tests on all features.
 
-        nrows: the maximum number of original rows to present.
+        n_rows: int
+            The maximum number of original rows to present.
         """
+
         sorted_df = self.test_results_df.sort_values('FINAL SCORE', ascending=True)
         if with_results:
-            self.__display_rows_with_tests(sorted_df, nrows)
+            self.__display_rows_with_tests(sorted_df, n_rows)
         else:
-            df = self.orig_df.loc[sorted_df.index].head(nrows).copy()
+            df = self.orig_df.loc[sorted_df.index].head(n_rows).copy()
             df['FINAL SCORE'] = sorted_df['FINAL SCORE'][:len(df)]
             if is_notebook():
                 display(df)
             else:
                 print(df)
 
-    def display_most_flagged_rows(self, with_results=True, nrows=10):
+    def display_most_flagged_rows(self, with_results=True, n_rows=10):
         """
         This is similar to display_least_flagged_rows, but displays the rows with the most identified issues.
+
+        with_results: bool
+            If True, the flagged rows will be display in separate tables, with additional rows indicating which tests
+            flagged which columns. If False, all displayed rows will be displayed in a single table; the flagged
+            columns will be highlighted, but there will not be an indication of which tests flagged them.
+        n_rows: int
+            The maximum number of original rows to present.
         """
 
         if self.test_results_df is None or len(self.test_results_df) == 0:
@@ -2098,10 +2173,10 @@ class DataConsistencyChecker:
         sorted_df = self.test_results_df.sort_values('FINAL SCORE', ascending=False)
         sorted_df.index = [x[0] if type(x) == tuple else x for x in sorted_df.index]
         if with_results:
-            self.__display_rows_with_tests(sorted_df, nrows, check_score=True)
+            self.__display_rows_with_tests(sorted_df, n_rows, check_score=True)
         else:
             row_idxs = np.array(sorted_df.index.to_list()).reshape(1, -1)[0]
-            df = self.orig_df.loc[row_idxs].head(nrows).copy()
+            df = self.orig_df.loc[row_idxs].head(n_rows).copy()
             df['FINAL SCORE'] = sorted_df['FINAL SCORE'][:len(df)]
             df = df[df['FINAL SCORE'] > 0]
             if is_notebook():
@@ -2152,6 +2227,101 @@ class DataConsistencyChecker:
         # self.display_detailed_results(include_examples=False, plot_results=True)
 
     ##################################################################################################################
+    # Methods to find relationships between the data and the numbers of issues found.
+    ##################################################################################################################
+
+    def plot_columns_vs_final_scores(self):
+        """
+        Used to determine if there are any relationships between column values and the final scores of the rows. This
+        displays tables and plots presenting any relationships found.
+        """
+
+        def clear_last_plots():
+            if n_rows == 1:
+                for i in range(num_feats, 4):
+                    ax[i].set_visible(False)
+            else:
+                last_col_used = num_feats % 4
+                for i in range(last_col_used, 4):
+                    ax[n_rows-1][i].set_visible(False)
+
+        if self.exceptions_summary_df is None or len(self.exceptions_summary_df) == 0:
+            print("No exceptions found.")
+            return
+
+        df = self.orig_df.copy()
+        df['FINAL SCORE'] = self.test_results_df['FINAL SCORE']
+
+        num_feats = len(self.numeric_cols) + len(self.date_cols)
+        if num_feats > 50:
+            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest"
+                   "correlation with the final score"))
+            num_feats = 50
+            feats = self.numeric_cols + self.date_cols
+            feats = feats[:50]  # todo: get the 50 with the greatest correlation
+        else:
+            feats = self.numeric_cols + self.date_cols
+
+        if num_feats > 0:
+            n_rows = math.ceil(num_feats / 4)
+            fig, ax = plt.subplots(nrows=n_rows, ncols=4, figsize=(14, 4 * n_rows))
+            for feat_idx, col_name in enumerate(feats):
+                if n_rows == 1:
+                    cur_ax = ax[feat_idx]
+                else:
+                    cur_ax = ax[feat_idx // 4][feat_idx % 4]
+                s = sns.scatterplot(data=df, x=df[col_name], y=df['FINAL SCORE'], ax=cur_ax)
+                s.set(xlabel=None)
+                s.set_title(col_name)
+            clear_last_plots()
+            plt.suptitle("Relationship of features to Final Score (Numeric and Date features)")
+            plt.tight_layout()
+            plt.subplots_adjust(top=0.95)
+            plt.show()
+
+        num_feats = len(self.binary_cols) + len(self.string_cols)
+        if num_feats > 50:
+            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest "
+                   "correlation with the final score"))
+            num_feats = 50
+            feats = self.binary_cols + self.string_cols
+            feats = feats[:50]  # todo: get the 50 with the greatest correlation
+        else:
+            feats = self.binary_cols + self.string_cols
+
+        if num_feats > 0:
+            n_rows = math.ceil(num_feats / 4)
+            fig, ax = plt.subplots(nrows=n_rows, ncols=4, figsize=(14, 4 * n_rows))
+            for feat_idx, col_name in enumerate(feats):
+                vc = self.orig_df[col_name].value_counts()
+                if n_rows == 1:
+                    cur_ax = ax[feat_idx]
+                else:
+                    cur_ax = ax[feat_idx // 4][feat_idx % 4]
+                if len(vc) > 10:
+                    common_vals = []
+                    for v_idx in vc.index:
+                        if vc[v_idx] > (self.num_rows / 10):
+                            common_vals.append(v_idx)
+                    if len(common_vals) == 0:
+                        continue
+                    map_dict = {x: x for x in common_vals}
+                    sub_df = df.copy()
+                    sub_df[col_name] = df[col_name].map(map_dict)
+                    sub_df[col_name] = sub_df[col_name].fillna("Other")
+                    s = sns.boxplot(data=sub_df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
+                else:
+                    s = sns.boxplot(data=df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
+                s.set_title(col_name)
+
+            clear_last_plots()
+            plt.suptitle("Relationship of features to Final Score (String and Binary features)")
+            plt.tight_layout()
+            # See https://stackoverflow.com/questions/8248467/tight-layout-doesnt-take-into-account-figure-suptitle
+            plt.subplots_adjust(top=0.90)
+            plt.show()
+
+    ##################################################################################################################
     # Private helper methods to support outputting the results of the analysis in various ways
     ##################################################################################################################
 
@@ -2159,6 +2329,7 @@ class DataConsistencyChecker:
         """
         Return the subset of the original data where the specified test flagged an issue in the specified column
         """
+
         results_col_name = self.get_results_col_name(test_id, col_name)
         if results_col_name not in self.test_results_df.columns:
             return None
@@ -2180,21 +2351,23 @@ class DataConsistencyChecker:
             clean_df.iloc[idx]['Column(s)'] = 'This test executes over all numeric columns'
         return clean_df
 
-    def __display_rows_with_tests(self, sorted_df, nrows, check_score=False):
+    def __display_rows_with_tests(self, sorted_df, n_rows, check_score=False):
         """
-        Display a set of dataframes, one per row in the original data, up to nrows rows, each including the original row
+        Display a set of dataframes, one per row in the original data, up to n_rows rows, each including the original row
         and the issues found in it, across all tests on all features.
 
-        sorted_df: a sorted version of self.test_results_df
-        nrows: the maximum number of rows from the original data to display
-        check_score: if True, only rows with scores above zero will be displayed
+        sorted_df: dataframe
+            a sorted version of self.test_results_df
+        n_rows: int
+            The maximum number of rows from the original data to display
+        check_score: bool
+            if True, only rows with scores above zero will be displayed
         """
 
-        # todo: this misses where a test checks 2 or 3 columns. -- need to flag all columns
         flagged_idx_arr = sorted_df.index[:10]
-        for row_idx in flagged_idx_arr[:nrows]:
+        for row_idx in flagged_idx_arr[:n_rows]:
             if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
-                print(f"The remaining rows have no flagged issues: cannot display {nrows} flagged rows.")
+                print(f"The remaining rows have no flagged issues: cannot display {n_rows} flagged rows.")
                 return
 
             # Get the row as it appears in the original data
@@ -2425,9 +2598,8 @@ class DataConsistencyChecker:
 
     def __draw_box_plots(self, test_id, cols, columns_set):
         # The first column is the string/binary value and the second is the numeric/date value
-        # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is kludgy.
-        # results_col_name = self.get_results_col_name(test_id, columns_set)
-        # col_names = self.col_to_original_cols_dict[results_col_name]
+        # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is somewhat
+        # kludgy.
         fig, ax = plt.subplots(figsize=(4, 4))
         s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
         plt.show()
@@ -2460,12 +2632,20 @@ class DataConsistencyChecker:
         Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
         Many tests have additional columns which can make the pattern between the columns more clear.
 
-        Parameters:
-        df: the dataframe of the rows to display. Typically 10 rows.
-        test_id: the id of the test that flagged these rows
-        cols: one set of columns flagged by this test
-        display_info: dictionary of information specific to these columns for this test. Also used to display plots.
-        is_patterns: boolean. Indicates if this
+        df: dataframe
+            the dataframe of the rows to display. Typically 10 rows.
+
+        test_id: string
+            the id of the test that flagged these rows
+
+        cols: array of strings
+            one set of columns flagged by this test
+
+        display_info: dictionary
+            dictionary of information specific to these columns for this test. Also used to display plots.
+
+        is_patterns: bool
+            Indicates if this is being called when displaying patterns or exceptions
         """
 
         col_name, col_name_1, col_name_2, col_set = "", "", "", ""
@@ -2648,14 +2828,22 @@ class DataConsistencyChecker:
         specified test in the specified columns. This handles specific tests by balancing the the rows displayed
         in order to include examples of different types of rows.
 
-        Parameters:
-        test_id: If test_id is None, this returns values not flagged by any test.
-        col_name: single column or column set
-        n_examples: the maximum number of examples to return.
-        group_results: if True, this will return consecutive rows. This used for tests where row order is relevant.
-        is_patterns: True if this is being called to display examples of a pattern, in which case there are no
-            exceptions.
+        test_id: bool
+            If test_id is None, this returns values not flagged by any test.
+
+        col_name: string
+            Single column or column set
+
+        n_examples: int
+            The maximum number of examples to return.
+
+        group_results: bool
+            If True, this will return consecutive rows. This used for tests where row order is relevant.
+
+        is_patterns: bool
+            Set True if this is being called to display examples of a pattern, in which case there are no exceptions.
         """
+
         if test_id is not None:
             if is_patterns:
                 cols = [x.lstrip('"').rstrip('"') for x in col_name.split(" AND ")]
@@ -3343,97 +3531,6 @@ class DataConsistencyChecker:
             f.write("</html>")
 
     ##################################################################################################################
-    # Methods to find relationships between the data and the numbers of issues found.
-    ##################################################################################################################
-
-    def plot_columns_vs_final_scores(self):
-
-        def clear_last_plots():
-            if nrows == 1:
-                for i in range(num_feats, 4):
-                    ax[i].set_visible(False)
-            else:
-                last_col_used = num_feats % 4
-                for i in range(last_col_used, 4):
-                    ax[nrows-1][i].set_visible(False)
-
-        if self.exceptions_summary_df is None or len(self.exceptions_summary_df) == 0:
-            print("No exceptions found.")
-            return
-
-        df = self.orig_df.copy()
-        df['FINAL SCORE'] = self.test_results_df['FINAL SCORE']
-
-        num_feats = len(self.numeric_cols) + len(self.date_cols)
-        if num_feats > 50:
-            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest"
-                   "correlation with the final score"))
-            num_feats = 50
-            feats = self.numeric_cols + self.date_cols
-            feats = feats[:50]  # todo: get the 50 with the greatest correlation
-        else:
-            feats = self.numeric_cols + self.date_cols
-
-        if num_feats > 0:
-            nrows = math.ceil(num_feats / 4)
-            fig, ax = plt.subplots(nrows=nrows, ncols=4, figsize=(14, 4 * nrows))
-            for feat_idx, col_name in enumerate(feats):
-                if nrows == 1:
-                    cur_ax = ax[feat_idx]
-                else:
-                    cur_ax = ax[feat_idx // 4][feat_idx % 4]
-                s = sns.scatterplot(data=df, x=df[col_name], y=df['FINAL SCORE'], ax=cur_ax)
-                s.set(xlabel=None)
-                s.set_title(col_name)
-            clear_last_plots()
-            plt.suptitle("Relationship of features to Final Score (Numeric and Date features)")
-            plt.tight_layout()
-            plt.subplots_adjust(top=0.95)
-            plt.show()
-
-        num_feats = len(self.binary_cols) + len(self.string_cols)
-        if num_feats > 50:
-            print((f"There are {num_feats} numeric and date features. Displaying only the 50 with the greatest "
-                   "correlation with the final score"))
-            num_feats = 50
-            feats = self.binary_cols + self.string_cols
-            feats = feats[:50]  # todo: get the 50 with the greatest correlation
-        else:
-            feats = self.binary_cols + self.string_cols
-
-        if num_feats > 0:
-            nrows = math.ceil(num_feats / 4)
-            fig, ax = plt.subplots(nrows=nrows, ncols=4, figsize=(14, 4 * nrows))
-            for feat_idx, col_name in enumerate(feats):
-                vc = self.orig_df[col_name].value_counts()
-                if nrows == 1:
-                    cur_ax = ax[feat_idx]
-                else:
-                    cur_ax = ax[feat_idx // 4][feat_idx % 4]
-                if len(vc) > 10:
-                    common_vals = []
-                    for v_idx in vc.index:
-                        if vc[v_idx] > (self.num_rows / 10):
-                            common_vals.append(v_idx)
-                    if len(common_vals) == 0:
-                        continue
-                    map_dict = {x: x for x in common_vals}
-                    sub_df = df.copy()
-                    sub_df[col_name] = df[col_name].map(map_dict)
-                    sub_df[col_name] = sub_df[col_name].fillna("Other")
-                    s = sns.boxplot(data=sub_df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
-                else:
-                    s = sns.boxplot(data=df,  x=col_name, y='FINAL SCORE', ax=cur_ax)
-                s.set_title(col_name)
-
-            clear_last_plots()
-            plt.suptitle("Relationship of features to Final Score (String and Binary features)")
-            plt.tight_layout()
-            # See https://stackoverflow.com/questions/8248467/tight-layout-doesnt-take-into-account-figure-suptitle
-            plt.subplots_adjust(top=0.90)
-            plt.show()
-
-    ##################################################################################################################
     # Internal methods to aid in analysing the data and executing tests
     ##################################################################################################################
 
@@ -3461,6 +3558,7 @@ class DataConsistencyChecker:
         Generates a column name for columns in self.results_df, which represent the results of running one test on one
         column or set of columns.
         """
+
         return f"TEST {test_id} -- {col_name} RESULT"
 
     @staticmethod
@@ -3469,6 +3567,7 @@ class DataConsistencyChecker:
         """
         Given an array of column names, generate a string representation.
         """
+
         col_name_str = ""
         for c in col_names:
             col_name_str += f'"{c}" AND '
@@ -3480,6 +3579,7 @@ class DataConsistencyChecker:
         Calculates the final score for each row in the original data. This treats each test on each column equally and
         calculates their count.
         """
+
         if self.test_results_df is not None:
             self.test_results_df['FINAL SCORE'] = self.test_results_df.sum(axis=1)
 
@@ -4009,8 +4109,6 @@ class DataConsistencyChecker:
         return num_pairs, pairs_arr
 
     def __get_binary_column_pairs(self, same_vocabulary=True):
-        """
-        """
         # Check if there would be too many pairs.
         num_pairs = len(self.binary_cols) * (len(self.binary_cols) - 1)
         if num_pairs > self.max_combinations:
@@ -4026,7 +4124,7 @@ class DataConsistencyChecker:
                 if same_vocabulary and len(col_1_vals.intersection(col_2_vals)) != 2:
                     continue
                 pairs_arr.append((col_name_1, col_name_2))
-        return num_pairs, airs_arr
+        return num_pairs, pairs_arr
 
     def __get_binary_column_pairs_unique(self, same_vocabulary=True, force=False):
         """
@@ -4403,7 +4501,8 @@ class DataConsistencyChecker:
             if col_name in self.numeric_cols:
                 df[col_name] = self.numeric_vals_filled[col_name].astype(float).fillna(sys.maxsize)
 
-            # todo: if we can create a good DT with 10 lags, see if can with less. Loop until use as few lags as possible.
+            # todo: if we can create a good DT with 10 lags, see if can with less. Loop until use as few lags as
+            #  possible.
 
             # Create the lag features
             for i in range(1, look_back_range):
