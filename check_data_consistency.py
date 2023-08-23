@@ -27,7 +27,6 @@ from termcolor import colored
 import concurrent
 from multiprocessing import Process, Queue
 
-
 # Visualization
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -35,10 +34,12 @@ import seaborn as sns
 # Warnings
 import warnings
 from sklearn.exceptions import ConvergenceWarning
+from scipy.stats import SpearmanRConstantInputWarning
 warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
+warnings.filterwarnings(action='ignore', category=SpearmanRConstantInputWarning)
 
 # Uncomment to debug any warnings.
-# warnings.filterwarnings("error")
+warnings.filterwarnings("error")
 
 # Constants used to generate synthetic data
 letters = string.ascii_letters
@@ -1061,7 +1062,6 @@ class DataConsistencyChecker:
         """
         Generate a random synthetic dataset which may be used to demonstrate each of the tests.
 
-        Parameters
         all_cols: bool
             If all_cols is False, this generates columns specifically only for the tests that are specified to run.
             If all_cols is True, this generates columns related to all tests, even where that test is not specified to
@@ -1731,7 +1731,9 @@ class DataConsistencyChecker:
             show_exceptions=True,
             show_short_list_only=False,
             include_examples=True,
-            plot_results=True):
+            plot_results=True,
+            max_shown=-1,
+        ):
         """
         Loops through each test specified, and each feature specified, and presents a detailed description of each. If
         filters are not specified, the set of identified patterns, with and without exceptions, can be very long in
@@ -1775,6 +1777,12 @@ class DataConsistencyChecker:
             If True, for any tests where plots are possible, one or more plots will be shown displaying the patterns.
             If exceptions are found, they will typically be shown in red. May be  set False to save
             time and space displaying the results.
+
+        max_shown: int
+            The maximum total number of patterns and exceptions shown. If no filters are set, the function will return
+            if more patterns and/or exceptions are available. If filters are set, and the number is larger, the first
+            max_shown will be set. If set to -1, a default will be used, which considers if plots and examples are
+            to be displayed. The default is 200 without plots or examples, 100 with either, and 50 with both.
         """
 
         def print_test_header(test_id):
@@ -1829,27 +1837,29 @@ class DataConsistencyChecker:
         if issue_id_list or row_id_list:
             show_patterns = False
 
-        if (test_id_list is None) and (col_name_list is None) and (issue_id_list is None) and (row_id_list is None):
-            max_results_can_show = 300  # This includes patterns & exceptions
+        if max_shown == -1:
+            max_shown = 200  # This includes patterns & exceptions
             if include_examples:
-                max_results_can_show /= 2
+                max_shown /= 2
             if plot_results:
-                max_results_can_show /= 2
+                max_shown /= 2
+
+        if (test_id_list is None) and (col_name_list is None) and (issue_id_list is None) and (row_id_list is None):
             msg = ("This is beyond the limit to display all at once. Try specifying tests and/or columns to be "
                    "displayed here, specific issues, or row numbers, or setting include_examples and/or "
                    "plot_results to False.")
 
             if show_patterns and show_exceptions and \
-                    ((len(self.exceptions_summary_df) + len(self.patterns_df)) > max_results_can_show):
+                    ((len(self.exceptions_summary_df) + len(self.patterns_df)) > max_shown):
                 print()
                 print((f"{len(self.exceptions_summary_df) + len(self.patterns_df)} patterns and exceptions were "
                        f"identified. {msg}"))
                 return
-            if show_patterns and (len(self.patterns_df) > max_results_can_show):
+            if show_patterns and (len(self.patterns_df) > max_shown):
                 print()
                 print(f"{len(self.exceptions_summary_df) + len(self.patterns_df)} patterns were identified. {msg}")
                 return
-            if show_exceptions and (len(self.exceptions_summary_df) > max_results_can_show):
+            if show_exceptions and (len(self.exceptions_summary_df) > max_shown):
                 print()
                 print(f"{len(self.exceptions_summary_df)} issues were identified. {msg}")
                 return
@@ -1877,6 +1887,11 @@ class DataConsistencyChecker:
             print()
             print_text(f"Displaying results for columns: {col_name_list}")
 
+            # Check for any invalid column names
+            for col_name in col_name_list:
+                if col_name not in self.orig_df.columns:
+                    print_text(f"{col_name} is not a valid column name")
+
         if test_id_list is None:
             test_id_list = self.get_test_list()
         if col_name_list is None:
@@ -1895,6 +1910,11 @@ class DataConsistencyChecker:
 
         stars = "******************************************************************************"
         hyphens = '----------------------------------------------------------------------------'
+        count_shown = 0
+
+        max_shown_msg = (f"Showing the first {max_shown} findings. To see additional patterns or exceptions, specify "
+                         "more specific tests, columns, issue numbers, or row numbers, or increase max_shown")
+
         for test_id in test_id_list:
             if self.execute_list and test_id not in self.execute_list:
                 continue
@@ -1909,12 +1929,18 @@ class DataConsistencyChecker:
             # Display patterns that have no exception
             if show_patterns and ((not show_short_list_only) or test_id in self.get_patterns_shortlist()):
                 for columns_set in sub_patterns_test['Column(s)'].values:
+                    if count_shown >= max_shown:
+                        print()
+                        print_text(max_shown_msg)
+                        return
+
                     sub_patterns = self.patterns_df[(self.patterns_df['Test ID'] == test_id) &
                                                     (self.patterns_df['Column(s)'] == columns_set)]
                     pattern_columns_arr = self.col_to_original_cols_dict[columns_set]
                     if len(set(col_name_list).intersection(set(pattern_columns_arr))) == 0:
                         continue
                     if len(sub_patterns) > 0:
+                        count_shown += 1
                         print_test_header(test_id)
                         print_column_header(columns_set, test_id)
                         print_text("Pattern found (without exceptions)")
@@ -1940,6 +1966,10 @@ class DataConsistencyChecker:
             # Display patterns with exceptions
             if show_exceptions:
                 for columns_set in sub_results_summary_test['Column(s)'].values:
+                    if count_shown >= max_shown:
+                        print()
+                        print_text(max_shown_msg)
+                        return
 
                     if row_id_list:
                         if row_id_list_df[self.get_results_col_name(test_id, columns_set)].any() == False:
@@ -1965,6 +1995,7 @@ class DataConsistencyChecker:
                     if issue_id_list and (issue_id not in issue_id_list):
                         continue
 
+                    count_shown += 1
                     print_test_header(test_id)
                     print_column_header(columns_set, test_id)
                     print_text(f"**Issue ID**: {issue_id}")
@@ -3163,6 +3194,14 @@ class DataConsistencyChecker:
             s.set_title(f"{cols[2]} vs the SUM of {cols[0]} and {cols[1]}")
             plt.show()
 
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[0])
+            s.set_title(f"{cols[2]} vs {cols[0]} Alone")
+            plt.show()
+
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1])
+            s.set_title(f"{cols[2]} vs {cols[1]} Alone")
+            plt.show()
+
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
             sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
             plt.show()
@@ -3534,6 +3573,77 @@ class DataConsistencyChecker:
     # Internal methods to aid in analysing the data and executing tests
     ##################################################################################################################
 
+    def get_similar_cols(self, full_cols_arr, include_self, lower_divisor, upper_multiplier,
+                         check_larger_false=False, check_larger_true=False):
+        """
+        Used by __check_sum_of_columns, as well as min, max, and mean
+        """
+
+        # Get information about which columns have the same values
+        cols_same_bool_dict = self.get_cols_same_bool_dict(force=True)
+
+        larger_dict = self.get_larger_pairs_with_bool_dict()
+
+        similar_cols_dict = {}
+        similar_cols_idxs_dict = {}
+        calc_size = 0
+        for col_name in full_cols_arr:
+            if include_self:
+                similar_cols = [col_name]
+            else:
+                similar_cols = []
+            similar_cols_idxs = []
+            for c_idx, c in enumerate(full_cols_arr):
+                if c == col_name:
+                    continue
+                # We provide for a large range, which can be found with, for example, tax values and so on, which may
+                # be only 1 to 15% of the total column
+                if (self.column_medians[col_name] / lower_divisor) < self.column_medians[c] < (self.column_medians[col_name] * upper_multiplier):
+                    # Ensure the columns are correlated with col_name. Any columns summing to col_name should be
+                    corr = self.pearson_corr.loc[col_name, c]
+                    if corr > 0.2:
+                        if not cols_same_bool_dict[tuple(sorted([col_name, c]))]:
+                            if (not check_larger_false and not check_larger_true) or \
+                                    (check_larger_false and (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == False)) or \
+                                    (check_larger_true and (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == True)):
+                                similar_cols.append(c)
+                                similar_cols_idxs.append(c_idx)
+            similar_cols_dict[col_name] = similar_cols
+            similar_cols_idxs_dict[col_name] = similar_cols_idxs
+            calc_size += int(math.pow(2, len(similar_cols)))
+        return similar_cols_dict, similar_cols_idxs_dict, calc_size
+
+    def get_limit_subset_sizes(self, full_cols_arr, similar_cols_dict, calc_size):
+        """
+        Used by __check_sum_of_columns, as well as min, max, and mean
+        """
+        limit_subset_sizes = False
+        max_subset_size = -1
+        can_process = True
+        if calc_size > self.max_combinations:
+
+            # Try limiting the sizes of the subsets
+            for max_subset_size in range(5, 1, -1):
+                calc_size_limited = 0
+                for col_name in full_cols_arr:
+                    num_cols = len(similar_cols_dict[col_name])
+                    for subset_size in range(2, max_subset_size + 1):
+                        calc_size_limited += math.comb(num_cols, subset_size)
+                if calc_size_limited < self.max_combinations:
+                    limit_subset_sizes = True
+                    break
+
+            if self.verbose >= 2:
+                if limit_subset_sizes:
+                    print((f"  Due to the potential number of combinations, limiting test to subsets of size "
+                           f"{max_subset_size}."))
+                else:
+                    print((f"  Skipping test. Given the number of similar columns for each positive numeric "
+                           f"column, there are {calc_size_limited:,} combinations, even limiting testing to subsets "
+                           f"2 columns. max_combinations is currently set to {self.max_combinations:,}."))
+                    can_process = False
+        return limit_subset_sizes, max_subset_size, can_process
+
     def get_decision_tree_rules_as_categories(self, rules, categorical_features):
         rules_arr = rules.split('\n')
         for rule in rules_arr:
@@ -3625,7 +3735,6 @@ class DataConsistencyChecker:
     def __process_analysis_binary(
             self,
             test_id,
-            col_name,
             original_cols,
             test_series,
             pattern_string,
@@ -3647,6 +3756,11 @@ class DataConsistencyChecker:
         identify exceptions and not patterns, such as LARGE_GAPS
         """
         test_series = np.array(test_series)
+
+        if len(original_cols) == 1:
+            col_name = original_cols[0]
+        else:
+            col_name = self.get_col_set_name(original_cols)
 
         num_true = test_series.tolist().count(True)
         if allow_patterns and num_true == self.num_rows:
@@ -4393,7 +4507,6 @@ class DataConsistencyChecker:
             test_series = ~self.orig_df[col_name].isin(rare_vals)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f"The column consistently contains a small set of common values: {common_vals}",
@@ -4446,7 +4559,6 @@ class DataConsistencyChecker:
             test_series = [True if counts_arr[x] == 1 else False for x in self.orig_df[col_name]]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values that are consistently unique",
@@ -4690,7 +4802,6 @@ class DataConsistencyChecker:
                 pred_series = pred_series.map(decode_dict)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 np.array(test_series),
                 (f"The values in {col_name} can consistently be predicted from the previous values in the column "
@@ -4782,7 +4893,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The columns "{col_name_1}" (with {num_missing_1} Null values) and "{col_name_2}" (with '
@@ -4842,7 +4952,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    f"{col_name_1} AND {col_name_2}",
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The columns "{col_name_1}" (with {num_missing_1} Null values) and "{col_name_2}" (with '
@@ -4890,7 +4999,6 @@ class DataConsistencyChecker:
                 return test_series.count(False) < 1
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f'The values in "{col_name_2}" are consistently the same as those in "{col_name_1}"')
@@ -5008,7 +5116,6 @@ class DataConsistencyChecker:
                 else:
                     self.__process_analysis_binary(
                         test_id,
-                        f'"{col_name_2}" AND "{col_name_1}"',
                         [col_name_2, col_name_1],
                         col_values,
                         (f'The values in "{col_name_1}" are consistently either the same as those in "{col_name_2}", '
@@ -5022,7 +5129,6 @@ class DataConsistencyChecker:
                 else:
                     self.__process_analysis_binary(
                         test_id,
-                        f'"{col_name_1}" AND "{col_name_2}"',
                         [col_name_1, col_name_2],
                         col_values,
                         (f'The values in "{col_name_2}" are consistently either the same as those in "{col_name_1}, '
@@ -5087,7 +5193,6 @@ class DataConsistencyChecker:
             test_series = (self.orig_df[col_name].isna()) | (vals_arr >= 0)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains consistently positive values")
@@ -5107,7 +5212,6 @@ class DataConsistencyChecker:
             test_series = (self.orig_df[col_name].isna()) | (vals_arr <= 0)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains consistently negative values")
@@ -5160,7 +5264,6 @@ class DataConsistencyChecker:
             # than normal, this may simply be that there are zeros in the least significant positions.
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The column contains values consistently with {array_to_str(common_num_digits)} decimals',
@@ -5207,7 +5310,6 @@ class DataConsistencyChecker:
                                             self.orig_df[col_name].isna())]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f"The column consistently contains values with one of {str(common_values)[1:-1]} after the decimal point",
@@ -5256,7 +5358,6 @@ class DataConsistencyChecker:
             test_series[0] = True
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains consistently ascending values")
@@ -5303,7 +5404,6 @@ class DataConsistencyChecker:
             test_series[0] = True
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains consistently descending values")
@@ -5339,7 +5439,6 @@ class DataConsistencyChecker:
                 test_series = np.array([(abs(x-y) < 0.1) or is_missing(x) for x, y in zip(col_percentiles, row_numbers_percentiles)])
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     f'"{col_name}" is consistently similar, with regards to percentile, to the row number')
@@ -5376,7 +5475,6 @@ class DataConsistencyChecker:
                                         zip(col_percentiles, row_numbers_percentiles)])
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     f'"{col_name}" is consistently inversely similar, with regards to percentile, to the row number')
@@ -5448,7 +5546,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'The values in "{col_name}" are consistently similar to the previous value, more so than they are '
@@ -5479,7 +5576,6 @@ class DataConsistencyChecker:
             test_series = round(np.log10(abs(vals_arr.replace(0, 1)))).values
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"This test checks for values of an unusual order of magnitude, etc. Each value is described in terms "
@@ -5530,7 +5626,6 @@ class DataConsistencyChecker:
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     (f"The test marked any values more than {diff_threshold:.3f} away from both the next smallest and "
@@ -5605,7 +5700,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
@@ -5637,7 +5731,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].isna() | (col_vals > lower_limit)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"The test marked any values less than {lower_limit} as very small given the 10th decile is {d1} and "
@@ -5663,7 +5756,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].isna() | (vals_arr < upper_limit)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"The test marked any values larger than {upper_limit:.2f} as very large given the 25th quartile "
@@ -5705,7 +5797,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].isna() | (vals_arr > lower_limit)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"Some values were unusually close to zero. Any values with absolute value less than {lower_limit} "
@@ -5740,7 +5831,6 @@ class DataConsistencyChecker:
             n_multiples = test_series.count(True)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f"The column contains values that are consistently multiples of {v}",
@@ -5840,7 +5930,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The column has consistently values with between {min_normal} and {max_normal} trailing zeros.',
@@ -5862,7 +5951,6 @@ class DataConsistencyChecker:
             test_series = np.array([x != 0 for x in self.orig_df[col_name]])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently contains non-zero values")
@@ -5888,7 +5976,6 @@ class DataConsistencyChecker:
             test_series = np.array([(abs(x) <= 1.0) or is_missing(x) for x in vals_arr])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently contains values between -1.0, and 1.0 (inclusive)")
@@ -5908,7 +5995,6 @@ class DataConsistencyChecker:
             test_series = np.array([(x == 0) or (abs(x) >= 1.0) for x in vals_arr.fillna(1)])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently contains absolute values greater than or equal to 1.0")
@@ -5932,7 +6018,6 @@ class DataConsistencyChecker:
                                                                       self.orig_df[col_name].isna())]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently contains values that are valid numbers",
@@ -5989,7 +6074,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 f'"{col_name_1}" is consistently larger than "{col_name_2}"',
@@ -6062,7 +6146,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_2}" AND "{col_name_1}"',
                 [col_name_2, col_name_1],
                 test_series,
                 f'"{col_name_1}" is consistently an order of magnitude or more larger than "{col_name_2}"',
@@ -6123,7 +6206,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their ratio')
@@ -6178,7 +6260,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their absolute '
@@ -6231,7 +6312,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f'"{col_name_1}" is consistently the inverse of "{col_name_2}"')
@@ -6269,7 +6349,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f'"{col_name_1}" is consistently the negative of "{col_name_2}"')
@@ -6330,7 +6409,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The sum of "{col_name_1}" and "{col_name_2}" is consistently close to '
@@ -6399,7 +6477,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The difference of "{col_name_1}" and "{col_name_2}" is consistently close to '
@@ -6461,7 +6538,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The product of "{col_name_1}" and "{col_name_2}" is consistently close to '
@@ -6540,7 +6616,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The ratio of "{col_name_1}" and "{col_name_2}" is consistently close to '
@@ -6599,7 +6674,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f'"{col_name_1}" is consistently an even integer multiple of "{col_name_2}"')
@@ -6736,7 +6810,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 "One or more rare combinations of values were found",
@@ -6805,7 +6878,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     f'"{col_name_1}" is consistently similar, with respect to rank, to "{col_name_2}"',
@@ -6817,7 +6889,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
                     f'"{col_name_1}" is consistently inversely similar in rank to "{col_name_2}"',
@@ -6860,7 +6931,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 (f'The columns "{col_name_1}" (with {num_zeros_1} zero values) and "{col_name_2}" (with '
@@ -6901,7 +6971,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 (f'The columns "{col_name_1}" (with {num_zeros_1} zero values) and "{col_name_2}" (with '
@@ -6941,7 +7010,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_1].shift(1).isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_2, col_name_1]),
                 [col_name_2, col_name_1],
                 test_series,
                 f'Column "{col_name_1}" consistently contains a running sum of "{col_name_2}"',
@@ -7056,7 +7124,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as the floor of "{col_name_2}"',)
@@ -7070,7 +7137,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as the ceiling of "{col_name_2}"',)
@@ -7084,7 +7150,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as rounding "{col_name_2}"',)
@@ -7098,7 +7163,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as rounding "{col_name_2} to the 10s"',)
@@ -7112,7 +7176,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as rounding "{col_name_2} to the 100s"',)
@@ -7126,7 +7189,6 @@ class DataConsistencyChecker:
                     if test_series.count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_2, col_name_1]),
                             [col_name_2, col_name_1],
                             np.array(test_series),
                             f'Column "{col_name_1}" is consistently the same as rounding "{col_name_2} to the 1000s"',)
@@ -7201,7 +7263,6 @@ class DataConsistencyChecker:
                 test_series = np.array([x == y for x, y in zip(col_1_zero_arr, col_2_missing_arr)])
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     f'Where "{col_name_1}" is 0, "{col_name_2}" is consistently Null and not Null otherwise'
@@ -7291,7 +7352,6 @@ class DataConsistencyChecker:
                 if test_series_a.median() < test_series_b.median():
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([col_name_1, col_name_2, col_name_3]),
                         [col_name_1, col_name_2, col_name_3],
                         test_series,
                         f"{col_name_3} is consistently similar to the difference of {col_name_1} and {col_name_2}")
@@ -7368,7 +7428,6 @@ class DataConsistencyChecker:
                 # todo: test that it's not that one column is 0 and col 3 is too
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2, col_name_3]),
                     [col_name_1, col_name_2, col_name_3],
                     test_series,
                     f'"{col_name_3}" is consistently similar to the product of "{col_name_1}" and "{col_name_2}"')
@@ -7448,7 +7507,6 @@ class DataConsistencyChecker:
             if num_matching >= (self.num_rows - self.contamination_level):
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2, col_name_3]),
                     [col_name_1, col_name_2, col_name_3],  # Put in order such that col_3 == col_1 / col_2
                     test_series,
                     f'"{col_name_3}" is consistently similar to the ratio of "{col_name_1}" and "{col_name_2}"')
@@ -7508,7 +7566,6 @@ class DataConsistencyChecker:
             if test_series.tolist().count(False) < self.contamination_level:
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_a, col_b, col_c]),
                     [col_a, col_b, col_c],
                     test_series,
                     (f'The values in "{col_c}" are consistently larger than the sum of "{col_a}", '
@@ -7634,7 +7691,6 @@ class DataConsistencyChecker:
             if test_series.tolist().count(False) < self.contamination_level:
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_a, col_b, col_c]),
                     [col_a, col_b, col_c],  # Order such that the last depends on the others
                     test_series,
                     (f'The values in "{col_c}" are consistently larger than the difference between "{col_a}", '
@@ -7738,48 +7794,13 @@ class DataConsistencyChecker:
                 column_pos_arr.append(col_name)
 
         # Identify the set of similar columns for each positive numeric column
-        similar_cols_dict = {}
-        calc_size = 0
-        for col_name in column_pos_arr:
-            similar_cols = []
-            for c in column_pos_arr:
-                if c == col_name:
-                    continue
-                # We provide for a large range, which can be found with, for example, tax values and so on, which may
-                # be only 1 to 15% of the total column
-                if self.column_medians[col_name] > self.column_medians[c] > (self.column_medians[col_name] / 20.0):
-                    # Ensure the columns are correlated with col_name. Any columns summing to col_name should be
-                    corr = self.pearson_corr.loc[col_name, c]
-                    if corr > 0.4:
-                        similar_cols.append(c)
-            similar_cols_dict[col_name] = similar_cols
-            calc_size += int(math.pow(2, len(similar_cols)))
+        similar_cols_dict, _, calc_size = self.get_similar_cols(
+            column_pos_arr, include_self=False, lower_divisor=20.0, upper_multiplier=1.0)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes = False
-        max_subset_size = -1
-        if calc_size > self.max_combinations:
-
-            # Try limiting the sizes of the subsets
-            for max_subset_size in range(5, 1, -1):
-                calc_size_limited = 0
-                for col_name in column_pos_arr:
-                    num_cols = len(similar_cols_dict[col_name])
-                    for subset_size in range(2, max_subset_size + 1):
-                        calc_size_limited += math.comb(num_cols, subset_size)
-                if calc_size_limited < self.max_combinations:
-                    limit_subset_sizes = True
-                    break
-
-            if self.verbose >= 2:
-                if limit_subset_sizes:
-                    print((f"  Due to the potential number of combinations, limiting test to subsets of size "
-                           f"{max_subset_size}."))
-                else:
-                    print((f"  Skipping test. Given the number of similar columns for each positive numeric "
-                           f"column, there are {calc_size_limited:,} combinations, even limiting testing to subsets "
-                           f"2 columns. max_combinations is currently set to {self.max_combinations:,}."))
-                    return
+        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
+        if not can_process:
+            return
 
         for col_idx, col_name in enumerate(column_pos_arr):
             if (self.verbose == 2 and col_idx > 0 and col_idx % 10 == 0) or (self.verbose >= 3):
@@ -7855,7 +7876,6 @@ class DataConsistencyChecker:
                         if col_values.tolist().count(False) < self.contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
-                                self.get_col_set_name(subset + [col_name]),
                                 subset + [col_name],
                                 col_values,
                                 f'The column "{col_name}" is consistently equal to the sum of the values in the columns {subset}',
@@ -7882,11 +7902,10 @@ class DataConsistencyChecker:
                         if col_values.tolist().count(False) < self.contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
-                                self.get_col_set_name(subset + [col_name]),
                                 subset + [col_name],
                                 np.array(col_values),
-                                (f'The column "{col_name}" is consistently equal to the sum of the values in the columns '
-                                 f"{subset} plus {median_diff}"),
+                                (f'The column "{col_name}" is consistently equal to the sum of the values in the '
+                                 f"columns {subset} plus {median_diff}"),
                                 "",
                                 display_info={"Sum": col_sums, "operation": "plus", "amount": median_diff}
                             )
@@ -7904,7 +7923,6 @@ class DataConsistencyChecker:
                         if col_values.tolist().count(False) < self.contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
-                                self.get_col_set_name(subset + [col_name]),
                                 subset + [col_name],
                                 np.array(col_values),
                                 (f"The column {col_name} is consistently equal to the sum of the values in the columns "
@@ -7920,8 +7938,10 @@ class DataConsistencyChecker:
         Unlike sum_of_columns, there is not the concept of adding or multiplying a constant to the minimum of another
         set of columns.
 
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'min_of_cols all' is consistently the min of "min_of_cols rand_a",
+            "min_of_cols rand_b" AND "min_of_cols rand_c"
+        Patterns with exception: 'min_of_cols most' is consistently the min of "min_of_cols rand_a",
+            "min_of_cols rand_b" AND "min_of_cols rand_c", with 1 exception
         """
         self.__add_synthetic_column('min_of_cols rand_a', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('min_of_cols rand_b', [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
@@ -7944,7 +7964,15 @@ class DataConsistencyChecker:
         # For each target column, try all subsets whose minimum values match this column.
 
         two_rows_np = self.sample_df[self.numeric_cols].sample(n=2, random_state=0).values
-        larger_dict = self.get_larger_pairs_with_bool_dict()
+
+        # Identify the set of similar columns for each positive numeric column
+        similar_cols_dict, similar_cols_idxs_dict, calc_size = self.get_similar_cols(
+            self.numeric_cols, include_self=False, lower_divisor=1.0, upper_multiplier=10.0, check_larger_false=True)
+
+        # Check if there are too many combinations to execute this test
+        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
+        if not can_process:
+            return
 
         for col_idx, col_name in enumerate(self.numeric_cols):
             printed_column_status = False
@@ -7952,38 +7980,16 @@ class DataConsistencyChecker:
                 print(f"  Examining column {col_idx} of {len(self.numeric_cols)} numeric columns")
                 printed_column_status = True
 
-            similar_cols = []
-            similar_cols_idxs = []
-            printed_subset_size_msg = False
-            for c_idx, c in enumerate(self.numeric_cols):
-                # We provide for a large range, which can be found with, for example, tax values and so on, which may
-                # be only 1 to 15% of the total column
-                if self.column_medians[col_name] < self.column_medians[c] < (self.column_medians[col_name] * 10.0):
-                    # Ensure the columns are correlated with col_name. Any columns in the min to col_name should be.
-                    corr = self.pearson_corr.loc[col_name, c]
-                    if corr > 0.2:
-                        if (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == False):
-                            similar_cols.append(c)
-                            similar_cols_idxs.append(c_idx)
-            if len(similar_cols) == 0:
-                continue
+            similar_cols = similar_cols_dict[col_name]
+            similar_cols_idxs = similar_cols_idxs_dict[col_name]
 
             found_any = False
-            for subset_size in range(min(10, len(similar_cols)), 1, -1):
+            starting_size = len(similar_cols)
+            if limit_subset_sizes:
+                starting_size = min(starting_size, max_subset_size)
+            for subset_size in range(starting_size, 2, -1):
                 if found_any:
                     break
-
-                calc_size = math.comb(len(similar_cols), subset_size)
-                skip_subsets = calc_size > self.max_combinations
-                if skip_subsets:
-                    if self.verbose >= 2 and not printed_subset_size_msg:
-                        if not printed_column_status:
-                            print(f"  Examining column {col_idx} of {len(self.numeric_cols)} numeric columns")
-                            printed_column_status = True
-                        print((f"    Skipping subsets of size {subset_size}. There are {calc_size:,} subsets. max_combinations is "
-                               f"currently set to {self.max_combinations:,}"))
-                        printed_subset_size_msg = True
-                    continue
 
                 subsets = list(combinations(similar_cols_idxs, subset_size))
                 if self.verbose >= 2 and len(similar_cols) > 15:
@@ -7999,7 +8005,7 @@ class DataConsistencyChecker:
                     test_np = two_rows_np[:, subset]
                     col_mins = test_np.min(axis=1)
                     test_series = np.where(two_rows_np[:, col_idx] == col_mins, True, False)
-                    if test_series.tolist().count(False) > 1:
+                    if test_series.tolist().count(False) > 0:
                         continue
 
                     # Test on a subset of the rows
@@ -8020,7 +8026,8 @@ class DataConsistencyChecker:
                         # Check the target column is not identical to any of the source columns
                         subset_okay = True
                         for col in subset_names:
-                            equal_series = [x == y or is_missing(x) or is_missing(y) for x, y in zip(self.orig_df[col_name], self.orig_df[col])]
+                            equal_series = [x == y or is_missing(x) or is_missing(y)
+                                            for x, y in zip(self.orig_df[col_name], self.orig_df[col])]
                             if equal_series.count(False) < self.contamination_level:
                                 subset_okay = False
                                 break
@@ -8039,7 +8046,6 @@ class DataConsistencyChecker:
 
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(subset_names + [col_name]),
                             subset_names + [col_name],
                             test_series,
                             (f'The column "{col_name}" is consistently equal to the minimum of the values in the '
@@ -8072,7 +8078,15 @@ class DataConsistencyChecker:
         # For each target column, try all subsets whose minimum values match this column.
 
         two_rows_np = self.sample_df[self.numeric_cols].sample(n=2, random_state=0).values
-        larger_dict = self.get_larger_pairs_with_bool_dict()
+
+        # Identify the set of similar columns for each positive numeric column
+        similar_cols_dict, similar_cols_idxs_dict, calc_size = self.get_similar_cols(
+            self.numeric_cols, include_self=False, lower_divisor=10.0, upper_multiplier=1.0, check_larger_true=True)
+
+        # Check if there are too many combinations to execute this test
+        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
+        if not can_process:
+            return
 
         for col_idx, col_name in enumerate(self.numeric_cols):
             printed_column_status = False
@@ -8080,38 +8094,16 @@ class DataConsistencyChecker:
                 print(f"  Examining column {col_idx} of {len(self.numeric_cols)} numeric columns")
                 printed_column_status = True
 
-            similar_cols = []
-            similar_cols_idxs = []
-            printed_subset_size_msg = False
-            for c_idx, c in enumerate(self.numeric_cols):
-                # We provide for a large range, which can be found with, for example, tax values and so on, which may
-                # be only 1 to 15% of the total column
-                if (self.column_medians[col_name] / 10.0) < self.column_medians[c] < self.column_medians[col_name]:
-                    # Ensure the columns are correlated with col_name. Any columns in the min to col_name should be.
-                    corr = self.pearson_corr.loc[col_name, c]
-                    if corr > 0.2:
-                        if (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == True):
-                            similar_cols.append(c)
-                            similar_cols_idxs.append(c_idx)
-            if len(similar_cols) == 0:
-                continue
+            similar_cols = similar_cols_dict[col_name]
+            similar_cols_idxs = similar_cols_idxs_dict[col_name]
 
             found_any = False
-            for subset_size in range(min(10, len(similar_cols)), 1, -1):
+            starting_size = len(similar_cols)
+            if limit_subset_sizes:
+                starting_size = min(starting_size, max_subset_size)
+            for subset_size in range(starting_size, 2, -1):
                 if found_any:
                     break
-
-                # Check if there are too many combinations for this subset_size
-                calc_size = math.comb(len(similar_cols), subset_size)
-                if calc_size > self.max_combinations:
-                    if self.verbose >= 2 and not printed_subset_size_msg:
-                        if not printed_column_status:
-                            print(f"  Examining column {col_idx} of {len(self.numeric_cols)} numeric columns")
-                            printed_column_status = True
-                        print((f"    Skipping subsets of size {subset_size}. There are {calc_size:,} subsets. max_combinations is "
-                               f"currently set to {self.max_combinations:,}"))
-                        printed_subset_size_msg = True
-                    continue
 
                 subsets = list(combinations(similar_cols_idxs, subset_size))
                 if self.verbose >= 2 and len(similar_cols) > 15:
@@ -8167,7 +8159,6 @@ class DataConsistencyChecker:
 
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(subset_names + [col_name]),
                             subset_names + [col_name],
                             test_series,
                             (f'The column "{col_name}" is consistently equal to the maximum of the values in the '
@@ -8202,8 +8193,8 @@ class DataConsistencyChecker:
     def __check_mean_of_columns(self, test_id):
         """
         This test loops through each numeric column and determines if that column is the mean of some subset of the
-        other numeric columns. Doing this, it is able to cache information from the first few columns checked,
-        and consequently, subsequent columns tend to execute much faster.
+        other numeric columns. Doing this, it is able to cache information from the first  columns checked, and
+        consequently, subsequent columns tend to execute much faster.
         """
 
         # Track which columns are mostly positive. We execute this test only on those columns.
@@ -8217,55 +8208,14 @@ class DataConsistencyChecker:
         # columns again, but continue through the positive numeric columns for numeric columns in other ranges.
         skip_col_sets = []
 
-        # Get information about which columns have the same values
-        cols_same_bool_dict = self.get_cols_same_bool_dict(force=True)
-
         # Identify the set of similar columns for each positive numeric column
-        similar_cols_dict = {}
-        calc_size = 0
-        for col_name in column_pos_arr:
-            # Identify the columns with similar values, based on the medians
-            similar_cols = [col_name]
-            for c in column_pos_arr:
-                if c == col_name:
-                    continue
-                # We provide for a large range, which can be found with, for example, tax values and so on, which may
-                # be only 1 to 15% of the total column
-                if (self.column_medians[col_name] / 5.0) < self.column_medians[c] < (self.column_medians[col_name] * 5.0):
-                    # Ensure the columns are correlated with col_name. Any columns related to  col_name should be
-                    # correlated.
-                    corr = self.pearson_corr.loc[col_name, c]
-                    if corr > 0.4:
-                        if not cols_same_bool_dict[tuple(sorted([col_name, c]))]:
-                            similar_cols.append(c)
-            similar_cols_dict[col_name] = similar_cols
-            calc_size += int(math.pow(2, len(similar_cols)))
+        similar_cols_dict, _, calc_size = self.get_similar_cols(
+            column_pos_arr, include_self=True, lower_divisor=5.0, upper_multiplier=5.0)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes = False
-        max_subset_size = -1
-        if calc_size > self.max_combinations:
-
-            # Try limiting the sizes of the subsets
-            for max_subset_size in range(5, 1, -1):
-                calc_size_limited = 0
-                for col_name in column_pos_arr:
-                    num_cols = len(similar_cols_dict[col_name])
-                    for subset_size in range(2, max_subset_size + 1):
-                        calc_size_limited += math.comb(num_cols, subset_size)
-                if calc_size_limited < self.max_combinations:
-                    limit_subset_sizes = True
-                    break
-
-            if self.verbose >= 2:
-                if limit_subset_sizes:
-                    print((f"  Due to the potential number of combinations, limiting test to subsets of size "
-                           f"{max_subset_size}."))
-                else:
-                    print((f"  Skipping test. Given the number of similar columns for each positive numeric "
-                           f"column, there are {calc_size_limited:,} combinations, even limiting testing to subsets "
-                           f"2 columns. max_combinations is currently set to {self.max_combinations:,}."))
-                    return
+        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
+        if not can_process:
+            return
 
         for col_idx, col_name in enumerate(column_pos_arr):
             if self.verbose >= 2:
@@ -8342,7 +8292,6 @@ class DataConsistencyChecker:
                     if test_series.tolist().count(False) < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(sorted(rest_of_cols) + [matching_column]),
                             sorted(rest_of_cols) + [matching_column],
                             test_series,
                             (f'The column "{matching_column}" is consistently equal to the mean of the values in the '
@@ -8477,7 +8426,6 @@ class DataConsistencyChecker:
                 found_any = True
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(subset),
                     list(subset),
                     pos_matching_arr & neg_matching_arr,
                     f"The columns in {str(subset)[1:-1]} are consistently positive and negative together",
@@ -8613,7 +8561,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(subset),
                     list(subset),
                     zero_matching_arr & non_zero_matching_arr,
                     "The columns are consistently zero or non-zero together.",
@@ -8774,7 +8721,6 @@ class DataConsistencyChecker:
                 test_series = normalized_errors_arr < 0.1
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(cols + [col_name]),
                     cols + [col_name],
                     test_series,
                     f'The values in column "{col_name}" are consistently predictable from {cols} based using a decision '
@@ -8933,7 +8879,6 @@ class DataConsistencyChecker:
                 test_series = normalized_errors_arr < 0.5
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(features_used + [col_name]),
                     features_used + [col_name],
                     test_series,
                     (f'The column "{col_name}" contains values that are consistently predictable based on a linear '
@@ -9022,7 +8967,6 @@ class DataConsistencyChecker:
                 test_series = (df_rank['Avg Percentile'] - df_rank[col_name]) < 0.5
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     (f'Column "{col_name}" contains values that are small compared to the values in similar columns: '
@@ -9064,7 +9008,6 @@ class DataConsistencyChecker:
                 test_series = ( df_rank[col_name] - df_rank['Avg Percentile']) < 0.5
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     (f'Column "{col_name}" contains values that are large compared to the values in similar columns: '
@@ -9115,7 +9058,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"The test flagged any values earlier than {lower_limit} as very early given the 25th quartile is "
@@ -9145,7 +9087,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"The test flagged any values later than {upper_limit} as very late given the 25th quartile is "
@@ -9186,7 +9127,6 @@ class DataConsistencyChecker:
             test_series = np.array([x not in rare_dow for x in dow_list])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific days of the week',
@@ -9220,7 +9160,6 @@ class DataConsistencyChecker:
             test_series = np.array([x not in rare_dom for x in dom_list])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific days of the month',
@@ -9256,7 +9195,6 @@ class DataConsistencyChecker:
             test_series = np.array([x not in rare_months for x in month_list])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific months of the year',
@@ -9293,7 +9231,6 @@ class DataConsistencyChecker:
             test_series = np.array([x not in rare_hours for x in hour_list])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific hours of the day',
@@ -9331,7 +9268,6 @@ class DataConsistencyChecker:
             test_series = np.array([x not in rare_minutes for x in minutes_list])
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific minutes of the hour',
@@ -9368,7 +9304,6 @@ class DataConsistencyChecker:
                 gap_array = gap_array | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_counts(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     gap_array,
                     f"Columns {col_name_1} and {col_name_2} are consistently",
@@ -9418,7 +9353,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The gap between "{col_name_1}" and "{col_name_2}" is larger than normal. We flag any gaps '
@@ -9471,7 +9405,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The gap between "{col_name_1}" and "{col_name_2}" is smaller than normal. We flag any gaps '
@@ -9519,7 +9452,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
                     f'"{col_big}" is consistently later than "{col_small}"',
@@ -9614,7 +9546,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{date_col}" AND "{num_col}"',
                     [date_col, num_col],
                     test_series,
                     f'"{num_col}" is unusually large given the date column: "{date_col}"',
@@ -9699,7 +9630,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{date_col}" AND "{num_col}"',
                     [date_col, num_col],
                     test_series,
                     f'"{num_col}" is unusually small given the date column: "{date_col}"',
@@ -9776,10 +9706,10 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
-                f"The columns consistently have the same value", "")
+                f"The columns consistently have the same value",
+                "")
 
     def __generate_binary_opposite(self):
         """
@@ -9823,7 +9753,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                f'"{col_name_1}" AND "{col_name_2}"',
                 [col_name_1, col_name_2],
                 test_series,
                 f"The columns consistently have the opposite value", "")
@@ -9929,10 +9858,10 @@ class DataConsistencyChecker:
             if test_series is not None:
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
-                    pattern_str, "")
+                    pattern_str,
+                    "")
 
     ##################################################################################################################
     # Data consistency checks for sets of binary columns
@@ -10025,7 +9954,6 @@ class DataConsistencyChecker:
                     if num_matching > (self.num_rows - self.contamination_level):
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(list(subset) + [col_name]),
                             list(subset) + [col_name],
                             test_series,
                             f'"{col_name}" is consistently the result of an AND operation over the columns {subset_list}',
@@ -10123,7 +10051,6 @@ class DataConsistencyChecker:
                     if num_matching > (self.num_rows - self.contamination_level):
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(list(subset) + [col_name]),
                             list(subset) + [col_name],
                             test_series,
                             f'"{col_name}" is consistently the result of an OR operation over the columns {subset_list}',
@@ -10210,7 +10137,6 @@ class DataConsistencyChecker:
                 if num_matching >= (self.num_rows - self.contamination_level):
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([col_name_2, col_name_3, col_name_1]),
                         [col_name_2, col_name_3, col_name_1],
                         test_series,
                         (f'"{col_name_1}" is consistently the result of an XOR operation with columns "{col_name_2}" '
@@ -10315,7 +10241,6 @@ class DataConsistencyChecker:
                         test_series = np.array([sums == vc.index[0]][0])
                         self.__process_analysis_binary(
                                 test_id,
-                                self.get_col_set_name(col_names),
                                 list(col_names),
                                 test_series,
                                 (f"The set of {len(col_names)} columns: {col_names} consistently have exactly "
@@ -10446,7 +10371,6 @@ class DataConsistencyChecker:
                     subset_names = [cols[x] for x in list(subset)]
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name(subset_names),
                         subset_names,
                         test_series,
                         f'For columns {subset_names}, the combinations of values flagged are rare',
@@ -10522,7 +10446,6 @@ class DataConsistencyChecker:
                     test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col].isna()
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col, bin_col]),
                         [num_col, bin_col],
                         test_series,
                         (f'{counts_str} and is consistently "{val1}" when Column "{num_col}" contains '
@@ -10538,7 +10461,6 @@ class DataConsistencyChecker:
                     test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col].isna()
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col, bin_col]),
                         [num_col, bin_col],
                         test_series,
                         (f'{counts_str} and is consistently "{val0}" when Column "{num_col}" contains '
@@ -10554,7 +10476,6 @@ class DataConsistencyChecker:
                     test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col].isna()
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col, bin_col]),
                         [num_col, bin_col],
                         test_series,
                         (f'{counts_str} and is consistently "{val1}" when Column "{num_col}" contains '
@@ -10570,7 +10491,6 @@ class DataConsistencyChecker:
                     test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col].isna()
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col, bin_col]),
                         [num_col, bin_col],
                         test_series,
                         (f'{counts_str} and is consistently "{val0}" when Column "{num_col}" contains '
@@ -10693,7 +10613,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_2, col_name_3, bin_col]),
                 [col_name_2, col_name_3, bin_col],
                 test_series,
                 (f"Column {bin_col} consistently has value {value_when_match} when columns {col_name_2} and "
@@ -10788,6 +10707,8 @@ class DataConsistencyChecker:
         if pairs is None:
             return
 
+        nunique_dict = self.get_nunique_dict()
+
         # Calculate and cache the sums of each pair of numeric columns
         sums_arr_dict = {}
         sorted_sums_arr_dict = {}
@@ -10813,6 +10734,9 @@ class DataConsistencyChecker:
 
             for num_col_1, num_col_2 in pairs:
                 if not self.check_columns_same_scale_2(num_col_1, num_col_2):
+                    continue
+
+                if (nunique_dict[num_col_1] < 10) or (nunique_dict[num_col_2] < 10):
                     continue
 
                 sum_arr = sums_arr_dict[(num_col_1, num_col_2)]
@@ -10851,17 +10775,23 @@ class DataConsistencyChecker:
                     # Test on a sample of rows
                     test_series = [True if (x == val0 and y <= threshold) or (x == val1 and y >= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col].head(sample_size), sum_arr.head(sample_size))]
-                    test_series = test_series | self.orig_df[bin_col].head(sample_size).isna() | self.orig_df[num_col_1].head(sample_size).isna() | self.orig_df[num_col_2].head(sample_size).isna()
+                    test_series = test_series | \
+                                  self.orig_df[bin_col].head(sample_size).isna() | \
+                                  self.orig_df[num_col_1].head(sample_size).isna() | \
+                                  self.orig_df[num_col_2].head(sample_size).isna()
                     if test_series.tolist().count(False) > 1:
                         continue
 
                     # Test on the full columns
                     test_series = [True if (x == val0 and y <= threshold) or (x == val1 and y >= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col], sum_arr)]
-                    test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col_1].isna() | self.orig_df[num_col_2].isna()
+                    test_series = test_series | \
+                                  self.orig_df[bin_col].isna() | \
+                                  self.orig_df[num_col_1].isna() | \
+                                  self.orig_df[num_col_2].isna()
+
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col_1, num_col_2, bin_col]),
                         [num_col_1, num_col_2, bin_col],
                         test_series,
                         (f'Column "{bin_col}" is consistently {val0} when the sum of columns "{num_col_1}" and '
@@ -10875,17 +10805,23 @@ class DataConsistencyChecker:
                     # Test on a sample of rows
                     test_series = [True if (x == val1 and y > threshold) or (x == val0 and y <= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col].head(sample_size), sum_arr.head(sample_size))]
-                    test_series = test_series | self.orig_df[bin_col].head(sample_size).isna() | self.orig_df[num_col_1].head(sample_size).isna() | self.orig_df[num_col_2].head(sample_size).isna()
+                    test_series = test_series | \
+                                  self.orig_df[bin_col].head(sample_size).isna() | \
+                                  self.orig_df[num_col_1].head(sample_size).isna() | \
+                                  self.orig_df[num_col_2].head(sample_size).isna()
                     if test_series.tolist().count(False) > 1:
                         continue
 
                     # Test on the full columns
                     test_series = [True if (x == val1 and y > threshold) or (x == val0 and y <= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col], sum_arr)]
-                    test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[num_col_1].isna() | self.orig_df[num_col_2].isna()
+                    test_series = test_series | \
+                                  self.orig_df[bin_col].isna() | \
+                                  self.orig_df[num_col_1].isna() | \
+                                  self.orig_df[num_col_2].isna()
+
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([num_col_1, num_col_2, bin_col]),
                         [num_col_1, num_col_2, bin_col],
                         test_series,
                         (f'Column "{bin_col}" is consistently {val1} when the sum of columns "{num_col_1}" and '
@@ -10911,7 +10847,6 @@ class DataConsistencyChecker:
             test_series = (self.orig_df[col_name].astype(str) != "") & (~self.orig_df[col_name].astype(str).str.isspace())
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'Column "{col_name}" consistently contains non-blank values',
@@ -10957,7 +10892,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].isna() | (test_series_counts == 0)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'Column "{col_name}" consistently contains values without leading spaces'
@@ -10970,7 +10904,6 @@ class DataConsistencyChecker:
                            (test_series_counts < (median_num_spaces * 2)))
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} leading spaces (minimum: '
@@ -11007,7 +10940,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].isna() | (test_series_counts == 0)
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'Column "{col_name}" consistently contains values without trailing spaces'
@@ -11020,7 +10952,6 @@ class DataConsistencyChecker:
                            (test_series_counts < (median_num_spaces * 2)))
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} trailing spaces (minimum: '
@@ -11062,7 +10993,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently starts with an alphabetic character")
@@ -11104,7 +11034,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently starts with a numeric character")
@@ -11153,7 +11082,6 @@ class DataConsistencyChecker:
                 results_col = test_series.isin(common_first_chars) | self.orig_df[col_name].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     results_col,
                     (f'The column "{col_name}" has {self.orig_df[col_name].nunique()} distinct values and contains '
@@ -11190,7 +11118,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently starts with an uppercase character")
@@ -11223,7 +11150,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column consistently starts with an lowercase character")
@@ -11271,7 +11197,6 @@ class DataConsistencyChecker:
                 results_col = test_series.isin(common_last_chars) | self.orig_df[col_name].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     results_col,
                     (f'The column "{col_name}" has {self.orig_df[col_name].nunique()} distinct values and contains '
@@ -11340,7 +11265,6 @@ class DataConsistencyChecker:
             # In the string, remove the [] symbols from the string representation of an array.
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f"The column consistently contains the {str(common_special_chars_list)[1:-1]} character(s)",
@@ -11428,7 +11352,6 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f"The column consistently contains the all of the following characters: {common_chars_list}",
@@ -11462,7 +11385,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if e.isalpha()]))
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values with consistently ",
@@ -11499,7 +11421,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if e.isdigit()]))
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values with consistently",
@@ -11535,7 +11456,6 @@ class DataConsistencyChecker:
             test_series = [test_series.median() if y else x for x, y in zip(test_series, self.orig_df[col_name].isnull())]
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values with consistently", " alpha-numeric characters")
@@ -11564,7 +11484,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values with consistently",
@@ -11602,7 +11521,6 @@ class DataConsistencyChecker:
             test_series = self.orig_df[col_name].fillna("").astype(str).str.len()
             self.__process_analysis_counts(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column contains values with consistently", " characters")
@@ -11629,7 +11547,6 @@ class DataConsistencyChecker:
             test_series = val_lens < upper_limit
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"Some values were unusually long. Any values with length greater than {upper_limit} characters "
@@ -11663,7 +11580,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f"Some values were unusually short. Any values with length less than {lower_limit} characters "
@@ -11758,7 +11674,6 @@ class DataConsistencyChecker:
                 pattern_str = f"The column contains values consistently with '{c}' in position {common_posn_str}"
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     pattern_str)
@@ -11833,7 +11748,6 @@ class DataConsistencyChecker:
             test_series = [y or (x == vc.index[0]) for x, y in zip(patterns_arr, self.orig_df[col_name].isna())]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'Column "{col_name}" consistently contains values with the pattern "{vc.index[0]}", where "X" '
@@ -11864,7 +11778,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column is consistently uppercase")
@@ -11893,7 +11806,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 "The column is consistently lowercase")
@@ -11958,7 +11870,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     test_series,
                     (f'The column "{col_name}" consistently contains values containing only the characters: '
@@ -12005,7 +11916,6 @@ class DataConsistencyChecker:
             test_series = [x in common_values for x in first_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 np.array(test_series),
                 f"The column consistently begins with one of {str(common_values)[1:-1]}",
@@ -12050,7 +11960,6 @@ class DataConsistencyChecker:
             test_series = [x in common_values for x in last_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 np.array(test_series),
                 f"The column consistently ends with one of {str(common_values)[1:-1]}")
@@ -12085,7 +11994,6 @@ class DataConsistencyChecker:
             test_series = [x < upper_limit for x in word_counts_arr] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'The values in column "{col_name}" have word count with 25th percentile {q1} words and 75th '
@@ -12127,7 +12035,6 @@ class DataConsistencyChecker:
             test_series = [x < upper_limit for x in max_word_lens]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 (f'The words in column "{col_name}" have lengths with 25th percentile {q1} characters and 75th '
@@ -12170,7 +12077,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in column "{col_name}" consistently contain the word(s) {str(common_words_arr)[1:-1]}'
@@ -12210,7 +12116,6 @@ class DataConsistencyChecker:
             test_series = [len(set(x).intersection(set(rare_words_arr))) == 0 for x in words_arr]
             self.__process_analysis_binary(
                 test_id,
-                col_name,
                 [col_name],
                 test_series,
                 f'The values in column "{col_name}" consistently use common words',
@@ -12294,7 +12199,6 @@ class DataConsistencyChecker:
 
         self.__process_analysis_binary(
             test_id,
-            self.get_col_set_name(pattern_cols),
             pattern_cols,
             test_series,
             f'The values in "{col_name}" are consistently grouped together. The overall order is: {groups_str}'
@@ -12390,7 +12294,6 @@ class DataConsistencyChecker:
                 continue
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 "Rare combinations of values were found",
@@ -12506,7 +12409,6 @@ class DataConsistencyChecker:
                 continue
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 "Rare combinations of first characters were found",
@@ -12590,7 +12492,6 @@ class DataConsistencyChecker:
                 continue
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 "Rare combinations of first words were found",
@@ -12691,7 +12592,6 @@ class DataConsistencyChecker:
                 continue
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 f"Rare combinations of the first word in {col_name_1} and the value in {col_name_2} were found",
@@ -12738,7 +12638,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     np.array(test_series),
                     (f'The columns "{col_name_1}" and "{col_name_2}" consistently have a similar characters '
@@ -12782,7 +12681,6 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 np.array(test_series),
                 (f'The columns "{col_name_1}" and "{col_name_2}" consistently have a similar number of characters '
@@ -12837,7 +12735,6 @@ class DataConsistencyChecker:
                 if test_series.tolist().count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([col_name_1, col_name_2]),
                         [col_name_1, col_name_2],
                         np.array(test_series),
                         (f'The columns "{col_name_1}" and "{col_name_2}" consistently have a similar number of words '
@@ -12895,7 +12792,6 @@ class DataConsistencyChecker:
                 if test_series.tolist().count(False) < self.contamination_level:
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([col_name_1, col_name_2]),
                         [col_name_1, col_name_2],
                         np.array(test_series),
                         (f'The columns "{col_name_1}" and "{col_name_2}" consistently have a similar number of words '
@@ -12963,7 +12859,6 @@ class DataConsistencyChecker:
             test_series = (test_series | self.orig_df[col_name_1].isnull()) | self.orig_df[col_name_2].isnull()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
                 test_series,
                 (f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same first {max_number_matching} '
@@ -13034,9 +12929,8 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same first word'
             )
 
@@ -13121,9 +13015,8 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same last word'
             )
 
@@ -13171,9 +13064,8 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same alphabetic characters '
             )
 
@@ -13220,9 +13112,8 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same numeric characters '
             )
 
@@ -13274,9 +13165,8 @@ class DataConsistencyChecker:
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same special characters'
             )
 
@@ -13325,9 +13215,8 @@ class DataConsistencyChecker:
             test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" is consistently the same as the first characters of "{col_name_2}"'
             )
 
@@ -13372,9 +13261,8 @@ class DataConsistencyChecker:
             test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 f'Columns "{col_name_1}" is consistently the same as the last characters of "{col_name_2}"'
             )
 
@@ -13434,9 +13322,8 @@ class DataConsistencyChecker:
                                 self.orig_df[col_name_2])]
             self.__process_analysis_binary(
                 test_id,
-                self.get_col_set_name([col_name_1, col_name_2]),
                 [col_name_1, col_name_2],
-                np.array(test_series),
+                test_series,
                 (f'Columns "{col_name_1}" is consistently contained within "{col_name_2}", but not the first or last '
                  f'characters')
             )
@@ -13503,7 +13390,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     f'"{col_name_1}" is consistently similar, with regards to percentile, to "{col_name_2}"')
@@ -13513,7 +13399,6 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    f'"{col_name_1}" AND "{col_name_2}"',
                     [col_name_1, col_name_2],
                     test_series,
                     f'"{col_name_1}" is consistently inversely similar in percentile to "{col_name_2}"')
@@ -13632,9 +13517,8 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
-                    np.array(test_series),
+                    test_series,
                     (f'"{col_name_2}" contains very large values given the specific value in "{col_name_1}" (Values '
                      f'that are large given any value of "{col_name_1}" are not flagged by this test.)'),
                     allow_patterns=False  # todo: ones that set allow_patterns=False may get ,. in string. check for that. maybe just do a replace()
@@ -13751,7 +13635,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     test_series,
                     (f'"{col_name_2}" contains very small values given the specific value in "{col_name_1}" (Values '
@@ -13884,9 +13767,8 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
-                    np.array(test_series),
+                    test_series,
                     (f'"{col_name_2}" contains very large values given the first word/prefix {flagged_prefixes} in '
                      f'"{col_name_1}" (Values that are large given any value of "{col_name_1}" are not flagged by '
                      f'this test.)'),
@@ -14009,7 +13891,6 @@ class DataConsistencyChecker:
 
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2]),
                     [col_name_1, col_name_2],
                     np.array(test_series),
                     (f'"{col_name_2}" contains very small values given the first word/prefix {flagged_prefixes} in '
@@ -14137,9 +14018,9 @@ class DataConsistencyChecker:
             for v1 in common_vals_dict[col_name_1]:
                 for v2 in common_vals_dict[col_name_2]:
                     sub_df = self.orig_df[(self.orig_df[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]
-                    subsets_dict[(v1, v2)] = sub_df
+                    subsets_dict[(col_name_1, col_name_2, v1, v2)] = sub_df
 
-        # Loop through each pair of string columns, and for each pair, each numeric/date column
+        # Loop through each pair of string columns, and for each pair, each pair of values, and each numeric/date column
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 50 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -14158,7 +14039,7 @@ class DataConsistencyChecker:
                         if found_many:
                             break
 
-                        sub_df = subsets_dict[(v1, v2)]
+                        sub_df = subsets_dict[(col_name_1, col_name_2, v1, v2)]
                         if len(sub_df) < 100:
                             continue
 
@@ -14196,9 +14077,9 @@ class DataConsistencyChecker:
                               self.orig_df[col_name_1].isna() | \
                               self.orig_df[col_name_2].isna() | \
                               self.orig_df[col_name_3].isna()
+
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2, col_name_3]),
                     [col_name_1, col_name_2, col_name_3],
                     test_series,
                     (f'"{col_name_3}" contains very large values given the values in "{col_name_1}" and '
@@ -14273,7 +14154,7 @@ class DataConsistencyChecker:
             for v1 in common_vals_dict[col_name_1]:
                 for v2 in common_vals_dict[col_name_2]:
                     sub_df = self.orig_df[(self.orig_df[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]
-                    subsets_dict[(v1, v2)] = sub_df
+                    subsets_dict[(col_name_1, col_name_2, v1, v2)] = sub_df
 
         # Loop through each pair of string columns, and for each pair, each numeric/date column
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
@@ -14294,7 +14175,7 @@ class DataConsistencyChecker:
                         if found_many:
                             break
 
-                        sub_df = subsets_dict[(v1, v2)]
+                        sub_df = subsets_dict[(col_name_1, col_name_2, v1, v2)]
                         if len(sub_df) < 100:
                             continue
 
@@ -14330,7 +14211,6 @@ class DataConsistencyChecker:
                               self.orig_df[col_name_3].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_1, col_name_2, col_name_3]),
                     [col_name_1, col_name_2, col_name_3],
                     test_series,
                     (f'"{col_name_3}" contains very small values given the values in "{col_name_1}" and '
@@ -14373,9 +14253,12 @@ class DataConsistencyChecker:
     def __check_corr_given_val(self, test_id):
 
         # From: https://stackoverflow.com/questions/71844846/is-there-a-faster-way-to-get-correlation-coefficents
-        def pairwise_correlation(A, B):
-            am = A - np.mean(A, axis=0)
-            bm = B - np.mean(B, axis=0)
+        # Modified to check for all zero arrays
+        def pairwise_correlation(a, b):
+            am = a - np.mean(a, axis=0)
+            bm = b - np.mean(b, axis=0)
+            if all(am == 0.0) or all(bm == 0.0):
+                return 0.0
             cor = am.T @ bm / (np.sqrt(
                 np.sum(am**2, axis=0)).T * np.sqrt(
                 np.sum(bm**2, axis=0)))
@@ -14383,6 +14266,8 @@ class DataConsistencyChecker:
 
         if len(self.numeric_cols) < 2:
             return
+
+        nunique_dict = self.get_nunique_dict()
 
         # Create a numpy array of just the numeric columns for efficiency
         numeric_df = None
@@ -14440,9 +14325,9 @@ class DataConsistencyChecker:
                 if self.verbose >= 2 and num_idx > 0 and num_idx % 10_000 == 0:
                     print(f"  Examining column set {num_idx:,} of {num_pairs:,} pairs of numeric columns.")
 
-                if self.orig_df[col_name_1].nunique(dropna=True) < 10:
+                if nunique_dict[col_name_1] < 10:
                     continue
-                if self.orig_df[col_name_2].nunique(dropna=True) < 10:
+                if nunique_dict[col_name_2] < 10:
                     continue
 
                 # Get the column indexes of the 2 numeric columns
@@ -14503,7 +14388,6 @@ class DataConsistencyChecker:
                 if not any_subsets_uncorrelated and some_subset_correlated:
                     self.__process_analysis_binary(
                         test_id,
-                        self.get_col_set_name([col_name_1, col_name_2, col_cond]),
                         [col_name_1, col_name_2, col_cond],
                         test_series,
                         (f'"{col_name_1}" is consistently correlated with "{col_name_2}" when conditioning on '
@@ -14630,7 +14514,6 @@ class DataConsistencyChecker:
                 test_series = (y == y_pred)
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name(cols + [col_name]),
                     cols + [col_name],
                     test_series,
                     f'The values in column "{col_name}" are consistently predictable from {cols} based using a decision '
@@ -14715,7 +14598,6 @@ class DataConsistencyChecker:
             if num_matching >= (self.num_rows - self.contamination_level):
                 self.__process_analysis_binary(
                     test_id,
-                    self.get_col_set_name([col_name_a, col_name_b, col_name_c]),
                     [col_name_a, col_name_b, col_name_c],
                     test_series,
                     (f'The values in "{col_name_c}" are consistently the same as those in either "{col_name_a}" '
@@ -15038,7 +14920,6 @@ class DataConsistencyChecker:
                         test_series = [x == y for x, y in zip(match_1_2_arr, match_3_4_arr)]
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name([col_name_1, col_name_2, col_name_3, col_name_4]),
                             [col_name_1, col_name_2, col_name_3, col_name_4],
                             test_series,
                             (f'Columns "{col_name_1}" and "{col_name_2}" have equal values in the same rows as '
@@ -15117,7 +14998,6 @@ class DataConsistencyChecker:
                     if 0 < num_dup < self.contamination_level:
                         self.__process_analysis_binary(
                             test_id,
-                            self.get_col_set_name(subset),
                             subset,
                             ~test_series,
                             f'The set {subset} consistently contain a unique combination of values',
@@ -15152,7 +15032,6 @@ class DataConsistencyChecker:
         test_series = self.orig_df.isna().sum(axis=1)
         self.__process_analysis_counts(
             test_id,
-            self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
             "The dataset consistently has",
@@ -15188,7 +15067,6 @@ class DataConsistencyChecker:
         test_series = num_zeros_arr == most_common_count
         self.__process_analysis_binary(
             test_id,
-            self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
             f"The dataset consistently has {most_common_count} elements with value 0 per row"
@@ -15244,7 +15122,6 @@ class DataConsistencyChecker:
 
         self.__process_analysis_binary(
             test_id,
-            self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
             f"The dataset consistently has {common_str} unique values per row",
@@ -15274,7 +15151,6 @@ class DataConsistencyChecker:
         test_series = self.orig_df.applymap(lambda x: isinstance(x, numbers.Number) and x < 0).sum(axis=1)
         self.__process_analysis_counts(
             test_id,
-            self.get_col_set_name(list(self.orig_df.columns)),
             list(self.orig_df.columns),
             test_series,
             "The dataset consistently has",
@@ -15306,7 +15182,6 @@ class DataConsistencyChecker:
         flagged_vals = [x for x in rand_df['Avg Percentile'] if x < lower_limit]
         self.__process_analysis_binary(
             test_id,
-            self.get_col_set_name(self.numeric_cols),
             self.numeric_cols,
             test_series,
             ("This test considered all numeric columns, and calculated the percentile of each value, relative to its "
@@ -15347,7 +15222,6 @@ class DataConsistencyChecker:
         flagged_vals = [x for x in rank_df['Avg Percentile'] if x > upper_limit]
         self.__process_analysis_binary(
             test_id,
-            self.get_col_set_name(self.numeric_cols),
             self.numeric_cols,
             test_series,
             ("This test considered all numeric columns, and calculated the percentile of each value, relative to its "
@@ -15413,12 +15287,18 @@ def get_non_alphanumeric(x):
     Return the passed string, with all alphanumeric characters removed. Returns an empty string if the passed
     string is empty or contains only alphanumeric characters.
     """
+
     if x.isalnum():
         return []
     return [c for c in x if not str(c).isalnum()]
 
 
 def styling_orig_row(x, row_idx, flagged_arr):
+    """
+    Used to set the background colours for dataframes that display the flagged rows. All cells are coloured either
+    light blue (indicating no issues) or light yellow (indicating at least one issue).
+    """
+
     df_styler = pd.DataFrame('', index=x.index, columns=x.columns)
     for c_idx, c_flagged in enumerate(flagged_arr):
         if c_flagged:
@@ -15429,6 +15309,11 @@ def styling_orig_row(x, row_idx, flagged_arr):
 
 
 def styling_flagged_rows(x, flagged_cells):
+    """
+    Similar to styling_orig_row(), but called where the list of tests are not included in the dataframe, only original
+    data rows.
+    """
+
     df_styler = pd.DataFrame('background-color: #e5f8fa; color: black', index=x.index, columns=x.columns)
     for row_idx in x.index:
         for col_idx, col_name in enumerate(x.columns[:-1]):  # Do not check the 'FINAL SCORE' column
@@ -15444,6 +15329,7 @@ def is_notebook():
     """
     Determine if we are currently operating in a notebook, such as Jupyter. Returns True if so, False otherwise.
     """
+
     try:
         shell = get_ipython().__class__.__name__
         if shell == 'ZMQInteractiveShell':
@@ -15460,12 +15346,14 @@ def print_text(s):
     """
     General method to handle printing text to either console or notebook, in the form of markdown.
     """
+
     if is_notebook():
+        # Remove or replace any characters that are specific to console
         s = s.replace('\n', '<br>')
         display(Markdown(s))
     else:
-        # Remove any characters that are specific to markdown
-        print(s.replace("*", "").replace("#", ""))
+        # Remove or replace any characters that are specific to markdown
+        print(s.replace("*", "").replace("#", "").replace("<br>", "\n"))
 
 
 def is_missing(x):
@@ -15473,6 +15361,7 @@ def is_missing(x):
     When passed a single value of any type, returns True if the value is None, np.nan, empty, or can otherwise be
     considered missing. Returns False otherwise.
     """
+
     # todo: check NaD (not a date) too. and NaT (not a time)
     if x is None:
         return True
@@ -15487,13 +15376,11 @@ def is_missing(x):
     return False
 
 
-def get_subsets(arr, min_size=1):
-    subsets = []
-    [subsets.extend(list(combinations(arr, n))) for n in range(len(arr)+1, min_size-1, -1)]
-    return subsets
-
-
 def array_to_str(arr):
+    """
+    Create a prettified string version of a python array
+    """
+
     arr = sorted(arr)
     arr_str = ""
     for v in arr:
@@ -15508,6 +15395,7 @@ def replace_special_with_space(x):
     spaces. This is generally used to support splitting strings based on special characters as well as white space
     characters.
     """
+
     if x is None:
         return ""
     if x in [np.inf, -np.inf, np.NaN]:
