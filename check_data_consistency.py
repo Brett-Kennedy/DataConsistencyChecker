@@ -39,7 +39,7 @@ warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 warnings.filterwarnings(action='ignore', category=SpearmanRConstantInputWarning)
 
 # Uncomment to debug any warnings.
-warnings.filterwarnings("error")
+# warnings.filterwarnings("error")
 
 # Constants used to generate synthetic data
 letters = string.ascii_letters
@@ -91,10 +91,10 @@ class DataConsistencyChecker:
             multiple sizes.
 
         verbose: int
-            If -1, no output at all will be displayed
-            If 0, no output will be displayed until the tests are complete.
-            If 1, the test names will be displayed as they execute.
-            If 2, progress related to each of the more expensive tests will be displayed as well.
+           -1: no output at all will be displayed
+            0: no output will be displayed until the tests are complete.
+            1: the test names will be displayed as they execute.
+            2: progress related to each of the more expensive tests will be displayed as well.
         """
 
         # Set class variables from the parameters
@@ -152,10 +152,12 @@ class DataConsistencyChecker:
         # single column in test_results_df for that test and set of columns.
         self.test_results_df = None
 
+        self.results_dict = {}
+
         # This maps the columns used in test_results_df and patterns_df to the original columns
         self.col_to_original_cols_dict = {}
 
-        # Data that is collected once needed, and then saved for other tests to use.
+        # Data that is collected once needed, and then saved for subsequent tests to use.
         self.__init_variables()
 
         # This maps one-to-one with the original data, but in each cell contains a score for the corresponding cell in
@@ -198,7 +200,7 @@ class DataConsistencyChecker:
                                          self.__check_unique_values, self.__generate_unique_values,
                                          True, True, True),
             'PREV_VALUES_DT':           (('Check if the values in a column can be predicted from previous values in '
-                                         'that column.'),
+                                         'that column using a simple decision tree.'),
                                          self.__check_prev_values_dt, self.__generate_prev_values_dt,
                                          True, True, True),
 
@@ -225,8 +227,8 @@ class DataConsistencyChecker:
             'NEGATIVE':                 ('Check if all numbers are negative.',
                                          self.__check_negative_values, self.__generate_negative_values,
                                          True, True, True),
-            'NUMBER_DECIMALS':          (('Check if there is a consistent number of decimals in each value in the '
-                                          'column.'),
+            'NUMBER_DECIMALS':          (('Check if there is a consistent number of decimal digits in each value in '
+                                          'the column.'),
                                          self.__check_number_decimals, self.__generate_number_decimals,
                                          False, True, True),
             'RARE_DECIMALS':            ('Check if there are any uncommon sets of digits after the decimal point.',
@@ -941,9 +943,6 @@ class DataConsistencyChecker:
                 except:
                     self.orig_df[col_name] = self.orig_df[col_name].astype(str).astype(float)
 
-        # todo: for columns with mostly numeric values, but some non-alphanumeric (eg $, %), strip and do the numeric tests
-        #   maybe do this in the prepare_data(), duplicate the columns.
-
         # For binary columns, find and cache the set of unique values per column
         for col_name in self.binary_cols:
             self.column_unique_vals[col_name] = sorted([x for x in self.orig_df[col_name].unique() if not is_missing(x)])
@@ -1087,6 +1086,18 @@ class DataConsistencyChecker:
 
         assert add_nones in ['none', 'one-row', 'in-sync', 'random', '80-percent']
 
+        # Check the passed test IDs, if any, are valid
+        if execute_list:
+            for test_id in execute_list:
+                if test_id not in self.get_test_list():
+                    print_text(f"{test_id} is not a valid test ID. Unable to generate data.")
+                    return
+        if exclude_list:
+            for test_id in exclude_list:
+                if test_id not in self.get_test_list():
+                    print_text(f"{test_id} is not a valid test ID. Unable to generate data.")
+                    return
+
         self.synth_df = pd.DataFrame()
         for test_id in self.test_dict.keys():
             # Set the seed for each test, to ensure the synthetic data is the same regardless which other synthetic
@@ -1159,6 +1170,7 @@ class DataConsistencyChecker:
 
     def check_data_quality(
             self,
+            append_results=False,
             execute_list=None,
             exclude_list=None,
             test_start_id=0,
@@ -1169,6 +1181,11 @@ class DataConsistencyChecker:
         Run the specified tests on the dataset specified here. This method identifies the patterns and exceptions to
         these found in the data. Some information is returned, but additional API calls may be made as well to access
         this information
+
+        append_results: bool
+            If set True, any previous test results, from previous executions of check_data_quality() will be saved and
+            the results from the current run appended to the previous results. If False, all previous test results will
+            be removed.
 
         execute_list: list of Test IDs
             If specified, these and only these tests will be executed.
@@ -1264,13 +1281,15 @@ class DataConsistencyChecker:
         self.execution_times = {}
         self.num_exceptions = 0
 
-        # Initialize the variables related to the results found
-        self.patterns_arr = []
-        self.patterns_df = None
-        self.results_summary_arr = []
-        self.exceptions_summary_df = None
-        self.test_results_df = None
-        self.test_results_by_column_np = np.zeros((self.num_rows, len(self.orig_df.columns)), dtype=float)
+        # Initialize the variables related to the results found, unless append_results is specified.
+        if not append_results:
+            self.patterns_arr = []
+            self.patterns_df = None
+            self.results_summary_arr = []
+            self.exceptions_summary_df = None
+            self.test_results_df = None
+            self.results_dict = {}
+            self.test_results_by_column_np = np.zeros((self.num_rows, len(self.orig_df.columns)), dtype=float)
 
         # Get the test index of each test
         test_idx_dict = {x: y for x, y in
@@ -1307,6 +1326,9 @@ class DataConsistencyChecker:
                     self.num_exceptions += 1
                 self.n_tests_executed += 1
 
+        # Populate the test_results_df dataframe with all results found
+        self.test_results_df = pd.DataFrame(self.results_dict)
+
         # Sum the the number of columns flagged per row
         self.__calculate_final_scores()
 
@@ -1314,9 +1336,13 @@ class DataConsistencyChecker:
         self.patterns_df = pd.DataFrame(
             self.patterns_arr,
             columns=['Test ID', 'Column(s)', 'Description of Pattern', 'Display Information'])
+
         self.exceptions_summary_df = pd.DataFrame(
             self.results_summary_arr,
             columns=['Test ID', 'Column(s)', 'Description of Pattern', 'Number of Exceptions', 'Display Information'])
+
+        # Add the Pattern Id column to patterns_df
+        self.patterns_df['Pattern ID'] = list(range(len(self.patterns_df)))
 
         # Add the Issue Id column to exceptions_summary_df
         self.exceptions_summary_df['Issue ID'] = list(range(len(self.exceptions_summary_df)))
@@ -1508,11 +1534,14 @@ class DataConsistencyChecker:
             return self._clean_column_names(self.patterns_df.drop(columns=['Display Information']))
         df = self.patterns_df.copy()
         if test_exclude_list:
-            df = df[~df['Test ID'].isin(test_exclude_list)]
+            df = df[~df['Test ID'].isin(test_exclude_list)].copy()
         if column_exclude_list:
-            df = df[~df['Column(s)'].isin(column_exclude_list)]
+            df = df[~df['Column(s)'].isin(column_exclude_list)].copy()
         if show_short_list_only:
-            df = df[df['Test ID'].isin(self.get_patterns_shortlist())]
+            len_prev = len(df)
+            df = df[df['Test ID'].isin(self.get_patterns_shortlist())].copy()
+            if len(df) < len_prev:
+                print_text("Some patterns not shown. Set show_short_list_only to False to see additional patterns.")
         return self._clean_column_names(df.drop(columns=['Display Information']))
 
     def get_exceptions_summary(self):
@@ -1700,14 +1729,13 @@ class DataConsistencyChecker:
         heatmap: bool
             If True, a heatmap of form of the table will be displayed.
         """
-        # todo: respect the all_tests parameter
         # todo: draw a heatmap use white for no pattern, blue for pattern with no exceptions, yellow for pattern
         #  with exceptions.
         vals = []
         for test_id in self.get_test_list():
-            if self.execute_list and test_id not in self.execute_list:
-                continue
-            if self.exclude_list and test_id in self.exclude_list:
+            if (not all_tests) and \
+                    (test_id not in self.patterns_df['Test ID'].values) and \
+                    (test_id not in self.exceptions_summary_df['Test ID'].values):
                 continue
             sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
             sub_results_summary_test = self.exceptions_summary_df[self.exceptions_summary_df['Test ID'] == test_id]
@@ -1726,10 +1754,11 @@ class DataConsistencyChecker:
             test_id_list=None,
             col_name_list=None,
             issue_id_list=None,
+            pattern_id_list=None,
             row_id_list=None,
             show_patterns=True,
             show_exceptions=True,
-            show_short_list_only=False,
+            show_short_list_only=True,
             include_examples=True,
             plot_results=True,
             max_shown=-1,
@@ -1750,12 +1779,15 @@ class DataConsistencyChecker:
             to display will be displayed.
 
         issue_id_list: Array of Issue IDs
-            If specified, only these exceptions will be displayed. Does not apply to patterns.
+            If specified, only these exceptions will be displayed. If set, patterns will not be shown.
+
+        pattern_id_list: Array of Pattern IDs
+            If specified, only these patterns will be displayed. If set, exceptions will not be shown.
 
         row_id_list: Array of ints, representing row numbers in the original dataset
             If specified, only patterns or exceptions found for these rows will be displayed.
 
-        show_pattersn: bool
+        show_patterns: bool
             If set True, patterns without exceptions will be displayed. If set False, these will not be displayed.
 
         show_exceptions: bool
@@ -1837,6 +1869,9 @@ class DataConsistencyChecker:
         if issue_id_list or row_id_list:
             show_patterns = False
 
+        if pattern_id_list:
+            show_exceptions = False
+
         if max_shown == -1:
             max_shown = 200  # This includes patterns & exceptions
             if include_examples:
@@ -1844,7 +1879,8 @@ class DataConsistencyChecker:
             if plot_results:
                 max_shown /= 2
 
-        if (test_id_list is None) and (col_name_list is None) and (issue_id_list is None) and (row_id_list is None):
+        if (test_id_list is None) and (pattern_id_list is None) and (col_name_list is None) and \
+                (issue_id_list is None) and (row_id_list is None):
             msg = ("This is beyond the limit to display all at once. Try specifying tests and/or columns to be "
                    "displayed here, specific issues, or row numbers, or setting include_examples and/or "
                    "plot_results to False.")
@@ -1875,7 +1911,7 @@ class DataConsistencyChecker:
                     if test_id not in self.get_patterns_shortlist():
                         sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
                         if len(sub_patterns_test):
-                            print_text((f"Not displaying details for {test_id}. This is not in the short list and "
+                            print_text((f"Not displaying patterns for {test_id}. This is not in the short list and "
                                         f"show_short_list_only was set to True"))
 
             # Check for any invalid test IDs
@@ -1939,6 +1975,12 @@ class DataConsistencyChecker:
                     pattern_columns_arr = self.col_to_original_cols_dict[columns_set]
                     if len(set(col_name_list).intersection(set(pattern_columns_arr))) == 0:
                         continue
+
+                    # If pattern_id_list is specified, check the current pattern is in the list
+                    pattern_id = sub_patterns['Pattern ID'].values[0]
+                    if pattern_id_list and (pattern_id not in pattern_id_list):
+                        continue
+
                     if len(sub_patterns) > 0:
                         count_shown += 1
                         print_test_header(test_id)
@@ -2375,11 +2417,12 @@ class DataConsistencyChecker:
         clean_df = df.copy()
         idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
         for idx in idxs:
-            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all columns'
+            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all columns'
+
         idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
                                             'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
         for idx in idxs:
-            clean_df.iloc[idx]['Column(s)'] = 'This test executes over all numeric columns'
+            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all numeric columns'
         return clean_df
 
     def __display_rows_with_tests(self, sorted_df, n_rows, check_score=False):
@@ -2495,6 +2538,14 @@ class DataConsistencyChecker:
 
             if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
                 xylim = (min(df[col_name_1].min(), df[col_name_2].min()), max(df[col_name_1].max(), df[col_name_2].max()))
+
+            if test_id in ['RARE_COMBINATION']:
+                # Use a kde plot as the background
+                s = sns.kdeplot(data=self.orig_df,
+                                x=col_name_1,
+                                y=col_name_2,
+                                fill=True,
+                                ax=ax)
 
             if show_exceptions:
                 s = sns.scatterplot(
@@ -2875,182 +2926,174 @@ class DataConsistencyChecker:
             Set True if this is being called to display examples of a pattern, in which case there are no exceptions.
         """
 
-        if test_id is not None:
-            if is_patterns:
-                cols = [x.lstrip('"').rstrip('"') for x in col_name.split(" AND ")]
-            else:
-                results_col_name = self.get_results_col_name(test_id, col_name)
-                cols = self.col_to_original_cols_dict[results_col_name]
-
-            # If there are no values flagged for this test in this feature, there will not be a column in
-            # test_results_df. In this case, return any values.
-            if not is_patterns and results_col_name not in self.test_results_df.columns:
-                return self.orig_df[col_name].sample(n=n_examples, random_state=0)
-
-            df = None
-            if test_id in ['BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES', 'BINARY_AND', 'BINARY_OR',
-                           'BINARY_XOR', 'BINARY_NUM_SAME', 'BINARY_TWO_OTHERS_MATCH']:
-                if len(cols) == 2 and cols[0] in self.binary_cols and cols[1] in self.binary_cols:
-                    v0_0, v0_1 = self.column_unique_vals[cols[0]]
-                    v1_0, v1_1 = self.column_unique_vals[cols[1]]
-                    df_v00 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_0)].head(n_examples // 4)
-                    df_v01 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_1)].head(n_examples // 4)
-                    df_v10 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_0)].head(n_examples // 4)
-                    df_v11 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_1)].head(n_examples // 4)
-                    df = pd.concat([df_v00, df_v01, df_v10, df_v11])
-                elif len(cols) == 3 and cols[0] in self.binary_cols and \
-                        cols[1] in self.binary_cols and cols[2] in self.binary_cols:
-                    v0_0, v0_1 = self.orig_df[cols[0]].dropna().unique()
-                    v1_0, v1_1 = self.orig_df[cols[1]].dropna().unique()
-                    v2_0, v2_1 = self.orig_df[cols[2]].dropna().unique()
-                    df_v000 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_0) &
-                        (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
-                    df_v001 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_0) &
-                        (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
-                    df_v010 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_1) &
-                        (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
-                    df_v011 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_0) &
-                        (self.orig_df[cols[1]] == v1_1) &
-                        (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
-                    df_v100 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_0) &
-                        (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
-                    df_v101 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_0) &
-                        (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
-                    df_v110 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_1) &
-                        (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
-                    df_v111 = self.orig_df[
-                        (self.orig_df[cols[0]] == v0_1) &
-                        (self.orig_df[cols[1]] == v1_1) &
-                        (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
-                    df = pd.concat([df_v000, df_v001, df_v010, df_v011, df_v100, df_v101, df_v110, df_v111])
-                elif len(cols) == 3 and cols[2] in self.binary_cols:
-                    v0, v1 = self.orig_df[cols[2]].dropna().unique()
-                    df_v0 = self.orig_df[
-                        (self.orig_df[cols[2]] == v0)].head(n_examples // 2)
-                    df_v1 = self.orig_df[
-                        (self.orig_df[cols[2]] == v1)].head(n_examples // 2)
-                    df = pd.concat([df_v0, df_v1])[cols]  # todo: probably the cases above should also filter the columns returned to [cols]
-            elif test_id in ['MATCHED_MISSING', 'UNMATCHED_MISSING']:
-                col_name_1, col_name_2 = cols[0], cols[1]
-                df_v_null = self.orig_df[cols][
-                    (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-                df_v_non_null = self.orig_df[cols][
-                    (~self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-                df = pd.concat([df_v_null, df_v_non_null])
-            elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'ALL_ZERO_OR_ALL_NON_ZERO']:
-                col_name_1 = cols[0]
-                df_v_zero = self.orig_df[cols][
-                    (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-                df_v_non_zero = self.orig_df[cols][
-                    (self.orig_df[col_name_1] != 0)].head(n_examples // 2)
-                df = pd.concat([df_v_zero, df_v_non_zero])
-            elif test_id in ['SAME_OR_CONSTANT']:
-                col_name_1, col_name_2 = cols
-                df_same = self.orig_df[cols][
-                    (self.orig_df[col_name_1] == self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
-                    ].head(n_examples // 2)
-                df_not_same = self.orig_df[cols][
-                    (self.orig_df[col_name_1] != self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
-                    ].head(n_examples // 2)
-                df = pd.concat([df_same, df_not_same])
-            elif test_id in ['NEGATIVE']:
-                col_name_1 = cols[0]
-                df_v_zero = self.orig_df[cols][
-                    (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-                df_v_neg = self.orig_df[cols][
-                    (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
-                df = pd.concat([df_v_zero, df_v_neg])
-            elif test_id in ['POSITIVE']:
-                col_name_1 = cols[0]
-                df_v_zero = self.orig_df[cols][
-                    (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-                df_v_pos = self.orig_df[cols][
-                    (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
-                df = pd.concat([df_v_zero, df_v_pos])
-            elif test_id in ['ALL_POS_OR_ALL_NEG']:
-                col_name_1 = cols[0]
-                df_v_pos = self.orig_df[cols][
-                    (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
-                df_v_neg = self.orig_df[cols][
-                    (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
-                df = pd.concat([df_v_pos, df_v_neg])
-            elif test_id in ['EVEN_MULTIPLE']:  # todo: this should cover many tests. cover null & not null, unless there are no nulls
-                col_name_1, col_name_2 = cols[0], cols[1]
-                df_v_null = self.orig_df[cols][
-                    (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-                num_non_null = n_examples - len(df_v_null)
-                df_v_non_null = self.orig_df[cols][
-                    (~self.orig_df[col_name_1].apply(is_missing))].head(num_non_null)
-                df = pd.concat([df_v_null, df_v_non_null])
-            elif test_id in ['DECISION_TREE_CLASSIFIER']:
-                target_col = cols[-1]
-                vc = self.orig_df[target_col].value_counts()
-                vals = vc.index[:3]  # Try to cover the 3 most common values
-                num_vals = len(vals)
-                dfs_arr = []
-                for i in range(num_vals):
-                    df_v = self.orig_df[cols][(self.orig_df[target_col] == vals[i])].head(n_examples // num_vals)
-                    dfs_arr.append(df_v)
-                df = pd.concat(dfs_arr)
-
-            # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
-            # create a df simply trying to reduce the number of Null values.
-            if (df is None) or (len(df) == 0):
-                # Test that test_results_df does not have duplicate values in the index
-                assert (self.test_results_df is None) or (len(self.test_results_df.index) == len(set(self.test_results_df.index)))
-                cols = list(cols)  # Ensure cols is not in tuple format
-                df = self.orig_df[cols]
-                for col in cols:
-                    sub_df = self.orig_df.loc[df.index]
-                    mask = sub_df[col].notna()
-                    if mask.tolist().count(True) >= 5:
-                        df = df[mask]
-            if len(df) == 0:  # This shouldn't happen; the column should only be added if there are some patterns
-                return None
-
-            # Remove rows that were flagged. If is_patterns is True, no rows were flagged, and we skip this check.
-            if not is_patterns:
-                sub_df = self.test_results_df.loc[df.index]
-                mask = sub_df[results_col_name] == 0
-                df = df[mask]
-
-            df.index = [x[0] if type(x) == tuple else x for x in df.index]
-            row_idxs = df.index
-            if not is_patterns:
-                df = self.orig_df.loc[row_idxs][list(self.col_to_original_cols_dict[results_col_name])]
-            if group_results:
-                start_point = np.random.randint(0, len(df)-n_examples)
-                return df.iloc[start_point: start_point + n_examples]
-            else:
-                return df.sample(n=min(len(df), n_examples), random_state=0)
+        if is_patterns:
+            cols = [x.lstrip('"').rstrip('"') for x in col_name.split(" AND ")]
         else:
-            good_indexes = [1] * self.num_rows
-            for test_id in self.get_test_list():
-                results_col_name = self.get_results_col_name(test_id, col_name)
-                if results_col_name in self.test_results_df.columns:
-                    good_indexes = good_indexes & (self.test_results_df[results_col_name] == 0)
-            return self.orig_df.loc[good_indexes][col_name].sample(n=n_examples, random_state=0)
+            results_col_name = self.get_results_col_name(test_id, col_name)
+            cols = self.col_to_original_cols_dict[results_col_name]
+
+        # If there are no values flagged for this test in this feature, there will not be a column in
+        # test_results_df. In this case, return any values.
+        if not is_patterns and results_col_name not in self.test_results_df.columns:
+            return self.orig_df[col_name].sample(n=n_examples, random_state=0)
+
+        df = None
+        if test_id in ['BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES', 'BINARY_AND', 'BINARY_OR',
+                       'BINARY_XOR', 'BINARY_NUM_SAME', 'BINARY_TWO_OTHERS_MATCH']:
+            if len(cols) == 2 and cols[0] in self.binary_cols and cols[1] in self.binary_cols:
+                v0_0, v0_1 = self.column_unique_vals[cols[0]]
+                v1_0, v1_1 = self.column_unique_vals[cols[1]]
+                df_v00 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_0)].head(n_examples // 4)
+                df_v01 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_1)].head(n_examples // 4)
+                df_v10 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_0)].head(n_examples // 4)
+                df_v11 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_1)].head(n_examples // 4)
+                df = pd.concat([df_v00, df_v01, df_v10, df_v11])[cols]
+            elif len(cols) == 3 and cols[0] in self.binary_cols and \
+                    cols[1] in self.binary_cols and cols[2] in self.binary_cols:
+                v0_0, v0_1 = self.orig_df[cols[0]].dropna().unique()
+                v1_0, v1_1 = self.orig_df[cols[1]].dropna().unique()
+                v2_0, v2_1 = self.orig_df[cols[2]].dropna().unique()
+                df_v000 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_0) &
+                    (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
+                df_v001 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_0) &
+                    (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
+                df_v010 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_1) &
+                    (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
+                df_v011 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_0) &
+                    (self.orig_df[cols[1]] == v1_1) &
+                    (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
+                df_v100 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_0) &
+                    (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
+                df_v101 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_0) &
+                    (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
+                df_v110 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_1) &
+                    (self.orig_df[cols[2]] == v2_0)].head(n_examples // 4)
+                df_v111 = self.orig_df[
+                    (self.orig_df[cols[0]] == v0_1) &
+                    (self.orig_df[cols[1]] == v1_1) &
+                    (self.orig_df[cols[2]] == v2_1)].head(n_examples // 4)
+                df = pd.concat([df_v000, df_v001, df_v010, df_v011, df_v100, df_v101, df_v110, df_v111])[cols]
+            elif len(cols) == 3 and cols[2] in self.binary_cols:
+                v0, v1 = self.orig_df[cols[2]].dropna().unique()
+                df_v0 = self.orig_df[
+                    (self.orig_df[cols[2]] == v0)].head(n_examples // 2)
+                df_v1 = self.orig_df[
+                    (self.orig_df[cols[2]] == v1)].head(n_examples // 2)
+                df = pd.concat([df_v0, df_v1])[cols]
+        elif test_id in ['MATCHED_MISSING', 'UNMATCHED_MISSING']:
+            col_name_1, col_name_2 = cols[0], cols[1]
+            df_v_null = self.orig_df[cols][
+                (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            df_v_non_null = self.orig_df[cols][
+                (~self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            df = pd.concat([df_v_null, df_v_non_null])
+        elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'ALL_ZERO_OR_ALL_NON_ZERO']:
+            col_name_1 = cols[0]
+            df_v_zero = self.orig_df[cols][
+                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_non_zero = self.orig_df[cols][
+                (self.orig_df[col_name_1] != 0)].head(n_examples // 2)
+            df = pd.concat([df_v_zero, df_v_non_zero])
+        elif test_id in ['SAME_OR_CONSTANT']:
+            col_name_1, col_name_2 = cols
+            df_same = self.orig_df[cols][
+                (self.orig_df[col_name_1] == self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
+                ].head(n_examples // 2)
+            df_not_same = self.orig_df[cols][
+                (self.orig_df[col_name_1] != self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
+                ].head(n_examples // 2)
+            df = pd.concat([df_same, df_not_same])
+        elif test_id in ['NEGATIVE']:
+            col_name_1 = cols[0]
+            df_v_zero = self.orig_df[cols][
+                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_neg = self.orig_df[cols][
+                (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
+            df = pd.concat([df_v_zero, df_v_neg])
+        elif test_id in ['POSITIVE']:
+            col_name_1 = cols[0]
+            df_v_zero = self.orig_df[cols][
+                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_pos = self.orig_df[cols][
+                (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
+            df = pd.concat([df_v_zero, df_v_pos])
+        elif test_id in ['ALL_POS_OR_ALL_NEG']:
+            col_name_1 = cols[0]
+            df_v_pos = self.orig_df[cols][
+                (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
+            df_v_neg = self.orig_df[cols][
+                (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
+            df = pd.concat([df_v_pos, df_v_neg])
+        elif test_id in ['EVEN_MULTIPLE']:  # todo: this should cover many tests. cover null & not null, unless there are no nulls
+            col_name_1, col_name_2 = cols[0], cols[1]
+            df_v_null = self.orig_df[cols][
+                (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            num_non_null = n_examples - len(df_v_null)
+            df_v_non_null = self.orig_df[cols][
+                (~self.orig_df[col_name_1].apply(is_missing))].head(num_non_null)
+            df = pd.concat([df_v_null, df_v_non_null])
+        elif test_id in ['DECISION_TREE_CLASSIFIER']:
+            target_col = cols[-1]
+            vc = self.orig_df[target_col].value_counts()
+            vals = vc.index[:3]  # Try to cover the 3 most common values
+            num_vals = len(vals)
+            dfs_arr = []
+            for i in range(num_vals):
+                df_v = self.orig_df[cols][(self.orig_df[target_col] == vals[i])].head(n_examples // num_vals)
+                dfs_arr.append(df_v)
+            df = pd.concat(dfs_arr)
+
+        # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
+        # create a df simply trying to reduce the number of Null values.
+        if (df is None) or (len(df) == 0):
+            # Test that test_results_df does not have duplicate values in the index
+            assert (self.test_results_df is None) or (len(self.test_results_df.index) == len(set(self.test_results_df.index)))
+            cols = list(cols)  # Ensure cols is not in tuple format
+            df = self.orig_df[cols]
+            for col in cols:
+                sub_df = self.orig_df.loc[df.index]
+                mask = sub_df[col].notna()
+                if mask.tolist().count(True) >= 5:
+                    df = df[mask]
+        if len(df) == 0:  # This shouldn't happen; the column should only be added if there are some patterns
+            return None
+
+        # Remove rows that were flagged. If is_patterns is True, no rows were flagged, and we skip this check.
+        if not is_patterns:
+            sub_df = self.test_results_df.loc[df.index]
+            mask = sub_df[results_col_name] == 0
+            df = df[mask]
+
+        df.index = [x[0] if type(x) == tuple else x for x in df.index]
+        row_idxs = df.index
+        if not is_patterns:
+            df = self.orig_df.loc[row_idxs][list(self.col_to_original_cols_dict[results_col_name])]
+        if group_results:
+            start_point = np.random.randint(0, len(df)-n_examples)
+            return df.iloc[start_point: start_point + n_examples]
+        else:
+            return df.sample(n=min(len(df), n_examples), random_state=0)
 
     def __display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
         # Do not show examples for some tests
@@ -3083,7 +3126,7 @@ class DataConsistencyChecker:
         self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns)
 
     def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
-        def draw_scatter(df, x_col, y_col):
+        def draw_scatter(df, x_col, y_col, draw_diagonal):
             fig, ax = plt.subplots(figsize=(4, 4))
             min_range = min(df[x_col].min(), df[y_col].min())
             max_range = max(df[x_col].max(), df[y_col].max())
@@ -3098,10 +3141,7 @@ class DataConsistencyChecker:
                     color='blue',
                     alpha=0.2,
                     label='Not Flagged')
-                if show_exceptions:
-                    s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
-                else:
-                    s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+                s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
             else:
                 result_col_name = self.get_results_col_name(test_id, columns_set)
                 df['Flagged'] = self.test_results_df[result_col_name]
@@ -3123,8 +3163,12 @@ class DataConsistencyChecker:
                     ax=ax,
                     label='Flagged'
                 )
+                s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
             s.set_xlim(xlim)
             s.set_ylim(ylim)
+
+            if draw_diagonal:
+                plt.plot(xlim, ylim)
             plt.xticks(rotation=60)
             plt.legend().remove()
             plt.show()
@@ -3146,7 +3190,7 @@ class DataConsistencyChecker:
             else:
                 self.__plot_heatmap(test_id, cols)
 
-        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS']: # todo: do for MIN_OF_COLUMNS etc
+        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS']:
             df = self.orig_df.copy()
             if test_id in ['MEAN_OF_COLUMNS']:
                 calculated_col = 'Mean'
@@ -3154,7 +3198,13 @@ class DataConsistencyChecker:
             if test_id in ['SUM_OF_COLUMNS']:
                 calculated_col = 'Sum'
                 df[calculated_col] = display_info['Sum']
-            draw_scatter(df, cols[-1], calculated_col)
+            if test_id in ['MIN_OF_COLUMNS']:
+                calculated_col = 'Min'
+                df[calculated_col] = display_info['Min']
+            if test_id in ['MAX_OF_COLUMNS']:
+                calculated_col = 'Max'
+                df[calculated_col] = display_info['Max']
+            draw_scatter(df, cols[-1], calculated_col, draw_diagonal=False)
 
         if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
                        'SIMILAR_TO_RATIO']:
@@ -3172,7 +3222,7 @@ class DataConsistencyChecker:
             elif test_id in ['SIMILAR_TO_RATIO']:
                 calculated_col = 'Division Results'
                 df[calculated_col] = self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2]
-            draw_scatter(df, col_name_3, calculated_col)
+            draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
 
         if test_id in ['RARE_VALUES']:
             self.__plot_count_plot(cols[0])
@@ -3712,8 +3762,8 @@ class DataConsistencyChecker:
             print(f"Found {len(self.patterns_df)} patterns without exceptions")
             print((f"{self.patterns_df['Test ID'].nunique()} tests "
                    f"({self.patterns_df['Test ID'].nunique() * 100.0 / self.n_tests_executed:.2f}% of tests) "
-                   f"identified at least one pattern without exceptions each. \nBy default some patterns are not listed in "
-                   f"calls to display_detailed_results()."))
+                   f"identified at least one pattern without exceptions each. \nBy default some patterns are not listed "
+                   f"in calls to display_detailed_results()."))
             print()
             print('Patterns with Exceptions:')
             print(f"Found {len(self.exceptions_summary_df)} patterns with exceptions")
@@ -3743,9 +3793,10 @@ class DataConsistencyChecker:
             display_info=None):
         """
         Used by tests that produce a binary column indicating the test result.
-        If all values in the column match the test, we update self.patterns_df.
-        If most, but not all rows produce a positive result, we flag any exceptions. In this case, we add a results
-        column and update self.results_summary_arr.
+
+        If all values in the column match the test, we update self.patterns_df. If most, but not all rows produce a
+        positive result, we flag any exceptions. In this case, we add a results column and update
+        self.results_summary_arr.
 
         test_series is the result of running the test. If the pattern consistently holds, this will be all True. If
         there are exceptions, the rows where there are exceptions will have value False, and  will be flagged in the
@@ -3765,7 +3816,7 @@ class DataConsistencyChecker:
         num_true = test_series.tolist().count(True)
         if allow_patterns and num_true == self.num_rows:
             self.patterns_arr.append([test_id, col_name, pattern_string, display_info])
-            self.col_to_original_cols_dict[col_name] = original_cols  # todo: ensure __process_coutns() is the same
+            self.col_to_original_cols_dict[col_name] = original_cols
 
         if (self.num_rows - self.contamination_level) <= num_true < self.num_rows:
             if allow_patterns:
@@ -3788,17 +3839,16 @@ class DataConsistencyChecker:
             # Update results_arr
             results_col_name = self.get_results_col_name(test_id, col_name)
             results_col = ~test_series.astype(bool)
-            self.__add_result_column(results_col_name, results_col, original_cols)
+            self.col_to_original_cols_dict[results_col_name] = original_cols
+            self.results_dict[results_col_name] = results_col
+            # self.__add_result_column(results_col_name, results_col)
 
             # Update test_results_by_column_df
-            # todo: call this for all tests that don't call process_binary or process_counts
-            #   I think only a few others do so far
             self.__update_results_by_column(results_col, original_cols)
 
     def __process_analysis_counts(
             self,
             test_id,
-            col_name,
             original_cols,
             test_series,
             pattern_string_1,
@@ -3830,6 +3880,11 @@ class DataConsistencyChecker:
 
         test_series = pd.Series(test_series)
 
+        if len(original_cols) == 1:
+            col_name = original_cols[0]
+        else:
+            col_name = self.get_col_set_name(original_cols)
+
         if test_series.nunique() == 1:
             if allow_patterns:
                 self.patterns_arr.append([test_id,
@@ -3855,7 +3910,9 @@ class DataConsistencyChecker:
 
                 # Update results_arr
                 results_col_name = self.get_results_col_name(test_id, col_name)
-                self.__add_result_column(results_col_name, results_col, original_cols)
+                self.col_to_original_cols_dict[results_col_name] = original_cols
+                self.results_dict[results_col_name] = results_col
+                # self.__add_result_column(results_col_name, results_col)
 
                 # Update test_results_by_column_df
                 self.__update_results_by_column(results_col, original_cols)
@@ -3889,12 +3946,11 @@ class DataConsistencyChecker:
             pd.DataFrame({col_name: col_values})],
             axis=1)
 
-    def __add_result_column(self, col_name, col_values, original_cols):
+    def __add_result_column(self, col_name, col_values):
         """
         Add a column with the specified name and values to self.test_results_df.
         This uses concat(), instead of simply adding columns, to avoid inefficiency issues.
         """
-        self.col_to_original_cols_dict[col_name] = original_cols
 
         self.test_results_df = pd.concat([
             self.test_results_df,
@@ -4694,7 +4750,7 @@ class DataConsistencyChecker:
                 test_series = [x == y or x in rare_values for x, y in zip(y_test_numeric, y_pred)]
                 test_series = [True]*look_back_range + test_series
                 rules = tree.export_text(clf)
-            elif col_name in self.numeric_cols:  # todo: try to do date columns here too
+            elif col_name in self.numeric_cols:  # todo: try to cover date columns here too
                 # Skip columns that have non-numeric values. In the future, we may support these as well.
                 if len(self.numeric_vals[col_name]) < self.num_rows:
                     continue
@@ -5255,7 +5311,8 @@ class DataConsistencyChecker:
             rare_num_digits = [x for x in counts_series.index if (x > (most_common_num_digits * 1.2)) and (x >= (most_common_num_digits + 2))]
 
             # An alternative formulation for rare numbers of digits
-            # [x for x, y in zip(counts_series.sort_values(ascending=True).index, counts_series.sort_values(ascending=True).values) if y <= self.contamination_level]
+            # [x for x, y in zip(counts_series.sort_values(ascending=True).index,
+            #   counts_series.sort_values(ascending=True).values) if y <= self.contamination_level]
 
             common_num_digits = [x for x in counts_series.index if x <= most_common_num_digits]
             test_series = [x not in rare_num_digits for x in num_digits_series]
@@ -5580,7 +5637,7 @@ class DataConsistencyChecker:
                 test_series,
                 (f"This test checks for values of an unusual order of magnitude, etc. Each value is described in terms "
                  f"of its order, or powers of 10. For example 10 is order 1, 100 is order 2, 1000 is order 3, etc. "
-                 f"All numbers are rounded to the nearest order of magnitude. "
+                 f"All numbers are rounded to the nearest order of magnitude, which may be 0 for numbers less than 5.0. "
                  f"The column contains values in the range {self.numeric_vals[col_name].min()} to "
                  f"{self.numeric_vals[col_name].max()}, and consistently in the order of"),
                 "",
@@ -5948,6 +6005,14 @@ class DataConsistencyChecker:
 
     def __check_non_zero(self, test_id):
         for col_name in self.numeric_cols:
+
+            # Check where are many values on either side of zero. Zero may be rare simply because there are many
+            # unique values.
+            num_below = len(self.orig_df[self.orig_df[col_name] < 0])
+            num_above = len(self.orig_df[self.orig_df[col_name] > 0])
+            if (num_below > self.contamination_level) and (num_above > self.contamination_level):
+                continue
+
             test_series = np.array([x != 0 for x in self.orig_df[col_name]])
             self.__process_analysis_binary(
                 test_id,
@@ -8050,7 +8115,8 @@ class DataConsistencyChecker:
                             test_series,
                             (f'The column "{col_name}" is consistently equal to the minimum of the values in the '
                              f'columns {subset_names}'),
-                            ""
+                            "",
+                            display_info={"Min": col_mins, "operation": ''}
                         )
                         found_any = True
                         break
@@ -8163,7 +8229,8 @@ class DataConsistencyChecker:
                             test_series,
                             (f'The column "{col_name}" is consistently equal to the maximum of the values in the '
                              f'columns {subset_names}'),
-                            ""
+                            "",
+                            display_info={"Max": col_maxs, "operation": ''}
                         )
                         found_any = True
                         break
@@ -8851,7 +8918,9 @@ class DataConsistencyChecker:
                 num_coefs = 0
                 features_used = []
                 for x_col_idx, x_col in enumerate(x_data.columns):
-                    if regr.coef_[x_col_idx] >= 0.01:  # todo: this is too stringent if the columns are on different scales, but this does keep the formulas interpretable
+                    # todo: this is too stringent if the columns are on different scales, but this does keep the
+                    #  formulas interpretable
+                    if regr.coef_[x_col_idx] >= 0.01:
                         regression_formula += f' {regr.coef_[x_col_idx]:.2f} * "{x_col}" + '
                         num_coefs += 1
                         features_used.append(x_col)
@@ -10275,12 +10344,12 @@ class DataConsistencyChecker:
     def __check_binary_rare_combo(self, test_id):
         """
         This is similar to RARE_PAIRS, which can check columns with any number of values, but is limited to pairs of
-        columns. This test can check sets of any number of columns, three or more.
+        columns. This test can check sets of any number of binary columns, three or more.
 
         This test considers all sets of binary columns of size 3 or more columns, where the columns have at least 10% of
-        their values both values in that column. The columns do not need to have the same vocabulary.
+        their values as both values in that column. The columns do not need to have the same vocabulary.
         It identifies rare combinations of values. Rare is defined as occurring both 1) less than the contamination rate
-        times; and 2) less than 1/20 as would occur given the number of columns in the set if the values were equally
+        times; and 2) less than 5% as would occur given the number of columns in the set if the values were equally
         distributed.
         """
 
@@ -10289,9 +10358,9 @@ class DataConsistencyChecker:
         min_count = self.num_rows / 10.0
         for col_name in self.binary_cols:
             val0, val1 = self.column_unique_vals[col_name]
-            if self.orig_df[col_name].tolist().count(val0) > min_count and \
-                self.orig_df[col_name].tolist().count(val1) > min_count and \
-                self.orig_df[col_name].isna().sum() < min_count:
+            if (self.orig_df[col_name].tolist().count(val0) > min_count) and \
+                    (self.orig_df[col_name].tolist().count(val1) > min_count) and \
+                    (self.orig_df[col_name].isna().sum() < min_count):
                 cols.append(col_name)
 
         max_subset_size = int(np.floor(np.log2(self.num_rows / 20)))
@@ -12026,8 +12095,13 @@ class DataConsistencyChecker:
         for col_name in self.string_cols:
             col_vals = self.orig_df[col_name].astype(str).apply(replace_special_with_space)
             word_arr = col_vals.str.split()
+            if not any([len(x) for x in word_arr]):
+                continue
             word_lens_arr = [[len(w) for w in x] for x in word_arr]
-            flat_word_lens_arr = pd.Series(np.concatenate(word_lens_arr).flat)
+            try:
+                flat_word_lens_arr = pd.Series(np.concatenate(word_lens_arr).flat)
+            except:
+                x = 9
             q1 = flat_word_lens_arr.quantile(0.25)
             q3 = flat_word_lens_arr.quantile(0.75)
             upper_limit = q3 + (self.iqr_limit * 1.5 * (q3 - q1))  # We use more than the normal limit
@@ -13191,6 +13265,7 @@ class DataConsistencyChecker:
         """
 
         is_missing_dict = self.get_is_missing_dict()
+        sample_is_missing_dict = self.get_sample_is_missing_dict()
 
         num_pairs, pairs = self.__get_string_column_pairs()
         if num_pairs > self.max_combinations:
@@ -13209,10 +13284,24 @@ class DataConsistencyChecker:
             if is_missing_dict[col_name_2].tolist().count(True) > (self.num_rows / 2):
                 continue
 
-            # todo: test on a sample first
-            test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[:len(x)]))
-                           for x, y in zip(self.orig_df[col_name_1].astype(str), self.orig_df[col_name_2].astype(str))]
-            test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
+            # Test first on a sample
+            test_series = [True if (w or x) else ((len(y) < len(z)) and (y == z[:len(y)]))
+                           for w, x, y, z in zip(
+                    sample_is_missing_dict[col_name_1],
+                    sample_is_missing_dict[col_name_2],
+                    self.sample_df[col_name_1].astype(str),
+                    self.sample_df[col_name_2].astype(str)
+                )]
+            if test_series.count(False) > 1:
+                continue
+
+            test_series = [True if (w or x) else ((len(y) < len(z)) and (y == z[:len(y)]))
+                           for w, x, y, z in zip(
+                    is_missing_dict[col_name_1],
+                    is_missing_dict[col_name_2],
+                    self.orig_df[col_name_1].astype(str),
+                    self.orig_df[col_name_2].astype(str)
+                )]
             self.__process_analysis_binary(
                 test_id,
                 [col_name_1, col_name_2],
@@ -13237,6 +13326,7 @@ class DataConsistencyChecker:
 
     def __check_a_suffix_of_b(self, test_id):
         is_missing_dict = self.get_is_missing_dict()
+        sample_is_missing_dict = self.get_sample_is_missing_dict()
 
         num_pairs, pairs = self.__get_string_column_pairs()
         if num_pairs > self.max_combinations:
@@ -13255,10 +13345,24 @@ class DataConsistencyChecker:
             if is_missing_dict[col_name_2].tolist().count(True) > (self.num_rows / 2):
                 continue
 
-            # todo: test on a sample first
-            test_series = [True if (is_missing(x) or is_missing(y)) else ((len(x) < len(y)) and (x == y[-len(x):]))
-                           for x, y in zip(self.orig_df[col_name_1].astype(str), self.orig_df[col_name_2].astype(str))]
-            test_series = test_series | is_missing_dict[col_name_1] | is_missing_dict[col_name_2]
+            # Test first on a sample
+            test_series = [True if (w or x) else ((len(y) < len(z)) and (y == z[-len(y):]))
+                           for w, x, y, z in zip(
+                    sample_is_missing_dict[col_name_1],
+                    sample_is_missing_dict[col_name_2],
+                    self.sample_df[col_name_1].astype(str),
+                    self.sample_df[col_name_2].astype(str)
+                )]
+            if test_series.count(False) > 1:
+                continue
+
+            test_series = [True if (w or x) else ((len(y) < len(z)) and (y == z[-len(y):]))
+                           for w, x, y, z in zip(
+                    is_missing_dict[col_name_1],
+                    is_missing_dict[col_name_2],
+                    self.orig_df[col_name_1].astype(str),
+                    self.orig_df[col_name_2].astype(str)
+                )]
             self.__process_analysis_binary(
                 test_id,
                 [col_name_1, col_name_2],
@@ -13305,10 +13409,10 @@ class DataConsistencyChecker:
             test_series = [True if v and w else
                            ((not v) and (not w) and (len(x) < len(y)) and (x != y[:len(x)]) and (x != y[-len(x):]) and (x in y))
                            for v, w, x, y in zip(
-                    sample_is_missing_dict[col_name_1],
-                    sample_is_missing_dict[col_name_2],
-                    self.sample_df[col_name_1],
-                    self.sample_df[col_name_2])]
+                                sample_is_missing_dict[col_name_1],
+                                sample_is_missing_dict[col_name_2],
+                                self.sample_df[col_name_1],
+                                self.sample_df[col_name_2])]
             if test_series.count(False) > 1:
                 continue
 
@@ -14014,11 +14118,15 @@ class DataConsistencyChecker:
 
         # Save the subset for each pair of values
         subsets_dict = {}
+        store_index_only = len(self.date_cols) == 0
         for col_name_1, col_name_2 in pairs:
             for v1 in common_vals_dict[col_name_1]:
                 for v2 in common_vals_dict[col_name_2]:
                     sub_df = self.orig_df[(self.orig_df[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]
-                    subsets_dict[(col_name_1, col_name_2, v1, v2)] = sub_df
+                    if store_index_only:
+                        subsets_dict[(col_name_1, col_name_2, v1, v2)] = sub_df.index
+                    else:
+                        subsets_dict[(col_name_1, col_name_2, v1, v2)] = sub_df
 
         # Loop through each pair of string columns, and for each pair, each pair of values, and each numeric/date column
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
@@ -14027,6 +14135,9 @@ class DataConsistencyChecker:
 
             for col_name_3 in self.numeric_cols + self.date_cols:
                 test_series = [True] * self.num_rows
+                col_upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_3]
+                col_q2_limit = col_q2 * 0.9
+                col_q3_limit = col_q3 * 0.9
 
                 # found_many is set to True if we find any subset where many rows are flagged. In this case, we end
                 # early, as exceptions are only flagged if they are few.
@@ -14043,8 +14154,24 @@ class DataConsistencyChecker:
                         if len(sub_df) < 100:
                             continue
 
+                        # Test the distribution relative to the full column on a sample
+                        if (len(sub_df) > 500) and (col_name_3 in self.numeric_cols):
+                            if store_index_only:
+                                sample_indexes = np.random.choice(sub_df, 50, replace=True)
+                            else:
+                                sample_indexes = sub_df.sample(n=50).index
+                            num_vals = self.numeric_vals_filled[col_name_3].loc[sample_indexes]
+                            q2 = num_vals.quantile(0.5)
+                            q3 = num_vals.quantile(0.75)
+                            if (q2 > col_q2_limit) or (q3 > col_q3_limit):
+                                # print("quit early")
+                                continue
+
                         if col_name_3 in self.numeric_cols:
-                            num_vals = self.numeric_vals_filled[col_name_3].loc[sub_df.index]
+                            if store_index_only:
+                                num_vals = self.numeric_vals_filled[col_name_3].loc[sub_df]
+                            else:
+                                num_vals = self.numeric_vals_filled[col_name_3].loc[sub_df.index]
                             q1 = num_vals.quantile(0.25)
                             q2 = num_vals.quantile(0.5)
                             q3 = num_vals.quantile(0.75)
@@ -14064,12 +14191,14 @@ class DataConsistencyChecker:
                             break
 
                         # Ensure the subset is small relative to the full column.
-                        col_upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_3]
-                        if (q2 > col_q2) or (q3 > col_q3):
+                        if (q2 > col_q2_limit) or (q3 > col_q3_limit):
                             continue
 
                         if 0 < res.tolist().count(False) <= self.contamination_level:
-                            index_of_large = [x for x, y in zip(sub_df.index, res) if not y]
+                            if store_index_only:
+                                index_of_large = [x for x, y in zip(sub_df, res) if not y]
+                            else:
+                                index_of_large = [x for x, y in zip(sub_df.index, res) if not y]
                             for i in index_of_large:
                                 test_series[i] = False
 
@@ -15034,7 +15163,7 @@ class DataConsistencyChecker:
             test_id,
             list(self.orig_df.columns),
             test_series,
-            "The dataset consistently has",
+            "The dataset consistently has ",
             "null values per row"
         )
 
@@ -15153,8 +15282,8 @@ class DataConsistencyChecker:
             test_id,
             list(self.orig_df.columns),
             test_series,
-            "The dataset consistently has",
-            "negative values per row"
+            "The dataset consistently has ",
+            " negative values per row"
         )
 
     def __generate_small_avg_rank_per_row(self):
