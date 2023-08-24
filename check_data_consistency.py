@@ -167,10 +167,15 @@ class DataConsistencyChecker:
         self.test_results_by_column_np = None
 
         # Safe versions of the exceptions found. These are stored to support restore_issues()
+        self.safe_patterns_arr = []
+        self.safe_patterns_df = None
+        self.safe_results_summary_arr = []
         self.safe_exceptions_summary_df = None
         self.safe_test_results_df = None
+        self.safe_results_dict = {}
         self.safe_test_results_by_column_np = None
 
+        # Debugging information
         self.DEBUG_MSG = True
         self.num_exceptions = 0
 
@@ -1347,16 +1352,17 @@ class DataConsistencyChecker:
         # Add the Issue Id column to exceptions_summary_df
         self.exceptions_summary_df['Issue ID'] = list(range(len(self.exceptions_summary_df)))
 
-        # Save safe versions of the exceptions found, to support restore_issues() if called
-        if self.exceptions_summary_df is not None:
-            self.safe_exceptions_summary_df = self.exceptions_summary_df.copy()
-        if self.test_results_df is not None:
-            self.safe_test_results_df = self.test_results_df.copy()
-        if self.test_results_by_column_np is not None:
-            self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
-
         # Display summary statistics
         self.__output_stats()
+
+        # Save safe versions of the patterns and exceptions found, to support restore_issues() if called
+        self.safe_patterns_arr = self.patterns_arr.copy()
+        self.safe_patterns_df = self.patterns_df.copy()
+        self.safe_results_summary_arr = self.results_summary_arr.copy()
+        self.safe_exceptions_summary_df = self.exceptions_summary_df.copy()
+        self.safe_test_results_df = self.test_results_df.copy()
+        self.safe_results_dict = self.results_dict.copy()
+        self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
 
         return self.get_exceptions_summary()
 
@@ -4428,27 +4434,226 @@ class DataConsistencyChecker:
     ##################################################################################################################
     # Clear issues
     ##################################################################################################################
-    def clear_issues(self, row_number=None, test_id=None, col_name=None):
+    def clear_results(
+            self,
+            test_id_list=None,
+            col_name_list=None,
+            pattern_id_list=None,
+            issue_id_list=None,
+            clear_all_patterns=False,
+            clear_all_exceptions=False):
         """
-        This may be used to iteratively clean the results until all issues are acknowledged or understood.
-        """
-        pass
+        This may be used to iteratively clean the results until the DataConstitencyChecker object has an appropriate
+        set of patterns and exceptions. This may be done, for example, to pass the DataConstitencyChecker on for
+        further processing or to generate a report, or, for example, until all issues are acknowledged or understood,
+        or until the set of results is zero.
 
-    def clear_issues_by_id(self, ids: list):
-        """
-        This may be used to iteratively clean the results until all issues are acknowledged or understood.
-        This removes a set of issues identified by id. The id corresponds to the row number in exceptions_summary_df.
-        This means each time check_data_quality() is executed, the results will have different ids.
-        """
-        pass
+        There are several parameters that may be used to specifiy which patterns or exceptions to remove. Only one
+        may be specified at a time.
 
-    def restore_issues(self):
+        test_id_list: array of test IDs
+            If set, this will remove any patterns or exceptions based on any of these tests.
+
+        col_name_list: array of column names
+            If set, this will remove any patterns or exceptions based on any of these column names. This includes
+            results that are based on other features as well.
+
+        pattern_id_list: array of integers
+            If set, this will remove the specified patterns. This will not affect the set of exceptions.
+
+        issue_id_list: array of integers
+            If set, this will remove the specified exceptions. This will not affect the set of patterns.
+
+        clear_all_patterns: bool
+            If set, this will remove all patterns. This will not affect the set of exceptions.
+
+        clear_all_exceptions: bool
+            If set, this will remove all exceptions. This will not affect the set of patterns.
         """
-        This set all the discovered exceptions back to the state when the tests were last run. It does not
-        re-execute any tests; it undoes any removing of exceptions that was done by calling clear_issues()
+
+        def check_col_includes_list(x):
+            cols_arr = self.col_to_original_cols_dict[x]
+            return len(set(cols_arr).intersection(col_name_list)) == 0
+
+        def check_exception_col_includes_list(row):
+            cols_arr = self.col_to_original_cols_dict[self.get_results_col_name(row[0], row[1])]
+            return len(set(cols_arr).intersection(col_name_list)) == 0
+
+        num_specfied = 0
+        if test_id_list is not None:
+            num_specfied += 1
+        if col_name_list is not None:
+            num_specfied += 1
+        if issue_id_list is not None:
+            num_specfied += 1
+        if pattern_id_list is not None:
+            num_specfied += 1
+        if clear_all_patterns:
+            num_specfied += 1
+        if clear_all_exceptions:
+            num_specfied += 1
+
+        if num_specfied == 0:
+            print("No method of removing results specified. Cannot execute function.")
+            return
+
+        if num_specfied > 1:
+            print(("Only one method or removing results may be specified in each call to clear_results(). The function "
+                   "may be called any number of times."))
+            return
+
+        if (self.exceptions_summary_df is None) or (self.test_results_df is None) or (self.exceptions_summary_df is None):
+            print("There are no results to clear. Cannot execute function.")
+            return
+
+        if test_id_list is not None:
+            # patterns_arr
+            self.patterns_arr = [x for x in self.patterns_arr if x[0] not in test_id_list]
+
+            # patterns_df
+            self.patterns_df = self.patterns_df[~self.patterns_df['Test ID'].isin(test_id_list)]
+
+            # results_summary_arr
+            self.results_summary_arr = [x for x in self.results_summary_arr if x[0] not in test_id_list]
+
+            # exceptions_summary_df
+            self.exceptions_summary_df = self.exceptions_summary_df[~self.exceptions_summary_df['Test ID'].isin(test_id_list)]
+
+            # test_results_df
+            drop_cols = []
+            for col_name in self.test_results_df:
+                test_name = col_name.replace('TEST ', '').split(' -- ')[0]
+                if test_name in test_id_list:
+                    drop_cols.append(col_name)
+            self.test_results_df = self.test_results_df.drop(columns=drop_cols)
+
+            # results_dict
+            for key in list(self.results_dict.keys()):
+                test_name = key.replace('TEST ', '').split(' -- ')[0]
+                if test_name in test_id_list:
+                    self.results_dict.pop(key)
+
+        if col_name_list is not None:
+            # patterns_arr
+            cols_list_arr = [self.col_to_original_cols_dict[x[1]] for x in self.patterns_arr]
+            self.patterns_arr = [x for x, y in
+                                 zip(self.patterns_arr, cols_list_arr) if not set(x).intersection(set(col_name_list))]
+
+            # patterns_df
+            self.patterns_df = self.patterns_df[self.patterns_df['Column(s)'].apply(check_col_includes_list)]
+
+            # results_summary_arr
+            cols_list_arr = [self.col_to_original_cols_dict[self.get_results_col_name(x[0], x[1])] for x in self.results_summary_arr]
+            self.results_summary_arr = [x for x, y in
+                                 zip(self.results_summary_arr, cols_list_arr) if not set(y).intersection(set(col_name_list))]
+
+            # exceptions_summary_df
+            self.exceptions_summary_df = self.exceptions_summary_df[self.exceptions_summary_df.apply(check_exception_col_includes_list, axis=1)]
+
+            # test_results_df
+            drop_cols = []
+            for col_name in self.test_results_df:
+                if col_name not in self.col_to_original_cols_dict:  # Skip "FINAL SCORE"
+                    continue
+                col_names = self.col_to_original_cols_dict[col_name]
+                if set(col_names).intersection(col_name_list):
+                    drop_cols.append(col_name)
+            self.test_results_df = self.test_results_df.drop(columns=drop_cols)
+
+            # results_dict
+            for key in list(self.results_dict.keys()):
+                col_names = self.col_to_original_cols_dict[key]
+                if set(col_names).intersection(col_name_list):
+                    self.results_dict.pop(key)
+
+        if pattern_id_list is not None:
+            # patterns_arr
+            self.patterns_df.reset_index(drop=True)
+            row_nums = self.patterns_df[self.patterns_df['Pattern ID'].isin(pattern_id_list)].index
+            for row_num in sorted(row_nums, reverse=True):
+                del self.patterns_arr[row_num]
+
+            # patterns_df
+            self.patterns_df = self.patterns_df[~self.patterns_df['Pattern ID'].isin(pattern_id_list)]
+
+            # results_summary_arr
+            # exceptions_summary_df
+            # test_results_df
+            # results_dict
+            #   patterns_id_list applies only to patterns
+
+        if issue_id_list is not None:
+            # patterns_arr
+            # patterns_df
+            #   issue_id_list applies only to exceptions
+
+            # results_summary_arr
+            self.exceptions_summary_df.reset_index(drop=True)
+            row_nums = self.exceptions_summary_df[self.exceptions_summary_df['Issue ID'].isin(issue_id_list)].index
+            for row_num in sorted(row_nums, reverse=True):
+                del self.results_summary_arr[row_num]
+
+            # exceptions_summary_df
+            # Before removing, get a list of the results column names for the issues
+            results_col_names = []
+            sub_df = self.exceptions_summary_df[self.exceptions_summary_df['Issue ID'].isin(issue_id_list)]
+            for i in sub_df.index:
+                row = sub_df.loc[i]
+                results_col_names.append(self.get_results_col_name(row[0], row[1]))
+            self.exceptions_summary_df = self.exceptions_summary_df[~self.exceptions_summary_df['Issue ID'].isin(issue_id_list)]
+
+            # test_results_df
+            self.test_results_df = self.test_results_df.drop(columns=results_col_names)
+
+            # results_dict
+            for key in list(self.results_dict.keys()):
+                if key in results_col_names:
+                    self.results_dict.pop(key)
+
+        if clear_all_patterns:
+            pass
+            # patterns_arr
+            self.patterns_arr = []
+
+            # patterns_df
+            self.patterns_df = self.patterns_df[0:0]
+
+            # results_summary_arr
+            # exceptions_summary_df
+            # test_results_df
+            # results_dict
+            # test_results_by_column_np
+            #   clear_all_patterns applies only to patterns
+
+        if clear_all_exceptions:
+            pass
+
+            # patterns_arr
+            # patterns_df
+            #   clear_all_exceptions applies only to exceptions
+
+            # results_summary_arr
+            self.results_summary_arr = []
+
+            # exceptions_summary_df
+            self.exceptions_summary_df = self.exceptions_summary_df[0:0]
+
+            # test_results_df
+            self.test_results_df = self.test_results_df[0:0]
+
+            # results_dict
+            self.results_dict = {}
+
+    def restore_results(self):
         """
+        This resets all the discovered results back to the state when check_data_quality() was last called.
+        """
+        self.patterns_arr = self.safe_patterns_arr.copy()
+        self.patterns_df = self.safe_patterns_df.copy()
+        self.results_summary_arr = self.safe_results_summary_arr.copy()
         self.exceptions_summary_df = self.safe_exceptions_summary_df.copy()
         self.test_results_df = self.safe_test_results_df.copy()
+        self.results_dict = self.safe_results_dict.copy()
         self.test_results_by_column_np = self.safe_test_results_by_column_np.copy()
 
     ##################################################################################################################
@@ -13442,9 +13647,9 @@ class DataConsistencyChecker:
             "correlated_alpha most", with exceptions
         """
         list_a = sorted([''.join(np.random.choice(list(string.ascii_lowercase), 10))
-                           for _ in range(self.num_synth_rows)])
+                                for _ in range(self.num_synth_rows)])
         list_b = sorted([''.join(np.random.choice(list(string.ascii_lowercase), 10))
-                          for _ in range(self.num_synth_rows)])
+                                for _ in range(self.num_synth_rows)])
         c = list(zip(list_a, list_b))
         random.shuffle(c)
         list_a, list_b = zip(*c)
