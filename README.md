@@ -141,7 +141,9 @@ As another example, there are tests to determine if the values in one column can
 
 All outlier detectors, including DataConsistencyChecker, allow some tuning. Detectors that return binary labels further require some thresholds, but all provide some options. For example, kth Nearest Neighbors requires defining k, a distance metric, a means of scaling each numeric column, a method of encoding categorical features, and so on. This is true of DataQualityChecker as well, though it has the advantage of executing many tests, such that any decisions made on individual tests will tend to average out over many tests, therefore requiring less tuning, though some tuning is possible if desired. Primarily though, we recommend tuning in the form of clearing issues, such that analysis begins with the full set of issues identified, followed by some manual pruning of any issues considered inconsequental, leaving the remaining issues, and a final outlier score per row. 
 
-A set of APIs, clear_issue(), clear_issues_by_id(), and restore_issues() are provided to allow users to examine the results, and incrementally clear any issues found which may be considered non-issues, leaving a final set of patterns and exceptions that are consisidered noteworthy. This can help reduce some noise when a non-trivial number of issues are found, or when reporting issues to others. 
+A set of APIs, clear_results(), and restore_results() are provided to allow users to examine the results, and incrementally clear any issues found which may be considered non-issues, leaving a final set of patterns and exceptions that are consisidered noteworthy. This can help reduce some noise when a non-trivial number of issues are found, or when reporting issues to others. 
+
+An example is provided in [clearing issues demo notebook](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_Clear_Issues.ipynb)
 
 ## Contamination Level
 
