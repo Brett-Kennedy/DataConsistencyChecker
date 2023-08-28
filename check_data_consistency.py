@@ -15,6 +15,7 @@ import statistics
 import datetime
 import time
 from dateutil.relativedelta import relativedelta
+import calendar
 import pandas.api.types as pandas_types
 import random
 import string
@@ -462,29 +463,45 @@ class DataConsistencyChecker:
             'UNUSUAL_MINUTES':          ('Check if a datetime / time column contains any unusual minutes of the hour.',
                                          self.__check_unusual_minutes, self.__generate_unusual_minutes,
                                          True, True, True),
+            'CONSTANT_DOM':             (('Check if a datetime column spans multiple months and the values are ' 
+                                          'consistently the same day of the month'),
+                                         self.__check_constant_dom, self.__generate_constant_dom,
+                                         True, True, True),
+            'CONSTANT_LAST_DOM':        (('Check if a datetime column spans multiple months and the values are ',
+                                          'consistently the last day of the month'),
+                                         self.__check_last_dom, self.__generate_last_dom,
+                                         True, True, True),
 
             # Tests on pairs of date columns
             'CONSTANT_GAP':             (('Check if there is consistently a specific gap in time between two date '
                                           'columns.'),
                                          self.__check_constant_date_gap, self.__generate_constant_date_gap,
-                                         True, True, True),
+                                         True, True, False),
             'LARGE_GAP':                ('Check if there is a larger than normal gap in time between two date columns.',
                                          self.__check_large_date_gap, self.__generate_large_date_gap,
-                                         True, True, True),
+                                         True, True, False),
             'SMALL_GAP':                ('Check if there is a smaller than normal gap in time between two date columns.',
                                          self.__check_small_date_gap, self.__generate_small_date_gap,
-                                         True, True, True),
+                                         True, True, False),
             'LATER':                    ('Check if one date column is consistently later than another date column.',
                                          self.__check_date_later, self.__generate_date_later,
-                                         True, True, True),
+                                         True, True, False),
+            'SAME_DATE':                (('Check if two date columns consistently contain the same date, but may '
+                                          'have different times.'),
+                                         self.__check_same_date, self.__generate_same_date,
+                                         True, True, False),
+            'SAME_MONTH':               (('Check if two date columns consistently contain the same month, but may '
+                                          'have different days or times.'),
+                                         self.__check_same_month, self.__generate_same_month,
+                                         True, True, False),
 
             # Tests on two columns, where one is date and the other is numeric
             'LARGE_GIVEN_DATE':         ('Check if a numeric value is very large given the value in a date column.',
                                          self.__check_large_given_date, self.__generate_large_given_date,
-                                         True, True, True),
+                                         True, True, False),
             'SMALL_GIVEN_DATE':         ('Check if a numeric value is very small given the value in a date column.',
                                          self.__check_small_given_date, self.__generate_small_given_date,
-                                         True, True, True),
+                                         True, True, False),
 
             # Tests on pairs of binary columns
             'BINARY_SAME':              (('For each pair of binary columns with the same set of two values, check if '
@@ -4868,6 +4885,10 @@ class DataConsistencyChecker:
 
         look_back_range = 10  # The number of previous values examined to predict the current value
 
+        # Set the seed to ensure the DT behaves the same each execution of this test
+        random.seed(0)
+        np.random.seed(0)
+
         for col_name in self.orig_df.columns:
             df = pd.DataFrame()
             df[col_name] = self.orig_df[col_name]
@@ -4919,7 +4940,7 @@ class DataConsistencyChecker:
 
                 # Allow the DT to create a rule for each value. Each rule may include multiple features in
                 # the decision path.
-                clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()))
+                clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()), random_state=0)
                 clf.fit(x_train, y_train_numeric)
 
                 # todo: predict on a smaller sample first
@@ -4975,7 +4996,7 @@ class DataConsistencyChecker:
                 decode_dict = None
 
                 # Get the normalized MAE when using a decision tree
-                regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range)
+                regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range, random_state=0)
                 regr.fit(x_train, y_train)
                 # todo: predict on a smaller sample first
                 y_pred = regr.predict(x_train)
@@ -8876,6 +8897,10 @@ class DataConsistencyChecker:
         # todo:  this does not work with all_cols=True -- it seems to get confused with many columns and not enough
         #   rows. There may be some way to improve that. There are about 530 cols vs 1000 rows, so maybe just comment.
 
+        # Set the seed to ensure the DT behaves the same each execution of this test
+        random.seed(0)
+        np.random.seed(0)
+
         # Determine which columns to drop, and which are categorical and should be one-hot encoded.
         drop_features = self.date_cols.copy()
         categorical_features = self.binary_cols.copy()
@@ -8901,7 +8926,7 @@ class DataConsistencyChecker:
             if (self.column_medians[col_name] == 0) and (self.orig_df[col_name].mean() == 0):
                 continue
 
-            regr = DecisionTreeRegressor(max_leaf_nodes=4)
+            regr = DecisionTreeRegressor(max_leaf_nodes=4, random_state=0)
 
             x_data = self.orig_df.drop(columns=[col_name])
             x_data = x_data.drop(columns=drop_features)
@@ -9548,6 +9573,105 @@ class DataConsistencyChecker:
                 f"on the {rare_minutes}th minutes of the hour"
             )
 
+    def __generate_constant_dom(self):
+        """
+        Patterns without exceptions: The column 'constant_dom all' consistently has dates on the 1st of the month
+        Patterns with exception: The column 'constant_dom most' consistently has dates on the 1st of the month, with
+            one exception.
+        """
+        rand_dates = []
+        for i in range(self.num_synth_rows):
+            d = np.random.randint(1, 28, 1)[0]
+            m = np.random.randint(1, 12, 1)[0]
+            y = np.random.randint(2010, 2023, 1)[0]
+            rand_dates.append(datetime.datetime.strptime(f"{d}-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+
+        all_constant_dates = []
+        most_constant_dates = []
+        for i in range(self.num_synth_rows):
+            m = np.random.randint(1, 12, 1)[0]
+            y = np.random.randint(2010, 2023, 1)[0]
+            all_constant_dates.append(datetime.datetime.strptime(f"01-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+            most_constant_dates.append(datetime.datetime.strptime(f"01-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+        most_constant_dates[-1] = datetime.datetime.strptime(f"13-7-2021 02:35:5", "%d-%m-%Y %H:%M:%S")
+
+        self.__add_synthetic_column('constant_dom rand', rand_dates)
+        self.__add_synthetic_column('constant_dom all', all_constant_dates)
+        self.__add_synthetic_column('constant_dom most', most_constant_dates)
+
+    def __check_constant_dom(self, test_id):
+        for col_name in self.date_cols:
+            min_date = pd.to_datetime(self.orig_df[col_name]).min()
+            max_date = pd.to_datetime(self.orig_df[col_name]).max()
+            # Ensure there is at least 3 months of range
+            if ((max_date - min_date) / np.timedelta64(1, 'M')) < 3:
+                continue
+
+            dom_arr = self.orig_df[col_name].dt.day
+            most_common = statistics.mode(dom_arr)
+            test_series = (dom_arr == most_common) | (self.orig_df[col_name].isna())
+            self.__process_analysis_binary(
+                test_id,
+                [col_name],
+                test_series,
+                f'The values in Column "{col_name}" were consistently on day {most_common} of the month',
+                ""
+            )
+
+    def __generate_last_dom(self):
+        """
+        Patterns without exceptions: The column 'constant_last_dom all' consistently has dates on the last of the month
+        Patterns with exception: The column 'constant_last_dom most' consistently has dates on the last of the month,
+            with one exception.
+        """
+        rand_dates = []
+        for i in range(self.num_synth_rows):
+            d = np.random.randint(1, 28, 1)[0]
+            m = np.random.randint(1, 12, 1)[0]
+            y = np.random.randint(2010, 2023, 1)[0]
+            rand_dates.append(datetime.datetime.strptime(f"{d}-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+
+        all_constant_dates = []
+        most_constant_dates = []
+        dom_arr = [(1, 31), (3, 31), (4, 30), (5, 31), (6, 30)]
+        for i in range(self.num_synth_rows):
+            m, d = dom_arr[np.random.randint(0, len(dom_arr), 1)[0]]
+            y = np.random.randint(2010, 2023, 1)[0]
+            all_constant_dates.append(datetime.datetime.strptime(f"{d}-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+            most_constant_dates.append(datetime.datetime.strptime(f"{d}-{m}-{y} 02:35:5", "%d-%m-%Y %H:%M:%S"))
+        most_constant_dates[-1] = datetime.datetime.strptime(f"13-7-2021 02:35:5", "%d-%m-%Y %H:%M:%S")
+
+        self.__add_synthetic_column('constant_last_dom rand', rand_dates)
+        self.__add_synthetic_column('constant_last_dom all', all_constant_dates)
+        self.__add_synthetic_column('constant_last_dom most', most_constant_dates)
+
+    def __check_last_dom(self, test_id):
+
+        def check_last_dom(x):
+            if x is None or x != x:
+                return False
+            y = x.year
+            m = x.month
+            d = x.day
+            last_dom = calendar.monthrange(y, m)[1]
+            return d == last_dom
+
+        for col_name in self.date_cols:
+            min_date = pd.to_datetime(self.orig_df[col_name]).min()
+            max_date = pd.to_datetime(self.orig_df[col_name]).max()
+            # Ensure there is at least 3 months of range
+            if ((max_date - min_date) / np.timedelta64(1, 'M')) < 3:
+                continue
+
+            test_series = self.orig_df[col_name].apply(check_last_dom) | (self.orig_df[col_name].isna())
+            self.__process_analysis_binary(
+                test_id,
+                [col_name],
+                test_series,
+                f'The values in Column "{col_name}" were consistently on last day of the month',
+                ""
+            )
+
     ##################################################################################################################
     # Data consistency checks pairs of date columns
     ##################################################################################################################
@@ -9713,7 +9837,7 @@ class DataConsistencyChecker:
             for col_name_idx_2 in range(col_name_idx_1 + 1, len(self.date_cols)):
                 col_name_2 = self.date_cols[col_name_idx_2]
                 med_2 = pd.to_datetime(self.orig_df[col_name_2]).quantile(0.5, interpolation='midpoint')
-                if  med_1 > med_2:
+                if med_1 > med_2:
                     col_big = col_name_1
                     col_small = col_name_2
                 else:
@@ -9732,6 +9856,21 @@ class DataConsistencyChecker:
                     f"",
                     allow_patterns=False
                 )
+
+    def __generate_same_date(self):
+        """
+        Patterns without exceptions:
+        Patterns with exception:
+        """
+
+    def __check_same_date(self, test_id):
+        pass
+
+    def __generate_same_month(self):
+        pass
+
+    def __check_same_month(self):
+        pass
 
     ##################################################################################################################
     # Data consistency checks for two columns, where one is date and the other is numeric
@@ -14767,6 +14906,10 @@ class DataConsistencyChecker:
         # todo: if there are many values, group the rare ones into "other"
         cols_same_bool_dict = self.get_cols_same_bool_dict()
 
+        # Set the seed to ensure the DT behaves the same each execution of this test
+        random.seed(0)
+        np.random.seed(0)
+
         drop_features = []
         categorical_features = []
         for col_name in self.orig_df.columns:
@@ -14790,7 +14933,7 @@ class DataConsistencyChecker:
 
             if col_name in drop_features:
                 continue
-            clf = DecisionTreeClassifier(max_leaf_nodes=4)
+            clf = DecisionTreeClassifier(max_leaf_nodes=4, random_state=0)
             x_data = self.orig_df.drop(columns=set(drop_features + [col_name]))
 
             # Remove any columns that are almost the same as the target column
