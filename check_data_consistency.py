@@ -56,6 +56,7 @@ TEST_DEFN_SHORTLIST = 3     # Element 3 indicates if the test is in the shortlis
 #                             by default when listing patterns found without exceptions.
 TEST_DEFN_IMPLEMENTED = 4   # Element 4 specifies if the test is implemented
 TEST_DEFN_FAST = 5          # Element 5 indicates if the test is reasonably fast even with thousands of columns.
+TEST_DEFN_CODE = 6          # Element 6 indicates if the test assumes the values may represent code or ID values.
 
 
 class DataConsistencyChecker:
@@ -199,657 +200,661 @@ class DataConsistencyChecker:
             'MISSING_VALUES':           (('Check if all values in a column are consistently present / consistently '
                                           'missing.'),
                                          self.__check_missing, self.__generate_missing,
-                                         False, True, True),
+                                         False, True, True, False),
             'RARE_VALUES':              ('Check if there are any rare values in a column.',
                                          self.__check_rare_values, self.__generate_rare_values,
-                                         False, True, True),
+                                         False, True, True, False),
             'UNIQUE_VALUES':            ('Check if there are consistently unique values with a column.',
                                          self.__check_unique_values, self.__generate_unique_values,
-                                         True, True, True),
+                                         True, True, True, False),
             'PREV_VALUES_DT':           (('Check if the values in a column can be predicted from previous values in '
                                          'that column using a simple decision tree.'),
                                          self.__check_prev_values_dt, self.__generate_prev_values_dt,
-                                         True, True, True),
+                                         True, True, True, False),
 
             # Tests on pairs of columns of any type
             'MATCHED_MISSING':          ('Check if two columns have missing values consistently in the same rows.',
                                          self.__check_matched_missing, self.__generate_matched_missing,
-                                         True, True, False),
+                                         True, True, False, False),
             'UNMATCHED_MISSING':        (('Check if two columns both frequently have null values, but consistently not '
                                           'in the same rows.'),
                                          self.__check_unmatched_missing, self.__generate_unmatched_missing,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_VALUES':              ('Check if two columns consistently have the same values.',
                                          self.__check_same, self.__generate_same,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_OR_CONSTANT':         (('Check one column consistently has either the same value as another column, '
                                           'or a small number of other values.'),
                                          self.__check_same_or_constant, self.__generate_same_or_constant,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on single numeric columns
             'POSITIVE':                 ('Check if all numbers in a column are positive.',
                                          self.__check_positive_values, self.__generate_positive_values,
-                                         False, True, True),
+                                         False, True, True, False),
             'NEGATIVE':                 ('Check if all numbers in a column are negative.',
                                          self.__check_negative_values, self.__generate_negative_values,
-                                         True, True, True),
+                                         True, True, True, False),
             'NUMBER_DECIMALS':          (('Check if there is a consistent number of decimal digits in each value in '
                                           'a column.'),
                                          self.__check_number_decimals, self.__generate_number_decimals,
-                                         False, True, True),
+                                         False, True, True, False),
             'RARE_DECIMALS':            ('Check if there are any uncommon sets of digits after the decimal point.',
                                          self.__check_rare_decimals, self.__generate_rare_decimals,
-                                         True, True, True),
+                                         True, True, True, False),
             'COLUMN_ORDERED_ASC':       ('Check if a column is monotonically increasing.',
                                          self.__check_column_increasing, self.__generate_column_increasing,
-                                         True, True, True),
+                                         True, True, True, False),
             'COLUMN_ORDERED_DESC':      ('Check if a column is monotonically decreasing.',
                                          self.__check_column_decreasing, self.__generate_column_decreasing,
-                                         True, True, True),
+                                         True, True, True, False),
             'COLUMN_TENDS_ASC':         ('Check if a column is generally increasing.',
                                          self.__check_column_tends_asc, self.__generate_column_tends_asc,
-                                         True, True, True),
+                                         True, True, True, False),
             'COLUMN_TENDS_DESC':        ('Check if a column is generally decreasing.',
                                          self.__check_column_tends_desc, self.__generate_column_tends_desc,
-                                         True, True, True),
+                                         True, True, True, False),
             'SIMILAR_PREVIOUS':         (('Check if all values are similar to the previous value in the column, '
                                           'relative to the range of values in the column.'),
                                          self.__check_similar_previous, self.__generate_similar_previous,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_ORDER_MAGNITUDE':  (('Check if there are any unusual numeric values, in the sense of having an '
                                           'unusual order of magnitude for the column.'),
                                          self.__check_unusual_order_magnitude, self.__generate_unusual_order_magnitude,
-                                         False, True, True),
+                                         False, True, True, False),
             'FEW_NEIGHBORS':            (('Check if there are any unusual numeric values, in the sense of being '
                                           'distant from both the next smallest and next largest values within the '
                                           'column.'),
                                          self.__check_few_neighbors, self.__generate_few_neighbors,
-                                         False, True, True),
+                                         False, True, True, False),
             'FEW_WITHIN_RANGE':         (('Check if there are any unusual numeric values, in the sense of having few '
                                           'other values in the column within a small range.'),
                                          self.__check_few_within_range, self.__generate_few_within_range,
-                                         False, True, True),
+                                         False, True, True, False),
             'VERY_SMALL':               ('Check if there are any very small values relative to their column.',
                                          self.__check_very_small, self.__generate_very_small,
-                                         True, True, True),
+                                         True, True, True, False),
             'VERY_LARGE':               ('Check if there are any very large values relative to their column.',
                                          self.__check_very_large, self.__generate_very_large,
-                                         True, True, True),
+                                         True, True, True, False),
             'VERY_SMALL_ABS':           ('Check if there are any very small absolute values relative to its column.',
                                          self.__check_very_small_abs, self.__generate_very_small_abs,
-                                         True, True, True),
+                                         True, True, True, False),
             'MULTIPLE_OF_CONSTANT':     ('Check if all values in a column are multiples of some constant.',
                                          self.__check_multiple_constant, self.__generate_multiple_constant,
-                                         True, True, True),
+                                         True, True, True, False),
             'ROUNDING':                 ('Check if all values in a column are rounded to the same degree.',
                                          self.__check_rounding, self.__generate_rounding,
-                                         True, True, True),
+                                         True, True, True, False),
             'NON_ZERO':                 ('Check if all values in a column are non-zero.',
                                          self.__check_non_zero, self.__generate_non_zero,
-                                         False, True, True),
+                                         False, True, True, False),
             'LESS_THAN_ONE':            ('Check if all values in a column are between -1.0 and 1.0, inclusive.',
                                          self.__check_less_than_one, self.__generate_less_than_one,
-                                         True, True, True),
+                                         True, True, True, False),
             'GREATER_THAN_ONE':         (('Check if all values in a column are less than -1.0 or greater than 1.0, '
                                           'inclusive.'),
                                          self.__check_greater_than_one, self.__generate_greater_than_one,
-                                         False, True, True),
+                                         False, True, True, False),
             'INVALID_NUMBERS':          (('Check for values in numeric columns that are not valid numbers, including '
                                           'values that include parenthesis, brackets, percent signs and other values.'),
                                          self.__check_invalid_numbers, self.__generate_invalid_numbers,
-                                         False, True, True),
+                                         False, True, True, False),
 
             # Tests on pairs of numeric columns
             'LARGER':                   (('Check if one column is consistently larger than another, but within one '
                                           'order of magnitude.'),
                                          self.__check_larger, self.__generate_larger,
-                                         False, True, False),
+                                         False, True, False, False),
             'MUCH_LARGER':              (('Check if one column is consistently at least one order of magnitude larger '
                                           'than another.'),
                                          self.__check_much_larger, self.__generate_much_larger,
-                                         False, True, False),
+                                         False, True, False, False),
             'SIMILAR_WRT_RATIO':        (('Check if two columns are consistently similar, with respect to their ratio, '
                                           'to each other.'),
                                          self.__check_similar_wrt_ratio, self.__generate_similar_wrt_ratio,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_WRT_DIFF':         (('Check if two columns are consistently similar, with respect to absolute '
                                           'difference, to each other.'),
                                          self.__check_similar_wrt_difference, self.__generate_similar_wrt_difference,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_TO_INVERSE':       (('Check if one column is consistently similar to the inverse of another '
                                           'column.'),
                                          self.__check_similar_to_inverse, self.__generate_similar_to_inverse,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_TO_NEGATIVE':      (('Check if one column is consistently similar to the negative of another '
                                           'column.'),
                                          self.__check_similar_to_negative, self.__generate_similar_to_negative,
-                                         True, True, False),
+                                         True, True, False, False),
             'CONSTANT_SUM':             ('Check if the sum of two columns is consistently similar to a constant value.',
                                          self.__check_constant_sum, self.__generate_constant_sum,
-                                         True, True, False),
+                                         True, True, False, False),
             'CONSTANT_DIFF':            (('Check if the difference between two columns is consistently similar to a '
                                           'constant value.'),
                                          self.__check_constant_diff, self.__generate_constant_diff,
-                                         True, True, False),
+                                         True, True, False, False),
             'CONSTANT_PRODUCT':         (('Check if the product of two columns is consistently similar to a constant '
                                           'value.'),
                                          self.__check_constant_product, self.__generate_constant_product,
-                                         True, True, False),
+                                         True, True, False, False),
             'CONSTANT_RATIO':           (('Check if the ratio of two columns is consistently similar to a constant '
                                           'value.'),
                                          self.__check_constant_ratio, self.__generate_constant_ratio,
-                                         True, True, False),
+                                         True, True, False, False),
             'EVEN_MULTIPLE':            ('Check if one column is consistently an even integer multiple of the other.',
                                          self.__check_even_multiple, self.__generate_even_multiple,
-                                         True, True, False),
+                                         True, True, False, False),
             'RARE_COMBINATION':         ('Check if two columns have any unusual pairs of values.',
                                          self.__check_rare_combination, self.__generate_rare_combination,
-                                         True, True, False),
+                                         True, True, False, False),
             'CORRELATED_FEATURES':      ('Check if two columns are consistently correlated.',
                                          self.__check_correlated, self.__generate_correlated,
-                                         True, True, False),
+                                         True, True, False, False),
             'MATCHED_ZERO':             ('Check if two columns have a value of zero consistently in the same rows.',
                                          self.__check_matched_zero, self.__generate_matched_zero,
-                                         True, True, False),
+                                         True, True, False, False),
             'OPPOSITE_ZERO':            (('Check if two columns are consistently such that one column contains a zero '
                                           'and the other contains a non-zero value.'),
                                          self.__check_opposite_zero, self.__generate_opposite_zero,
-                                         True, True, False),
+                                         True, True, False, False),
             'RUNNING_SUM':              (('Check if one column is consistently the sum of its own value from the '
                                           'previous row and another column in the current row.'),
                                          self.__check_running_sum, self.__generate_running_sum,
-                                         True, True, False),
+                                         True, True, False, False),
             'A_ROUNDED_B':              ('Check if one column is consistently the result of rounding another column.',
                                          self.__check_a_rounded_b, self.__generate_a_rounded_b,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on pairs of columns where one must be numeric
             'MATCHED_ZERO_MISSING':     (('Check if two columns consistently have a zero in one column and a missing '
                                           'value in the other.'),
                                          self.__check_matched_zero_missing, self.__generate_matched_zero_missing,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of 3 numeric columns
             'SIMILAR_TO_DIFF':          (('Check if one column is consistently similar to the difference of two other '
                                           'columns.'),
                                          self.__check_similar_to_diff, self.__generate_similar_to_diff,
-                                         True, True, False),
+                                         True, True, False, False),
             'DIFF_EXACT':               (('Check if one column is consistently exactly the difference of two other '
                                           'columns.'),
                                          self.__check_diff_exact, self.__generate_diff_exact,
-                                         True, False, False),
+                                         True, False, False, False),
             'SIMILAR_TO_PRODUCT':       (('Check if one column is consistently similar to the product of two other '
                                          'columns.'),
                                          self.__check_similar_to_product, self.__generate_similar_to_product,
-                                         True, True, False),
+                                         True, True, False, False),
             'PRODUCT_EXACT':            ('Check if one column is consistently exactly the product of two other columns.',
                                          self.__check_product_exact, self.__generate_product_exact,
-                                         True, False, False),
+                                         True, False, False, False),
             'SIMILAR_TO_RATIO':         (('Check if one column is consistently similar to the ratio of two other '
                                           'columns.'),
                                          self.__check_similar_to_ratio, self.__generate_similar_to_ratio,
-                                         True, True, False),
+                                         True, True, False, False),
             'RATIO_EXACT':              ('Check if one column is consistently exactly the ratio of two other columns.',
                                          self.__check_ratio_exact, self.__generate_ratio_exact,
-                                         True, False, False),
+                                         True, False, False, False),
             'LARGER_THAN_SUM':          (('Check if one column is consistently larger than the sum of two other '
                                           'columns.'),
                                          self.__check_larger_than_sum, self.__generate_larger_than_sum,
-                                         False, True, False),
+                                         False, True, False, False),
             'LARGER_THAN_ABS_DIFF':     (('Check if one column is consistently larger than the difference between two '
                                           'other columns.'),
                                          self.__check_larger_than_abs_diff, self.__generate_larger_than_abs_diff,
-                                         False, False, False),  # Tends to over-report, not intuitive.
+                                         False, False, False, False),  # Tends to over-report, not intuitive.
 
             # Tests on single numeric columns in relation to all other numeric columns
             'SUM_OF_COLUMNS':           (('Check if one column is consistently similar to the sum of two or more other '
                                           'columns.'),
                                          self.__check_sum_of_columns, self.__generate_sum_of_columns,
-                                         True, True, False),
+                                         True, True, False, False),
             'MEAN_OF_COLUMNS':          (('Check if one column is consistently similar to the mean of two or more '
                                           'other columns.'),
                                          self.__check_mean_of_columns, self.__generate_mean_of_columns,
-                                         True, True, False),
+                                         True, True, False, False),
             'MIN_OF_COLUMNS':           (('Check if one column is consistently similar to the minimum of two or more '
                                           'other columns.'),
                                          self.__check_min_of_columns, self.__generate_min_of_columns,
-                                         True, True, False),
+                                         True, True, False, False),
             'MAX_OF_COLUMNS':           (('Check if one column is consistently similar to the maximumn of two or more '
                                           'other columns.'),
                                          self.__check_max_of_columns, self.__generate_max_of_columns,
-                                         True, True, False),
+                                         True, True, False, False),
             'ALL_POS_OR_ALL_NEG':       (('Identify sets of columns where the values are consistently either all '
                                          'positive, or all negative.'),
                                          self.check_all_pos_or_all_neg, self.generate_all_pos_or_all_neg,
-                                         True, True, False),
+                                         True, True, False, False),
             'ALL_ZERO_OR_ALL_NON_ZERO': (('Identify sets of columns where the values are consistently either all '
                                           'zero, or non-zero.'),
                                          self.check_all_zero_or_all_non_zero, self.generate_all_zero_or_all_non_zero,
-                                         True, True, False),
+                                         True, True, False, False),
             'DECISION_TREE_REGRESSOR':  (('Check if a numeric column can be derived from the other columns using a '
                                           'small decision tree.'),
                                          self.__check_dt_regressor, self.__generate_dt_regressor,
-                                         True, True, False),
+                                         True, True, False, False),
             'LINEAR_REGRESSION':        (('Check if a numeric column can be derived from the other numeric columns '
                                           'using linear regression.'),
                                          self.__check_lin_regressor, self.__generate_lin_regressor,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_VS_CORR_COLS':       (('Check if a value has an unusually small rank within its column compared to '
                                           'other ranks within that row for correlated columns.'),
                                          self.__check_small_vs_corr_cols, self.__generate_small_vs_corr_cols,
-                                         False, False, False),
+                                         False, False, False, False),
             'LARGE_VS_CORR_COLS':       (('Check if a value has an unusually large rank within its column compared to '
                                           'other ranks within that row for correlated columns.'),
                                          self.__check_large_vs_corr_cols, self.__generate_large_vs_corr_cols,
-                                         False, False, False),
+                                         False, False, False, False),
+            'PREDICT_NULL_DT':          (('Check if the Null values in one column can be predicted from the values '
+                                          'in the other columns.'),
+                                         self.__check_predict_null, self.__generate_predict_null,
+                                         True, True, False, False),
 
             # Tests on single Date columns
             'EARLY_DATES':              ('Check for dates significantly earlier than the other dates in the column.',
                                          self.__check_early_dates, self.__generate_early_dates,
-                                         True, True, True),
+                                         True, True, True, False),
             'LATE_DATES':               ('Check for dates significantly later than the other dates in the column.',
                                          self.__check_late_dates, self.__generate_late_dates,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_DAY_OF_WEEK':      ('Check if a date column contains any unusual days of the week.',
                                          self.__check_unusual_dow, self.__generate_unusual_dow,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_DAY_OF_MONTH':     ('Check if a date column contains any unusual days of the month.',
                                          self.__check_unusual_dom, self.__generate_unusual_dom,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_MONTH':            ('Check if a date column contains any unusual months of the year.',
                                          self.__check_unusual_month, self.__generate_unusual_month,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_HOUR':             (('Check if a datetime / time column contains any unusual hours of the day. '
                                           'This and UNUSUAL_MINUTES also identify where it is inconsistent if the time ' 
                                           'is included in the column.'),
                                          self.__check_unusual_hour, self.__generate_unusual_hour,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNUSUAL_MINUTES':          (('Check if a datetime / time column contains any unusual minutes of the hour. '
                                           'This and UNUSUAL_MINUTES also identify where it is inconsistent if the time '
                                           'is included in the column.'),
                                          self.__check_unusual_minutes, self.__generate_unusual_minutes,
-                                         True, True, True),
+                                         True, True, True, False),
             'CONSTANT_DOM':             (('Check if a date column spans multiple months and the values are '
                                           'consistently the same day of the month'),
                                          self.__check_constant_dom, self.__generate_constant_dom,
-                                         True, True, True),
+                                         True, True, True, False),
             'CONSTANT_LAST_DOM':        (('Check if a date column spans multiple months and the values are '
                                           'consistently the last day of the month'),
                                          self.__check_last_dom, self.__generate_last_dom,
-                                         True, True, True),
+                                         True, True, True, False),
 
             # Tests on pairs of date columns
             'CONSTANT_GAP':             (('Check if there is consistently a specific gap in time between two date '
                                           'columns.'),
                                          self.__check_constant_date_gap, self.__generate_constant_date_gap,
-                                         True, True, False),
+                                         True, True, False, False),
             'LARGE_GAP':                (('Check if there is an unusually large gap in time between dates in two '
                                           'date columns.'),
                                          self.__check_large_date_gap, self.__generate_large_date_gap,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_GAP':                (('Check if there is an unusually small gap in time between dates in two '
                                           'date columns.'),
                                          self.__check_small_date_gap, self.__generate_small_date_gap,
-                                         True, True, False),
+                                         True, True, False, False),
             'LATER':                    ('Check if one date column is consistently later than another date column.',
                                          self.__check_date_later, self.__generate_date_later,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_DATE':                (('Check if two date columns consistently contain the same date, but may '
                                           'have different times.'),
                                          self.__check_same_date, self.__generate_same_date,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_MONTH':               (('Check if two date columns consistently contain the same month, but may '
                                           'have different days or times.'),
                                          self.__check_same_month, self.__generate_same_month,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on two columns, where one is date and the other is numeric
             'LARGE_GIVEN_DATE':         ('Check if a numeric value is very large given the value in a date column.',
                                          self.__check_large_given_date, self.__generate_large_given_date,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_GIVEN_DATE':         ('Check if a numeric value is very small given the value in a date column.',
                                          self.__check_small_given_date, self.__generate_small_given_date,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on pairs of binary columns
             'BINARY_SAME':              (('For each pair of binary columns with the same set of two values, check if '
                                           'they consistently have the same value.'),
                                          self.__check_binary_same, self.__generate_binary_same,
-                                         True, True, False),
+                                         True, True, False, False),
             'BINARY_OPPOSITE':           (('For each pair of binary columns with the same set of two values, check if '
                                            'they consistently have the opposite value.'),
                                           self.__check_binary_opposite, self.__generate_binary_opposite,
-                                          True, True, False),
+                                          True, True, False, False),
             'BINARY_IMPLIES':           (('For each pair of binary columns with the same set of two values, check if '
                                           'when one has a given value, the other consistently does as well, though '
                                           'the other direction may not be true.'),
                                          self.__check_binary_implies, self.__generate_binary_implies,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of binary columns
             'BINARY_AND':               (('For sets of binary columns with the same set of two values, check if one '
                                           'column is consistently the result of ANDing the other columns.'),
                                          self.__check_binary_and, self.__generate_binary_and,
-                                         True, True, False),
+                                         True, True, False, False),
             'BINARY_OR':                (('For sets of binary columns with the same set of two values, check if one '
                                           'column is consistently the result of ORing the other columns.'),
                                          self.__check_binary_or, self.__generate_binary_or,
-                                         True, True, False),
+                                         True, True, False, False),
             'BINARY_XOR':               (('For sets of binary columns with the same set of two values, check if one '
                                           'column is consistently the result of XORing the other columns.'),
                                          self.__check_binary_xor, self.__generate_binary_xor,
-                                         True, True, False),
+                                         True, True, False, False),
             'BINARY_NUM_SAME':          (('For sets of binary columns with the same set of two values, check if there '
                                          'is a consistent number of these columns with the same value.'),
                                          self.__check_binary_num_same, self.__generate_binary_num_same,
-                                         True, True, False),
+                                         True, True, False, False),
             'BINARY_RARE_COMBINATION':  ('Check for rare sets of values in sets of three or more binary columns.',
                                          self.__check_binary_rare_combo, self.__generate_binary_rare_combo,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on pairs of columns where one is binary and one is numeric
             'BINARY_MATCHES_VALUES':    (('Check if the binary column is consistently one value when the values in a '
                                           'numeric column have low values, or when they have high values.'),
                                          self.__check_binary_matches_values, self.__generate_binary_matches_values,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of three columns, where one must be binary
             'BINARY_TWO_OTHERS_MATCH':  (('Check if a binary column is consistently one value when two other columns '
                                          'have the same value as each other.'),
                                          self.__check_binary_two_others_match, self.__generate_binary_two_others_match,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of three columns, where one is binary and the other two string
             'BINARY_TWO_STR_SIMILAR':   (('Check if a binary column is consistently one value when two other string '
                                           'have similar values as each other, with respect to string length and '
                                           'the characters used.'),
                                          self.__check_binary_two_str_match, self.__generate_binary_two_str_match,
-                                         True, False, False),
+                                         True, False, False, False),
 
             # Tests on sets of multiple columns, where one is binary and the others are numeric
             'BINARY_MATCHES_SUM':       (('Check if the binary column is consistently true when the sum of a set of '
                                          ' numeric columns is over some threshold.'),
                                          self.__check_binary_matches_sum, self.__generate_binary_matches_sum,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on single string columns
             'BLANK_VALUES':             ('Check for blank strings and values that are entirely whitespace.',
                                          self.__check_blank, self.__generate_blank,
-                                         False, True, True),
+                                         False, True, True, False),
             'LEADING_WHITESPACE':       ('Check for strings with unusual leading whitespace for the column.',
                                          self.__check_leading_whitespace, self.__generate_leading_whitespace,
-                                         True, True, True),
+                                         True, True, True, False),
             'TRAILING_WHITESPACE':      ('Check for blank strings with unusual trailing whitespace for the column.',
                                          self.__check_trailing_whitespace, self.__generate_trailing_whitespace,
-                                         True, True, True),
+                                         True, True, True, False),
             'FIRST_CHAR_ALPHA':         ('Check if the first characters are consistently alphabetic within a column.',
                                          self.__check_first_char_alpha, self.__generate_first_char_alpha,
-                                         False, True, True),
+                                         False, True, True, True),
             'FIRST_CHAR_NUMERIC':       ('Check if the first characters are consistently numeric within a column.',
                                          self.__check_first_char_numeric, self.__generate_first_char_numeric,
-                                         True, True, True),
+                                         True, True, True, True),
             'FIRST_CHAR_SMALL_SET':     (('Check if there are a small number of distinct characters used for the first '
                                           'character within a column.'),
                                          self.__check_first_char_small_set, self.__generate_first_char_small_set,
-                                         True, True, True),
+                                         True, True, True, True),
             'FIRST_CHAR_UPPERCASE':     ('Check if the first character is consistently uppercase within a column.',
                                          self.__check_first_char_uppercase, self.__generate_first_char_uppercase,
-                                         True, True, True),
+                                         True, True, True, False),
             'FIRST_CHAR_LOWERCASE':     ('Check if the first character is consistently lowercase within a column.',
                                          self.__check_first_char_lowercase, self.__generate_first_char_lowercase,
-                                         False, True, True),
+                                         False, True, True, False),
             'LAST_CHAR_SMALL_SET':      (('Check if there are a small number of distinct characters used for the last '
                                           'character within a column.'),
                                          self.__check_last_char_small_set, self.__generate_last_char_small_set,
-                                         True, True, True),
+                                         True, True, True, True),
             'COMMON_SPECIAL_CHARS':     (('Check if there are one or more non-alphanumeric characters that '
                                           'consistently appear in the values within a column.'),
                                          self.__check_common_special_chars, self.__generate_common_special_chars,
-                                         True, True, True),
+                                         True, True, True, False),
             'COMMON_CHARS':             (('Check if there is consistently a small number of characters repeated in '
                                           'each value in a column.'),
                                          self.__check_common_chars, self.__generate_common_chars,
-                                         True, True, True),
+                                         True, True, True, True),
             'NUMBER_ALPHA_CHARS':       (('Check if there is a consistent number of alphabetic characters in each '
                                           'value in a column.'),
                                          self.__check_number_alpha_chars, self.__generate_number_alpha_chars,
-                                         True, True, True),
+                                         True, True, True, True),
             'NUMBER_NUMERIC_CHARS':     (('Check if there is a consistent number of numeric characters in each value '
                                           'in a column.'),
                                          self.__check_number_numeric_chars, self.__generate_number_numeric_chars,
-                                         True, True, True),
+                                         True, True, True, True),
             'NUMBER_ALPHANUMERIC_CHARS':
                                         (('Check if there is a consistent number of alphanumeric characters in  '
                                           'each value in a column.'),
                                          self.__check_number_alphanumeric_chars,
                                          self.__generate_number_alphanumeric_chars,
-                                         True, True, True),
+                                         True, True, True, True),
             'NUMBER_NON-ALPHANUMERIC_CHARS':
                                         (('Check if there is a consistent number of non-alphanumeric characters '
                                           'in each value in a column.'),
                                          self.__check_number_non_alphanumeric_chars,
                                          self.__generate_number_non_alphanumeric_chars,
-                                         True, True, True),
+                                         True, True, True, True),
             'NUMBER_CHARS':             (('Check if there is a consistent number of characters in each value in a '
                                           'column.'),
                                          self.__check_number_chars, self.__generate_number_chars,
-                                         True, True, True),
+                                         True, True, True, False),
             'MANY_CHARS':               (('Check if any values have an unusually large number of characters for the '
                                           'column.'),
                                          self.__check_many_chars, self.__generate_many_chars,
-                                         False, True, True),
+                                         False, True, True, False),
             'FEW_CHARS':                (('Check if any values have an unusually small number of characters for the '
                                           'column.'),
                                          self.__check_few_chars, self.__generate_few_chars,
-                                         False, True, True),
+                                         False, True, True, False),
             'POSITION_NON-ALPHANUMERIC':
                                         (('Check if the positions of the non-alphanumeric characters is consistent '
                                           'within a column.'),
                                          self.__check_position_non_alphanumeric,
                                          self.__generate_position_non_alphanumeric,
-                                         True, True, True),
+                                         True, True, True, False),
             'CHARS_PATTERN':            (('Check if there is a consistent pattern of alphabetic, numeric and '
                                           'special characters in each value in a column.'),
                                          self.__check_chars_pattern, self.__generate_chars_pattern,
-                                         True, True, True),
+                                         True, True, True, False),
             'UPPERCASE':                ('Check if all alphabetic characters in a column are consistently uppercase.',
                                          self.__check_uppercase, self.__generate_uppercase,
-                                         True, True, True),
+                                         True, True, True, False),
             'LOWERCASE':                ('Check if all alphabetic characters in a column are consistently lowercase.',
                                          self.__check_lowercase, self.__generate_lowercase,
-                                         False, True, True),
+                                         False, True, True, False),
             'CHARACTERS_USED':          (('Check if there is a consistent set of characters used in each value in a '
                                           'column.'),
                                          self.__check_characters_used, self.__generate_characters_used,
-                                         True, True, True),
+                                         True, True, True, True),
             'FIRST_WORD_SMALL_SET':     (('Check if there is a small set of words consistently used for the first word '
                                           'of each value in a column.'),
                                          self.__check_first_word, self.__generate_first_word,
-                                         True, True, True),
+                                         True, True, True, False),
             'LAST_WORD_SMALL_SET':      (('Check if there is a small set of words consistently used for the last word.'
                                           'of each value in a column.'),
                                          self.__check_last_word, self.__generate_last_word,
-                                         True, True, True),
+                                         True, True, True, False),
             'NUMBER_WORDS':             (('Check if there is a consistent number of words used in each value in a '
                                           'column.'),
                                          self.__check_num_words, self.__generate_num_words,
-                                         True, True, True),
+                                         True, True, True, False),
             'LONGEST_WORDS':            ('Check if a column contains any unusually long words.',
                                          self.__check_longest_words, self.__generate_longest_words,
-                                         True, True, True),
+                                         True, True, True, False),
             'COMMON_WORDS':             (('Check if there is a consistent set of words used in each value in a '
                                           'column.'),
                                          self.__check_words_used, self.__generate_words_used,
-                                         True, True, True),
+                                         True, True, True, False),
             'RARE_WORDS':               ('Check if there are words which occur rarely in a given column.',
                                          self.__check_rare_words, self.__generate_rare_words,
-                                         True, True, True),
+                                         True, True, True, False),
             'GROUPED_STRINGS':          ('Check if a string or binary column is sorted into groups.',
                                          self.__check_grouped_strings,
                                          self.__generate_grouped_strings,
-                                         True, True, True),
+                                         True, True, True, False),
 
             # Tests on pairs string columns
             'A_IMPLIES_B':              (('Check if specific values in one categorical column imply specific values in '
                                           'another categorical column.'),
                                          self.__check_a_implies_b, self.__generate_a_implies_b,
-                                         True, False, False),
+                                         True, False, False, False),
             'RARE_PAIRS':               (('Check for pairs of values in two columns, where neither is rare, but the '
                                           'combination is rare.'),
                                          self.__check_rare_pairs, self.__generate_rare_pairs,
-                                         True, True, False),
+                                         True, True, False, False),
             'RARE_PAIRS_FIRST_CHAR':    (('Check for pairs of values in two columns, where neither begins with a rare '
                                           'character, but the combination or first characters is rare.'),
                                          self.__check_rare_pair_first_char, self.__generate_rare_pair_first_char,
-                                         True, True, False),
+                                         True, True, False, True),
             'RARE_PAIRS_FIRST_WORD':    (('Check for pairs of values in two columns, where neither begins with a rare '
                                           'word, but the combination of words is rare.'),
                                          self.__check_rare_pair_first_word, self.__generate_rare_pair_first_word,
-                                         True, True, False),
+                                         True, True, False, False),
             'RARE_PAIRS_FIRST_WORD_VAL':
                                         (('Check for pairs of values in two columns, where the combination of the '
                                           'first word in one and the value in the other is rare.'),
                                          self.__check_rare_pair_first_word_val,
                                          self.__generate_rare_pair_first_word_val,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_CHARACTERS':       (('Check if two string columns, with one word each, consistently have a '
                                           'significant overlap in the characters used.'),
                                          self.__check_similar_chars, self.__generate_similar_chars,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_NUM_CHARS':        (('Check if two string columns consistently have similar numbers of characters '
                                           'while the range of string lengths varies within both columns.'),
                                          self.__check_similar_num_chars, self.__generate_similar_num_chars,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_WORDS':            (('Check if two string columns consistently have a significant overlap in the '
                                           'words used.'),
                                          self.__check_similar_words, self.__generate_similar_words,
-                                         True, True, False),
+                                         True, True, False, False),
             'SIMILAR_NUM_WORDS':        ('Check if two string columns consistently have similar numbers of words.',
                                          self.__check_similar_num_words, self.__generate_similar_num_words,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_FIRST_CHARS':         (('Check if two string columns consistently start with the same set of  '
                                           'characters.'),
                                          self.__check_same_first_chars, self.__generate_same_first_chars,
-                                         True, True, False),
+                                         True, True, False, True),
             'SAME_FIRST_WORD':          ('Check if two string columns consistently start with the same word.',
                                          self.__check_same_first_word, self.__generate_same_first_word,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_LAST_WORD':           ('Check if two string columns consistently end with the same word.',
                                          self.__check_same_last_word, self.__generate_same_last_word,
-                                         True, True, False),
+                                         True, True, False, False),
             'SAME_ALPHA_CHARS':         (('Check if two string columns consistently contain the same set of  '
                                           'alphabetic characters.'),
                                          self.__check_same_alpha_chars, self.__generate_same_alpha_chars,
-                                         True, True, False),
+                                         True, True, False, True),
             'SAME_NUMERIC_CHARS':       (('Check if two string columns consistently contain the same set of  '
                                           'numeric characters.'),
                                          self.__check_same_numeric_chars, self.__generate_same_numeric_chars,
-                                         True, True, False),
+                                         True, True, False, True),
             'SAME_SPECIAL_CHARS':       (('Check if two string columns consistently contain the same set of '
                                           'special characters.'),
                                          self.__check_same_special_chars, self.__generate_same_special_chars,
-                                         True, True, False),
+                                         True, True, False, False),
             'A_PREFIX_OF_B':            ('Check if one column is consistently the prefix of another column.',
                                          self.__check_a_prefix_of_b, self.__generate_a_prefix_of_b,
-                                         True, True, False),
+                                         True, True, False, False),
             'A_SUFFIX_OF_B':            ('Check if one column is consistently the suffix of another column.',
                                          self.__check_a_suffix_of_b, self.__generate_a_suffix_of_b,
-                                         True, True, False),
+                                         True, True, False, False),
             'B_CONTAINS_A':             (('Check if one column is consistently contained in another columns, but is '
                                           'neither the prefix, nor suffix of the second column.'),
                                          self.__check_b_contains_a, self.__generate_b_contains_a,
-                                         True, True, False),
+                                         True, True, False, False),
             'CORRELATED_ALPHA_ORDER':   ('Check if the alphabetic orderings of two columns are consistently correlated.',
                                          self.__check_correlated_alpha, self.__generate_correlated_alpha,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests with one string and one numeric column
             'LARGE_GIVEN_VALUE':        (('Check if a value in a numeric column is very large given the value in '
                                           'a categorical column.'),
                                          self.__check_large_given, self.__generate_large_given,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_GIVEN_VALUE':        (('Check if a value in a numeric column is very small given the value in '
                                           'a categorical column.'),
                                          self.__check_small_given, self.__generate_small_given,
-                                         True, True, False),
+                                         True, True, False, False),
             'LARGE_GIVEN_PREFIX':       (('Check if a value in a numeric column is very large given the first '
                                           'word in a categorical column.'),
                                          self.__check_large_given_prefix, self.__generate_large_given_prefix,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_GIVEN_PREFIX':       (('Check if a value in a numeric column is very small given the first '
                                          'word in a categorical column.'),
                                          self.__check_small_given_prefix, self.__generate_small_given_prefix,
-                                         True, True, False),
+                                         True, True, False, False),
             'GROUPED_STRINGS_BY_NUMERIC':
                                         (('Check if a string or binary column is sorted into groups when the table is'
                                           'ordered by a numeric or date column.'),
                                          self.__check_grouped_strings_by_numeric,
                                          self.__generate_grouped_strings_by_numeric,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on two string and one numeric column
             'LARGE_GIVEN_PAIR':         (('Check if a value in a numeric or date column is large given a pair of '
                                           'values in two string or binary columns.'),
                                          self.__check_large_given_pair, self.__generate_large_given_pair,
-                                         True, True, False),
+                                         True, True, False, False),
             'SMALL_GIVEN_PAIR':         (('Check if a value in a numeric or date column is small given the a of '
                                           'values in two string or binary columns.'),
                                          self.__check_small_given_pair, self.__generate_small_given_pair,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on one string/binary column and two numeric
             'CORRELATED_GIVEN_VALUE':   (('Check if two numeric columns are correlated if conditioning on a string or'
                                          'binary column.'),
                                          self.__check_corr_given_val, self.__generate_corr_given_val,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on one string column related to the rest of the columns
             'DECISION_TREE_CLASSIFIER': (('Check if a categorical column can be derived from the other columns using '
                                           'a decision tree.'),
                                          self.__check_dt_classifier, self.__generate_dt_classifier,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of three columns of any type
             'C_IS_A_OR_B':              (('Check if one column is consistently equal to the value in one of two other '
                                           'columns, though not consistently either one of the two columns.'),
                                          self.__check_c_is_a_or_b, self.__generate_c_is_a_or_b,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of four columns of any type
             'TWO_PAIRS':                ('Check that, given two pairs of columns, the first pair of columns have '
                                          'matching values in, and only in, the same rows as the other pair of columns.',
                                          self.__check_two_pairs, self.__generate_two_pairs,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on sets of columns of any type
             'UNIQUE_SETS_VALUES':       ('Check if a set of columns has consistently unique combinations of values.',
                                          self.__check_unique_sets_values, self.__generate_unique_sets_values,
-                                         True, True, False),
+                                         True, True, False, False),
 
             # Tests on rows of values
             'MISSING_VALUES_PER_ROW':   ('Check if there is a consistent number of missing values per row.',
                                          self.__check_missing_values_per_row, self.__generate_missing_values_per_row,
-                                         True, True, True),
+                                         True, True, True, False),
             'ZERO_VALUES_PER_ROW':      ('Check if there is a consistent number of zero values per row.',
                                          self.__check_zero_values_per_row, self.__generate_zero_values_per_row,
-                                         True, True, True),
+                                         True, True, True, False),
             'UNIQUE_VALUES_PER_ROW':    ('Check if there is a consistent number of unique values per row.',
                                          self.__check_unique_values_per_row, self.__generate_unique_values_per_row,
-                                         True, True, True),
+                                         True, True, True, False),
             'NEGATIVE_VALUES_PER_ROW':  ('Check if there is a consistent number of negative values per row.',
                                          self.__check_negative_values_per_row, self.__generate_negative_values_per_row,
-                                         True, True, True),
+                                         True, True, True, False),
             'SMALL_AVG_RANK_PER_ROW':   (('Check if the numeric values in a row have a small average percentile value '
                                           'relative to their columns. This indicates the numeric values in a row are '
                                           'typically unusually small for their columns.'),
                                          self.__check_small_avg_rank_per_row, self.__generate_small_avg_rank_per_row,
-                                         False, True, True),
+                                         False, True, True, False),
             'LARGE_AVG_RANK_PER_ROW':   (('Check if the numeric values in a row have a large average percentile value '
                                           'relative to their columns. This indicates the numeric values in a row are '
                                           'typically unusually large for their columns.'),
                                          self.__check_large_avg_rank_per_row, self.__generate_large_avg_rank_per_row,
-                                         False, True, True),
+                                         False, True, True, False),
         }
 
         # Remove any tests not yet implemented
@@ -1212,6 +1217,7 @@ class DataConsistencyChecker:
             exclude_list=None,
             test_start_id=0,
             fast_only=False,
+            include_code_tests=True,
             contamination_level=0.005,
             run_parallel=False):
         """
@@ -1238,6 +1244,12 @@ class DataConsistencyChecker:
         fast_only: bool
             If specified, only tests that operate on single columns will be executed. The slower tests check sets of
             two or more columns, and are skipped if this is set True.
+
+        include_code_tests: bool:
+            Some tests are specific to columns with code or ID values, such that the individual characters in the
+            values may have meaning. For example, with value X7333, it may be relevant that the first character is
+            an 'X', or that the subsequent characters are 4 numeric characters. If set True, these tests will be
+            executed.
 
         contamination_level: int or float
             The maximum fraction of rows in violation of the pattern where we consider the pattern to still be in place.
@@ -1301,6 +1313,8 @@ class DataConsistencyChecker:
             if test_idx < test_start_id:
                 continue
             if fast_only and not self.test_dict[test_id][TEST_DEFN_FAST]:
+                continue
+            if (not include_code_tests) and self.test_dict[test_id][TEST_DEFN_CODE]:
                 continue
             if (self.execute_list is None and self.exclude_list is None) or \
                     (self.execute_list and test_id in self.execute_list) or \
@@ -1447,6 +1461,17 @@ class DataConsistencyChecker:
         # The TEST_DEFN_SHORTLIST element for each item in test_dict indicates if that test is in the short-list for
         # reporting discovered patterns
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_SHORTLIST]]
+
+    def get_tests_for_codes(self):
+        """
+        Returns an array with the IDs of the tests that related to ID and code values. Where it is known that no columns
+        are of this type, these tests may be skipped.
+        """
+
+        # The TEST_DEFN_CODE element for each item in test_dict indicates if that test is in the list of tests related
+        # to ID and code values.
+        return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_CODE]]
+
 
     ##################################################################################################################
     # Public methods to output statistics about the dataset, unrelated to any tests executed.
@@ -2079,9 +2104,14 @@ class DataConsistencyChecker:
                     print_test_header(test_id)
                     print_column_header(columns_set, test_id)
                     print_text(f"**Issue ID**: {issue_id}")
-                    print_text("A strong pattern, and exceptions to the pattern, were found.\n")
+                    if test_id in ['RARE_VALUES', 'VERY_SMALL', 'VERY_LARGE', 'VERY_SMALL_ABS', 'LARGE_GIVEN_DATE',
+                                   'SMALL_GIVEN_DATE', 'LARGE_GIVEN_VALUE', 'SMALL_GIVEN_VALUE', 'LARGE_GIVEN_PREFIX',
+                                   'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
+                        print_text("Unusual values were found.\n")
+                    else:
+                        print_text("A strong pattern, and exceptions to the pattern, were found.\n")
                     if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
-                                   'GROUPED_STRINGS']:
+                                   'GROUPED_STRINGS', 'PREDICT_NULL_DT']:
                         # These display a decision tree or other special output, so the formatting must be preserved.
                         print_text(f"**Description**:")
                         print(sub_summary.iloc[0]['Description of Pattern'])
@@ -2328,14 +2358,6 @@ class DataConsistencyChecker:
         display_plot(self.plot_final_scores_distribution_by_row, "Final Scores by Row of the Data")
         display_plot(self.plot_final_scores_distribution_by_feature, "Final Scores by Feature")
         display_plot(self.plot_final_scores_distribution_by_test, "Final Scores by Test")
-
-        # print("\n\n\n")
-        # title = 'Detailed Results (without examples):'
-        # if is_notebook():
-        #     display(Markdown(f'# {title}'))
-        # else:
-        #     print(title)
-        # self.display_detailed_results(include_examples=False, plot_results=True)
 
     ##################################################################################################################
     # Methods to find relationships between the data and the numbers of issues found.
@@ -2742,9 +2764,43 @@ class DataConsistencyChecker:
             s = sns.histplot(data=sub_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
             flagged_vals = sub_flagged_df[cols[1]].values
             for fv in flagged_vals:
-                s.axvline(fv, color='red')
+                # Add alpha, as in some cases the red lines are very close to the blue
+                s.axvline(fv, color='red', alpha=0.5)
             s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
         plt.tight_layout()
+        plt.show()
+
+    def __draw_network_plot(self, test_id):
+        nodes = ["A", "B", "C", "D", "E"]
+        edges = [("A", "B"), ("A", "C"), ("C", "D"), ("D", "E")]
+        positions = {
+            "A": (0, 50),
+            "B": (10, 20),
+            "C": (10, 70),
+            "D": (30, 50),
+            "E": (40, 50),
+        }
+
+        plt.figure()
+
+        # Draw the nodes
+        for node in nodes:
+            posn = positions[node]
+            plt.scatter(posn[0], posn[1], label=node, s=500, c='skyblue')
+            plt.text(posn[0], posn[1]-10, node, fontsize=12, color='black', fontweight='bold', ha='center', va='center')
+
+        # Draw the edges
+        for edge in edges:
+            node_0 = edge[0]
+            node_1 = edge[1]
+            p_1x = positions[node_0][0]
+            p_1y = positions[node_0][1]
+            p_2x = positions[node_1][0]
+            p_2y = positions[node_1][1]
+            plt.plot([p_1x, p_2x], [p_1y, p_2y], 'k-')
+
+        plt.axis('off')
+        plt.ylim(0, 100)
         plt.show()
 
     def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
@@ -2923,6 +2979,11 @@ class DataConsistencyChecker:
             df['RUNNING SUM'] = display_info['RUNNING SUM'][df.index]
         elif test_id in ['SMALL_AVG_RANK_PER_ROW', 'LARGE_AVG_RANK_PER_ROW']:
             df['AVG PERCENTILE  '] = display_info['percentiles'][df.index]
+        elif test_id in ['C_IS_A_OR_B']:
+            df['SAME AS'] = pd.Series(display_info['Same Column']).loc[df.index]
+        elif test_id in ['SAME_SPECIAL_CHARS']:
+            df['SPECIAL CHARS 1'] = pd.Series(display_info['Special Chars A']).loc[df.index]
+            df['SPECIAL CHARS 2'] = pd.Series(display_info['Special Chars B']).loc[df.index]
 
         df = df.sort_index()
         if is_notebook():
@@ -2942,7 +3003,8 @@ class DataConsistencyChecker:
             display_info=display_info,
             is_patterns=False)
 
-    def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, group_results=False, is_patterns=False):
+    def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, group_results=False, is_patterns=False,
+                                 display_info=None):
         """
         Return a random set of n_examples values from the specified columns that were not flagged by the
         specified test in the specified columns. This handles specific tests by balancing the the rows displayed
@@ -2962,6 +3024,9 @@ class DataConsistencyChecker:
 
         is_patterns: bool
             Set True if this is being called to display examples of a pattern, in which case there are no exceptions.
+
+        display_info: dict
+            Set by individual test to describe each row with respect to the pattern
         """
 
         if is_patterns:
@@ -2977,7 +3042,7 @@ class DataConsistencyChecker:
 
         df = None
         if test_id in ['BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES', 'BINARY_AND', 'BINARY_OR',
-                       'BINARY_XOR', 'BINARY_NUM_SAME', 'BINARY_TWO_OTHERS_MATCH']:
+                       'BINARY_XOR', 'BINARY_NUM_SAME', 'BINARY_TWO_OTHERS_MATCH', 'BINARY_MATCHES_SUM']:
             if len(cols) == 2 and cols[0] in self.binary_cols and cols[1] in self.binary_cols:
                 v0_0, v0_1 = self.column_unique_vals[cols[0]]
                 v1_0, v1_1 = self.column_unique_vals[cols[1]]
@@ -3034,24 +3099,18 @@ class DataConsistencyChecker:
                 df = pd.concat([df_v000, df_v001, df_v010, df_v011, df_v100, df_v101, df_v110, df_v111])[cols]
             elif len(cols) == 3 and cols[2] in self.binary_cols:
                 v0, v1 = self.orig_df[cols[2]].dropna().unique()
-                df_v0 = self.orig_df[
-                    (self.orig_df[cols[2]] == v0)].head(n_examples // 2)
-                df_v1 = self.orig_df[
-                    (self.orig_df[cols[2]] == v1)].head(n_examples // 2)
+                df_v0 = self.orig_df[self.orig_df[cols[2]] == v0].head(n_examples // 2)
+                df_v1 = self.orig_df[self.orig_df[cols[2]] == v1].head(n_examples // 2)
                 df = pd.concat([df_v0, df_v1])[cols]
         elif test_id in ['MATCHED_MISSING', 'UNMATCHED_MISSING']:
             col_name_1, col_name_2 = cols[0], cols[1]
-            df_v_null = self.orig_df[cols][
-                (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-            df_v_non_null = self.orig_df[cols][
-                (~self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            df_v_null = self.orig_df[cols][(self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
             df = pd.concat([df_v_null, df_v_non_null])
         elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'ALL_ZERO_OR_ALL_NON_ZERO']:
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][
-                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_non_zero = self.orig_df[cols][
-                (self.orig_df[col_name_1] != 0)].head(n_examples // 2)
+            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0)].head(n_examples // 2)
             df = pd.concat([df_v_zero, df_v_non_zero])
         elif test_id in ['SAME_OR_CONSTANT']:
             col_name_1, col_name_2 = cols
@@ -3064,24 +3123,18 @@ class DataConsistencyChecker:
             df = pd.concat([df_same, df_not_same])
         elif test_id in ['NEGATIVE']:
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][
-                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_neg = self.orig_df[cols][
-                (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
+            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples // 2)
             df = pd.concat([df_v_zero, df_v_neg])
         elif test_id in ['POSITIVE']:
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][
-                (self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_pos = self.orig_df[cols][
-                (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
+            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
             df = pd.concat([df_v_zero, df_v_pos])
         elif test_id in ['ALL_POS_OR_ALL_NEG']:
             col_name_1 = cols[0]
-            df_v_pos = self.orig_df[cols][
-                (self.orig_df[col_name_1] > 0)].head(n_examples // 2)
-            df_v_neg = self.orig_df[cols][
-                (self.orig_df[col_name_1] < 0)].head(n_examples // 2)
+            df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
+            df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples // 2)
             df = pd.concat([df_v_pos, df_v_neg])
         elif test_id in ['EVEN_MULTIPLE']:  # todo: this should cover many tests. cover null & not null, unless there are no nulls
             col_name_1, col_name_2 = cols[0], cols[1]
@@ -3101,6 +3154,18 @@ class DataConsistencyChecker:
                 df_v = self.orig_df[cols][(self.orig_df[target_col] == vals[i])].head(n_examples // num_vals)
                 dfs_arr.append(df_v)
             df = pd.concat(dfs_arr)
+        elif test_id in ['PREDICT_NULL_DT']:
+            col_target = cols[-1]
+            df_v_null = self.orig_df[cols][(self.orig_df[col_target].apply(is_missing))].head(n_examples // 2)
+            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_target].apply(is_missing))].head(n_examples // 2)
+            df = pd.concat([df_v_null, df_v_non_null])
+        elif test_id in ['C_IS_A_OR_B']:
+            df_both = self.orig_df[np.array(display_info['Same Column']) == 'BOTH'].head(n_examples // 3)
+            df_v1_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
+            df_v1_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v1_null) - (len(df_both) // 2))
+            df_v2_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
+            df_v2_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v2_null) - (len(df_both) // 2))
+            df = pd.concat([df_both, df_v1_null, df_v1_not_null, df_v2_null, df_v2_not_null])
 
         # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
         # create a df simply trying to reduce the number of Null values.
@@ -3157,10 +3222,13 @@ class DataConsistencyChecker:
         else:
             print_text(f"**Examples of values NOT flagged{consecutive_str}**:")
 
-        if show_consecutive:
-            vals = self.__get_sample_not_flagged(test_id, columns_set, group_results=True, is_patterns=is_patterns)
-        else:
-            vals = self.__get_sample_not_flagged(test_id, columns_set, group_results=False, is_patterns=is_patterns)
+        vals = self.__get_sample_not_flagged(
+            test_id,
+            columns_set,
+            group_results=show_consecutive,
+            is_patterns=is_patterns,
+            display_info=display_info
+        )
         self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns)
 
     def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
@@ -3278,17 +3346,22 @@ class DataConsistencyChecker:
         if test_id in ['BINARY_MATCHES_SUM']:
             df2 = self.orig_df[cols].copy()
             df2['SUM'] = self.numeric_vals_filled[cols[0]] + self.numeric_vals_filled[cols[1]]
-            s = sns.boxplot(data=df2, orient='h', y=cols[2], x='SUM')
-            s.set_title(f"{cols[2]} vs the SUM of {cols[0]} and {cols[1]}")
+
+            fig, ax = plt.subplots(nrows=1, ncols=3, sharey=True, figsize=(15, 4))
+            s = sns.boxplot(data=df2, orient='h', y=cols[2], x='SUM', ax=ax[0])
+            s.set_title(f"{cols[2]} vs \nthe SUM of {cols[0]} \nand \n{cols[1]}")
+
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[0], ax=ax[1])
+            s.set_title(f"{cols[2]} vs \n{cols[0]} \nAlone")
+
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1], ax=ax[2])
+            s.set_title(f"{cols[2]} vs \n{cols[1]} \nAlone")
             plt.show()
 
-            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[0])
-            s.set_title(f"{cols[2]} vs {cols[0]} Alone")
-            plt.show()
-
-            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1])
-            s.set_title(f"{cols[2]} vs {cols[1]} Alone")
-            plt.show()
+        if test_id in ['BINARY_TWO_OTHERS_MATCH']:
+            if (cols[0] in self.numeric_cols) and (cols[1] in self.numeric_cols):
+                s = sns.scatterplot(data=self.orig_df, x=cols[0], y=cols[1], hue=cols[2])
+                plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
             sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
@@ -3353,7 +3426,14 @@ class DataConsistencyChecker:
             df2 = self.orig_df[cols].copy()
             col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
             df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
+            if cols[1] in self.date_cols:
+                df2['Epoch'] = (df2[cols[1]] - datetime.datetime(1970, 1, 1)).dt.total_seconds()
+                sns.boxplot(data=df2, orient='h', y=cols[0], x='Epoch')
+                plt.xlabel(cols[1])
+                plt.xticks([])
+            else:
+                sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
+            plt.show()
 
             # Also draw a histogram of the relevant classes.
             results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -3378,6 +3458,8 @@ class DataConsistencyChecker:
                 for fv in flagged_vals:
                     s.axvline(fv, color='red')
                 s.set_title(f"Distribution of {cols[1]} where the first word of {cols[0]} is {v} (Flagged values in red)")
+                if cols[1] in self.date_cols:
+                    plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
                 plt.show()
 
         elif test_id in ['SMALL_AVG_RANK_PER_ROW', 'LARGE_AVG_RANK_PER_ROW']:
@@ -4055,7 +4137,7 @@ class DataConsistencyChecker:
             try:
                 upper_limit = q3 + (self.iqr_limit * (q3 - q1))
             except:
-                self.pper_limits_dict[col_name] = None
+                self.upper_limits_dict[col_name] = (None, None, None)
                 continue
             self. upper_limits_dict[col_name] = (upper_limit, q2, q3)
         return self.upper_limits_dict
@@ -4078,7 +4160,7 @@ class DataConsistencyChecker:
             try:
                 lower_limit = q1 - (self.iqr_limit * (q3 - q1))
             except:
-                self.lower_limits_dict[col_name] = None
+                self.lower_limits_dict[col_name] = (None, None, None)
                 continue
             self.lower_limits_dict[col_name] = (lower_limit, q1, q3)
         return self.lower_limits_dict
@@ -4472,6 +4554,7 @@ class DataConsistencyChecker:
             col_name_list=None,
             pattern_id_list=None,
             issue_id_list=None,
+            clear_code_tests=False,
             clear_all_patterns=False,
             clear_all_exceptions=False):
         """
@@ -4480,7 +4563,7 @@ class DataConsistencyChecker:
         further processing or to generate a report, or, for example, until all issues are acknowledged or understood,
         or until the set of results is zero.
 
-        There are several parameters that may be used to specifiy which patterns or exceptions to remove. Only one
+        There are several parameters that may be used to specify which patterns or exceptions to remove. Only one
         may be specified at a time.
 
         test_id_list: array of test IDs
@@ -4495,6 +4578,10 @@ class DataConsistencyChecker:
 
         issue_id_list: array of integers
             If set, this will remove the specified exceptions. This will not affect the set of patterns.
+
+        clear_code_tests: bool
+            If set, all patterns and exceptions related to all tests that are specifif to code and ID values will be
+            removed.
 
         clear_all_patterns: bool
             If set, this will remove all patterns. This will not affect the set of exceptions.
@@ -4520,6 +4607,8 @@ class DataConsistencyChecker:
             num_specfied += 1
         if pattern_id_list is not None:
             num_specfied += 1
+        if clear_code_tests:
+            num_specfied += 1
         if clear_all_patterns:
             num_specfied += 1
         if clear_all_exceptions:
@@ -4537,6 +4626,9 @@ class DataConsistencyChecker:
         if (self.exceptions_summary_df is None) or (self.test_results_df is None) or (self.exceptions_summary_df is None):
             print("There are no results to clear. Cannot execute function.")
             return
+
+        if clear_code_tests:
+            test_id_list = self.get_tests_for_codes()
 
         if test_id_list is not None:
             # patterns_arr
@@ -4866,15 +4958,15 @@ class DataConsistencyChecker:
         Patterns with exception:
             'pattern_history_df_str most_a' has a repeating pattern, with exceptions (a new value).
             'pattern_history_df_str most_b' has a repeating pattern, with exceptions (an existing value in the wrong
-                spot).
+                location).
             'pattern_history_df_num most_a' has a repeating pattern, with one exception
         Columns not flagged:
             'pattern_history_df_num not_1' has a trend, but it is no stronger than predicting the previous value
             'pattern_history_df_num not_2' has a trend, but it is no stronger than predicting the previous value
         """
         # Categorical test cases - repeating values
-        self.__add_synthetic_column('pattern_history_df_str all_a', ['a', 'b', 'c', 'd'] * (self.num_synth_rows // 4))
-        self.__add_synthetic_column('pattern_history_df_str most_a', ['a', 'b', 'c', 'd'] * (self.num_synth_rows // 4))
+        self.__add_synthetic_column('pattern_history_df_str all_a', ['a', 'a', 'b', 'c', 'd'] * (self.num_synth_rows // 5))
+        self.__add_synthetic_column('pattern_history_df_str most_a',['a', 'a', 'b', 'c', 'd'] * (self.num_synth_rows // 5))
         self.synth_df.loc[999, 'pattern_history_df_str most_a'] = 'x'
         self.__add_synthetic_column('pattern_history_df_str most_b', ['a', 'b', 'c', 'd'] * (self.num_synth_rows // 4))
         self.synth_df.loc[999, 'pattern_history_df_str most_b'] = 'a'
@@ -4885,10 +4977,9 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'pattern_history_df_num most_a'] = 10
 
         # Numeric test cases - trend
-        # todo: the DT can't beat just predicting the previous value
+        # The DT can't beat just predicting the previous value
         self.__add_synthetic_column('pattern_history_df_num not_1', np.arange(self.num_synth_rows))
         self.__add_synthetic_column('pattern_history_df_num not_2', np.arange(self.num_synth_rows))
-        self.synth_df.loc[999, 'pattern_history_df_num not_2'] = 10
 
     def __check_prev_values_dt(self, test_id):
         """
@@ -4910,9 +5001,6 @@ class DataConsistencyChecker:
             if col_name in self.numeric_cols:
                 df[col_name] = self.numeric_vals_filled[col_name].astype(float).fillna(sys.maxsize)
 
-            # todo: if we can create a good DT with 10 lags, see if can with less. Loop until use as few lags as
-            #  possible.
-
             # Create the lag features
             for i in range(1, look_back_range):
                 df[f"Lag_{i}"] = df[col_name].shift(i)
@@ -4929,9 +5017,12 @@ class DataConsistencyChecker:
             y_lag_1 = df_sample['Lag_1']
             y_train = df_sample[col_name]
 
-            x_train = x_train.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
-            y_lag_1 = y_lag_1.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
-            y_train = y_train.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+            x_train = x_train.replace([np.inf, -np.inf], sys.maxsize)
+            y_lag_1 = y_lag_1.replace([np.inf, -np.inf], sys.maxsize)
+            y_train = y_train.replace([np.inf, -np.inf], sys.maxsize)
+            x_train = x_train.fillna(sys.maxsize)
+            y_lag_1 = y_lag_1.fillna(sys.maxsize)
+            y_train = y_train.fillna(sys.maxsize)
 
             if col_name in self.string_cols or col_name in self.binary_cols or n_unique_vals <= look_back_range:
                 if self.orig_df[col_name].nunique() > look_back_range:
@@ -4953,12 +5044,12 @@ class DataConsistencyChecker:
                 y_train_numeric = y_train.map(encode_dict)
                 y_lag_1_numeric = y_lag_1.map(encode_dict)
 
-                # Allow the DT to create a rule for each value. Each rule may include multiple features in
-                # the decision path.
+                # Allow the DT to create a rule for each value. Each rule may include multiple features in the
+                # decision path.
                 clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()), random_state=0)
                 clf.fit(x_train, y_train_numeric)
 
-                # todo: predict on a smaller sample first
+                # Predict on a smaller sample first
                 y_pred = clf.predict(x_train)
                 # We do not use macro, as some rare classes may have poor f1 scores even for good trees.
                 f1 = f1_score(y_train_numeric, y_pred, average='micro')
@@ -4975,18 +5066,32 @@ class DataConsistencyChecker:
                 if f1_naive >= (f1 - 0.05):
                     continue
 
-                # Once we establish the accuracy on roughly 1000 rows, predict for the full column
-                test_df = df.iloc[look_back_range:]
-                x_test = test_df.drop(columns=[col_name])
-                y_test = test_df[col_name]
+                # Once we establish the accuracy on roughly 1000 rows, predict for the full column. Use as few lags
+                # as possible to get a good score.
+                for num_lags in range(1, 11):
+                    cols_used = [col_name]
+                    for i in range(num_lags):
+                        cols_used.append(f'Lag_{i+1}')
 
-                x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
-                y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+                    test_df = df.iloc[look_back_range:][cols_used]
+                    x_test = test_df.drop(columns=[col_name])
+                    y_test = test_df[col_name]
 
-                x_test = pd.get_dummies(x_test, columns=x_test.columns)
-                y_test_numeric = y_test.map(encode_dict)
+                    x_test = x_test.replace([np.inf, -np.inf], sys.maxsize)
+                    y_test = y_test.replace([np.inf, -np.inf], sys.maxsize)
+                    x_test = x_test.fillna(sys.maxsize)
+                    y_test = y_test.fillna(sys.maxsize)
 
-                y_pred = clf.predict(x_test)
+                    x_test = pd.get_dummies(x_test, columns=x_test.columns)
+                    y_test_numeric = y_test.map(encode_dict)
+
+                    clf = DecisionTreeClassifier(max_leaf_nodes=max(2, self.orig_df[col_name].nunique()), random_state=0)
+                    clf.fit(x_test, y_test_numeric)
+                    y_pred = clf.predict(x_test)
+
+                    f1 = f1_score(y_test_numeric, y_pred, average='micro')
+                    if f1 >= 0.9:
+                        break
 
                 test_series = [x == y or x in rare_values for x, y in zip(y_test_numeric, y_pred)]
                 test_series = [True]*look_back_range + test_series
@@ -5013,7 +5118,7 @@ class DataConsistencyChecker:
                 # Get the normalized MAE when using a decision tree
                 regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range, random_state=0)
                 regr.fit(x_train, y_train)
-                # todo: predict on a smaller sample first
+                # Predict on a smaller sample first
                 y_pred = regr.predict(x_train)
                 mae = metrics.median_absolute_error(y_train, y_pred)
                 if self.column_medians[col_name] != 0:
@@ -5031,20 +5136,35 @@ class DataConsistencyChecker:
 
                 # Test simply predicting the previous value
                 y_prev = y_train.shift(1)
-                # Element 0 will have NaN, so can not be evaluated.
+                # Element 0 will have NaN, so cannot be evaluated.
                 naive_mae = metrics.median_absolute_error(y_train[1:], y_prev[1:])
                 if mae > (naive_mae * 0.5):
                     continue
 
                 # Once we establish the accuracy on roughly 1000 rows, predict for the full column
-                test_df = df.iloc[look_back_range:]
-                x_test = test_df.drop(columns=[col_name])
-                y_test = test_df[col_name]
+                for num_lags in range(1, 11):
+                    cols_used = [col_name]
+                    for i in range(num_lags):
+                        cols_used.append(f'Lag_{i+1}')
 
-                # x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
-                # y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+                    test_df = df.iloc[look_back_range:][cols_used]
+                    x_test = test_df.drop(columns=[col_name])
+                    y_test = test_df[col_name]
 
-                y_pred = regr.predict(x_test)
+                    # x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+                    # y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
+
+                    regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range, random_state=0)
+                    regr.fit(x_test, y_test)
+                    y_pred = regr.predict(x_test)
+
+                    mae = metrics.median_absolute_error(y_test, y_pred)
+                    if self.column_medians[col_name] != 0:
+                        norm_mae = abs(mae / self.column_medians[col_name])
+                    else:
+                        norm_mae = np.inf
+                    if norm_mae <= 0.1:
+                        break
 
                 test_series = [True if y == 0 else (x/y) < (y / 10.0) for x, y in zip(y_test, y_pred)]
                 test_series = [True]*look_back_range + test_series
@@ -5083,6 +5203,9 @@ class DataConsistencyChecker:
                         # In some cases, '.0' is added to the end of the vals
                         rules = rules.replace(f"Lag_{i}_{val}.0 <= 0.50", f"The value {i} rows previously was not '{val}'")
                         rules = rules.replace(f"Lag_{i}_{val}.0 >  0.50", f"The value {i} rows previously was '{val}'")
+
+            # Correct grammar for single row case
+            rules = rules.replace('value 1 rows previously', 'value 1 row previously')
 
             # Check the tree is not trivial in that it has the same prediction in each leaf (the most common value)
             # todo: add this check for regression as well
@@ -5278,7 +5401,8 @@ class DataConsistencyChecker:
 
     def __check_same(self, test_id):
         """
-        Handling null values:
+        Handling null values: Matches if both values are Null. If one value is Null and the other is not, does not
+        count as a match.
         """
 
         def test_arrs(arr1, arr2, is_sample):
@@ -5291,7 +5415,7 @@ class DataConsistencyChecker:
             if count_most_freq_value_dict[col_name_2] > most_freq_limit:
                 return False
 
-            test_series = [x == y or is_missing(x) or is_missing(y) for x, y in zip(arr1, arr2)]
+            test_series = [x == y or (is_missing(x) and is_missing(y)) for x, y in zip(arr1, arr2)]
             if is_sample:
                 return test_series.count(False) < 1
             self.__process_analysis_binary(
@@ -5389,6 +5513,18 @@ class DataConsistencyChecker:
                 return False
             if arr2.isna().sum() > (len(arr2) * 0.75):
                 return False
+
+            # Skip columns that have few unique values
+            if is_sample:
+                if arr1.nunique() < math.sqrt(len(arr1)):
+                    return False
+                if arr2.nunique() < math.sqrt(len(arr2)):
+                    return False
+            else:
+                if arr1.nunique() < math.sqrt(self.num_rows):
+                    return False
+                if arr2.nunique() < math.sqrt(self.num_rows):
+                    return False
 
             same_indicator = [x == y or is_missing(x) or is_missing(y) for x, y in zip(arr1, arr2)]
 
@@ -5838,7 +5974,7 @@ class DataConsistencyChecker:
             test_series = diff_to_prev_arr < iqr
             test_series[0] = True
             if col_name in self.numeric_cols:
-                test_series = test_series | self.orig_df[col_name].isna() | self.orig_df[col_name].diff().isna()
+                test_series = test_series | self.orig_df[col_name].isna() | self.orig_df[col_name].astype(float).diff().isna()
             else:
                 test_series = test_series | self.orig_df[col_name].isna() | pd.to_datetime(self.orig_df[col_name]).diff().isna()
 
@@ -6249,8 +6385,8 @@ class DataConsistencyChecker:
 
             # Check where are many values on either side of zero. Zero may be rare simply because there are many
             # unique values.
-            num_below = len(self.orig_df[self.orig_df[col_name] < 0])
-            num_above = len(self.orig_df[self.orig_df[col_name] > 0])
+            num_below = len(self.orig_df[self.orig_df[col_name].astype(float) < 0])
+            num_above = len(self.orig_df[self.orig_df[col_name].astype(float) > 0])
             if (num_below > self.contamination_level) and (num_above > self.contamination_level):
                 continue
 
@@ -6524,6 +6660,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.75):
                 continue
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.75):
+                continue
+            if self.orig_df[col_name_1].tolist().count(0) > (self.num_rows * 0.75):
                 continue
             if self.orig_df[col_name_2].tolist().count(0) > (self.num_rows * 0.75):
                 continue
@@ -6924,7 +7062,7 @@ class DataConsistencyChecker:
             # Test first on a sample
             vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
             vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
-            sample_series = vals_arr_1 / vals_arr_2
+            sample_series = list(map(safe_div, vals_arr_1, vals_arr_2))
             nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
                 if statistics.median(sample_series) != 0 \
                 else 0.0
@@ -6939,7 +7077,7 @@ class DataConsistencyChecker:
 
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
             vals_arr_2 = self.numeric_vals_filled[col_name_2]
-            test_series_a = abs(vals_arr_1 / vals_arr_2)
+            test_series_a = list(map(safe_div, vals_arr_1, vals_arr_2))
             # Get the median absolute deviation of the ratios, normalized by the median
             nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
                 if np.nanmedian(test_series_a) != 0 \
@@ -7567,7 +7705,7 @@ class DataConsistencyChecker:
 
         for col_idx, col_name_1 in enumerate(self.numeric_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 50 == 0:
-                    print(f"  Processing column: {col_idx} of {len(self.numeric_cols)} numeric columns)")
+                    print(f"  Examining column: {col_idx} of {len(self.numeric_cols)} numeric columns)")
             # We use the first 50 rows of orig_df instead of sample_df, as it has few Null values.
             sample_col_1_zero_arr = [x == 0 for x in self.orig_df.head(50)[col_name_1]]
             col_1_zero_arr = [x == 0 for x in self.orig_df[col_name_1]]
@@ -7889,12 +8027,12 @@ class DataConsistencyChecker:
                 return False
 
             # Test the relationship on a small sample of the full data
-            test_series = self.sample_df[col_c] > (self.sample_df[col_a] + self.sample_df[col_b])
+            test_series = self.sample_df[col_c].astype(float) > (self.sample_df[col_a].astype(float) + self.sample_df[col_b].astype(float))
             num_not_matching = test_series.tolist().count(False)
             if num_not_matching > 1:
                 return False
 
-            test_series = self.numeric_vals_filled[col_c] > (self.numeric_vals_filled[col_a] + self.numeric_vals_filled[col_b])
+            test_series = self.numeric_vals_filled[col_c].astype(float) > (self.numeric_vals_filled[col_a] + self.numeric_vals_filled[col_b])
             test_series = test_series | self.orig_df[col_a].isna() | self.orig_df[col_b].isna() | self.orig_df[col_c].isna()
             if test_series.tolist().count(False) < self.contamination_level:
                 self.__process_analysis_binary(
@@ -8137,7 +8275,7 @@ class DataConsistencyChecker:
 
         for col_idx, col_name in enumerate(column_pos_arr):
             if (self.verbose == 2 and col_idx > 0 and col_idx % 10 == 0) or (self.verbose >= 3):
-                print(f"  Processing column: {col_idx} of {len(column_pos_arr)} positive numeric columns)")
+                print(f"  Examining column: {col_idx} of {len(column_pos_arr)} positive numeric columns)")
 
             similar_cols = similar_cols_dict[col_name]
             if len(similar_cols) == 0:
@@ -8182,9 +8320,9 @@ class DataConsistencyChecker:
                     subset = list(subset)
 
                     # Check all 3 sub-tests on a sample first
-                    sample_df = self.sample_df[subset]
+                    sample_df = self.sample_df[subset].astype(float)
                     col_sums = sample_df.sum(axis=1)
-                    sample_diffs_series = self.sample_df[col_name] - col_sums
+                    sample_diffs_series = self.sample_df[col_name].astype(float) - col_sums
                     sample_col_values = sample_diffs_series == 0
                     subtest_1_okay = sample_col_values.tolist().count(False) <= 1
 
@@ -8194,16 +8332,16 @@ class DataConsistencyChecker:
                     subtest_2_okay = sample_col_values.count(False) <= 1
 
                     # Check on a sample for 3rd sub-test
-                    ratios_series = self.sample_df[col_name] / col_sums
+                    ratios_series = self.sample_df[col_name].astype(float) / col_sums
                     median_ratio = ratios_series.median()
                     sample_col_values = [math.isclose(x, median_ratio) for x in ratios_series]
                     subtest_3_okay = sample_col_values.count(False) <= 1
 
                     # Check if col_name is the sum of subset
                     if subtest_1_okay or subtest_2_okay or subtest_3_okay:
-                        df = self.orig_df[subset]
+                        df = self.orig_df[subset].astype(float)
                         col_sums = df.sum(axis=1)
-                        diffs_series = self.orig_df[col_name] - col_sums
+                        diffs_series = self.orig_df[col_name].astype(float) - col_sums
                         col_values = diffs_series == 0
                         col_values = self.check_results_for_null(col_values, col_name, subset)
                         if col_values.tolist().count(False) < self.contamination_level:
@@ -8217,11 +8355,11 @@ class DataConsistencyChecker:
                             )
                             found_any = True
                             break
-                        too_small_arr = self.orig_df[col_name] > col_sums
+                        too_small_arr = self.orig_df[col_name].astype(float) > col_sums
                         if too_small_arr.tolist().count(True) > self.contamination_level:
                             know_failed_subsets[tuple(subset)] = True
                     else:
-                        too_small_arr = self.sample_df[col_name] > col_sums
+                        too_small_arr = self.sample_df[col_name].astype(float) > col_sums
                         if too_small_arr.tolist().count(True) > 1:
                             know_failed_subsets[tuple(subset)] = True
 
@@ -8249,7 +8387,7 @@ class DataConsistencyChecker:
                     # column col_name is the sum of the columns times a constant. We determine if the median value in
                     # the differences is this constant.
                     if subtest_3_okay:
-                        ratios_series = self.orig_df[col_name] / col_sums
+                        ratios_series = self.orig_df[col_name].astype(float) / col_sums
                         median_ratio = ratios_series.median()
                         col_values = [math.isclose(x, median_ratio) for x in ratios_series]
                         col_values = self.check_results_for_null(col_values, col_name, subset)
@@ -8554,7 +8692,7 @@ class DataConsistencyChecker:
 
         for col_idx, col_name in enumerate(column_pos_arr):
             if self.verbose >= 2:
-                print((f'  Processing column: {col_idx} of {len(column_pos_arr)} positive numeric columns (and all '
+                print((f'  Examining column: {col_idx} of {len(column_pos_arr)} positive numeric columns (and all '
                        f'numeric columns of similar ranges)'))
 
             similar_cols = similar_cols_dict[col_name]
@@ -9356,7 +9494,127 @@ class DataConsistencyChecker:
                     display_info={"cluster": cluster}
                 )
 
-    ##################################################################################################################
+    def __generate_predict_null(self):
+        """
+        Patterns without exceptions: the Null's in 'predict_null all' are consistently predictable from
+            'predict_null rand_b'
+        Patterns with exception: the Null's in 'predict_null most' are consistently predictable from
+            'predict_null rand_b'
+        """
+        self.__add_synthetic_column('predict_null rand_a', np.random.choice(['a', 'b', 'c', 'd'], self.num_synth_rows))
+        self.__add_synthetic_column('predict_null rand_b',
+                                    [random.randint(1, 1000) for _ in range(self.num_synth_rows)])
+        self.synth_df.at[999, 'predict_null rand_b'] = 985  # Set to be known to be over 800,
+        vals2 = np.random.randint(1, 1000, size=self.num_synth_rows)
+        vals2 = np.where(self.synth_df['predict_null rand_b'] > 800, None, vals2)
+        self.__add_synthetic_column('predict_null all', vals2)
+        self.__add_synthetic_column('predict_null most', vals2)
+        self.synth_df.at[999, 'predict_null most'] = 833
+
+    def __check_predict_null(self, test_id):
+
+        # Set the seed to ensure the DT behaves the same each execution of this test
+        random.seed(0)
+        np.random.seed(0)
+        is_missing_dict = self.get_is_missing_dict()
+
+        drop_features = []
+        categorical_features = []
+        for col_name in self.orig_df.columns:
+            if col_name in self.string_cols:
+                if self.orig_df[col_name].nunique() > 5:
+                    drop_features.append(col_name)
+                else:
+                    categorical_features.append(col_name)
+            if col_name in self.binary_cols:
+                categorical_features.append(col_name)
+
+        # Pre-calculate the number of missing values in each column
+        num_missing_dict = {}
+        for col_name in self.orig_df.columns:
+            if col_name in drop_features:
+                continue
+            num_missing_dict[col_name] = is_missing_dict[col_name].tolist().count(True)
+
+        for col_name in self.orig_df.columns:
+            target_col = is_missing_dict[col_name]
+
+            # Check if almost all Null or non-Null
+            if target_col.tolist().count(True) < math.sqrt(self.num_rows):
+                continue
+            if target_col.tolist().count(False) < math.sqrt(self.num_rows):
+                continue
+
+            x_df = self.orig_df.copy()
+
+            # Drop categorical columns with too many unique values
+            x_df = x_df.drop(columns=drop_features)
+
+            # Drop the target column
+            if col_name not in drop_features:
+                x_df = x_df.drop(columns=col_name)
+
+            # Drop any columns that have almost the same set of Null values as the target column
+            matching_cols = []
+            for col_name_2 in x_df.columns:
+                if abs(num_missing_dict[col_name] - num_missing_dict[col_name_2]) > self.contamination_level:
+                    continue
+                num_matching = len([1 for x, y in zip(is_missing_dict[col_name], is_missing_dict[col_name_2]) if x == y])
+                if num_matching > (self.num_rows - self.contamination_level):
+                    matching_cols.append(col_name_2)
+            x_df = x_df.drop(columns=matching_cols)
+
+            if len(x_df.columns) == 0:
+                continue
+
+            # One-hot encode any categorical X columns
+            use_categorical_features = categorical_features.copy()
+            if col_name in use_categorical_features:
+                use_categorical_features.remove(col_name)
+            use_categorical_features = [x for x in use_categorical_features if x in x_df.columns]
+            x_df = pd.get_dummies(x_df, columns=use_categorical_features)
+            x_df = x_df.fillna(sys.maxsize)
+
+            # Create, fit, and test the DT
+            clf = DecisionTreeClassifier(max_leaf_nodes=4, random_state=0)
+            clf.fit(x_df, target_col)
+            y_pred = clf.predict(x_df)
+            f1_dt = metrics.f1_score(target_col, y_pred, average='macro')
+
+            if f1_dt > 0.9:
+                rules = tree.export_text(clf)
+
+                # Clean the rules to use the original feature names. We go through in reverse order so we don't
+                # have, for example, feature_1 matching feature_11
+                cols = []
+                for c_idx, c_name in reversed(list(enumerate(x_df.columns))):
+                    rule_col_name = f'feature_{c_idx}'
+                    if rule_col_name in rules:
+                        orig_col = c_name
+                        for cat_col in categorical_features:
+                            if c_name.startswith(cat_col):
+                                orig_col = cat_col
+                        cols.append(orig_col)
+                        rules = rules.replace(rule_col_name, c_name)
+
+                # Some columns may be included multiple times. Put the columns used into a consistent, list without
+                # duplicates
+                cols = sorted(list(set(cols)))
+
+                # Clean the split points for categorical features to use the values, not 0.5
+                rules = self.get_decision_tree_rules_as_categories(rules, categorical_features)
+
+                test_series = (target_col == y_pred)
+                self.__process_analysis_binary(
+                    test_id,
+                    cols + [col_name],
+                    test_series,
+                    f'The Null values in column "{col_name}" are consistently predictable from {cols} based using a '
+                    f'decision tree with the following rules: \n{rules}',
+                    display_info={'Pred': pd.Series(y_pred)}
+                )
+
+##################################################################################################################
     # Data consistency checks for single date columns
     ##################################################################################################################
 
@@ -10716,7 +10974,7 @@ class DataConsistencyChecker:
                 continue
             vals_processed[col_vals_tuple] = True
             if self.verbose >= 2:
-                print(f"  Processing column: {col_idx} of {len(self.binary_cols)} binary columns) "
+                print(f"  Examining column: {col_idx} of {len(self.binary_cols)} binary columns) "
                       f"(and all other columns with values {col_vals_tuple}).")
             similar_cols = [col_name]
             for c_idx in range(col_idx + 1, len(self.binary_cols)):
@@ -11051,6 +11309,10 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'bin_match_others most'] = not self.synth_df.loc[999, 'bin_match_others most']
 
     def __check_binary_two_others_match(self, test_id):
+        """
+        Handling Null values: The two columns are considered a match if both are Null, and not o match if one, but not
+        both, is Null. Rows where the binary column is Null do not count for or against the pattern.
+        """
 
         def test_set(bin_col, col_name_2, col_name_3):
             nonlocal sub_df_0, sub_df_1
@@ -11076,8 +11338,8 @@ class DataConsistencyChecker:
             else:
                 test_series_0 = sample_sub_df_0[col_name_2] == sample_sub_df_0[col_name_3]
 
-            # Before calculating test_series_1, determine if test_series_0 is mostly True or mostly False. If not
-            # we can stop.
+            # Before calculating test_series_1, determine if test_series_0 is mostly True or mostly False. If so,
+            # we can return.
             if (test_series_0.tolist().count(True) > 2) and (test_series_0.tolist().count(False) > 2):
                 return
 
@@ -11146,7 +11408,9 @@ class DataConsistencyChecker:
             if not test_series:
                 return
 
-            test_series = test_series | self.orig_df[bin_col].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_3].isna()
+            test_series = test_series | \
+                          self.orig_df[bin_col].isna() | \
+                          (self.orig_df[col_name_2].isna() & self.orig_df[col_name_3].isna())
 
             self.__process_analysis_binary(
                 test_id,
@@ -11696,16 +11960,19 @@ class DataConsistencyChecker:
         Patterns without exceptions: 'last_char_small_set_all' consistently ends with one of a, b, c
         Patterns with exception: 'last_char_small_set_most' consistently ends with one of a, b, c, with one exception
         """
-        self.__add_synthetic_column('last_char_small_set_rand', [[''.join(random.choice(alphanumeric)
-            for _ in range(5))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('last_char_small_set_all',  [[''.join(random.choice(['a', 'b', 'c'])
-            for _ in range(5))][0] for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('last_char_small_set_most', [[''.join(random.choice(['a', 'b', 'c'])
-            for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcde'])
+        self.__add_synthetic_column(
+            'last_char_small_set_rand',
+            [[''.join(random.choice(alphanumeric) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'last_char_small_set_all',
+            [[''.join(random.choice(['a', 'b', 'c']) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column(
+            'last_char_small_set_most',
+            [[''.join(random.choice(['a', 'b', 'c']) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcde'])
 
     def __check_last_char_small_set(self, test_id):
         """
-        This test applies to ID and code values, where the first characters may have a specific meaning.
+        This test applies to ID and code values, where the last characters may have a specific meaning.
         """
 
         for col_name in self.string_cols:
@@ -11717,9 +11984,10 @@ class DataConsistencyChecker:
 
             test_series = pd.Series(
                 [str(x)[-1] if (not y) and (len(x) > 0) else None
-                 for x, y in zip(self.orig_df[col_name], self.orig_df[col_name].isna())])
+                 for x, y in zip(self.orig_df[col_name].str.strip(), self.orig_df[col_name].isna())])
             num_non_null_vals = self.orig_df[col_name].notna().sum()
             counts_series = test_series.value_counts(normalize=False)
+
             # Check if there's a small set of characters that make up the bulk of the values
             count_most_common = np.where(
                 counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.contamination_level))[0]
@@ -11828,7 +12096,7 @@ class DataConsistencyChecker:
 
         for col_idx, col_name in enumerate(self.string_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 100 == 0:
-                print(f"  Processing column {col_idx} of {len(self.string_cols)} string columns")
+                print(f"  Examining column {col_idx} of {len(self.string_cols)} string columns")
 
             # Skip columns that have mostly a single character
             value_lens_arr = pd.Series(self.orig_df[col_name].astype(str).str.len())
@@ -12247,14 +12515,15 @@ class DataConsistencyChecker:
         def get_str_format(x):
             if x is None:
                 return ""
-            new_str = ' '  # Add a space just to simplify tests for the previous character. Removed later.
+            x = x.strip()  # Remove leading and trailing spaces
+            new_str = ' '  # Add a space to simplify tests for the previous character. Removed later.
             for c in x:
                 if c.isdigit() or c.isalpha():
                     if new_str[-1] != 'X':
                         new_str += 'X'
                 else:
                     new_str += c
-            new_str = new_str[1:]  # strip the space added at the start
+            new_str = new_str[1:]  # Strip the space added at the start
             return new_str
 
         for col_name in self.string_cols:
@@ -13661,18 +13930,22 @@ class DataConsistencyChecker:
 
     def __generate_same_special_chars(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: "same_special all" contains the same special characters as "same_special rand_b"
+        Patterns with exception: "same_special most" contains the same special characters as "same_special rand_b"
+            with one exception. Also, "same_special most" contains the same special characters as "same_special all"
+            with one exception.
         """
-        self.__add_synthetic_column('same_special rand_a', [''.join(np.random.choice(['$', '%', '#', '@', '!'], 10))
-                                                        for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('same_special all', self.synth_df['same_special rand_a'].str[:1] +
+        self.__add_synthetic_column(
+            'same_special rand_a',
+            [''.join(np.random.choice(['$', '%', '#', '@', '!'], 10)) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('same_special rand_b', self.synth_df['same_special rand_a'].str[:1] +
+                                    ''.join(np.random.choice(list(string.ascii_lowercase), 3)))
+        self.__add_synthetic_column('same_special all', self.synth_df['same_special rand_b'].str[:] +
                                     ''.join(np.random.choice(list(string.ascii_lowercase), 10)))
         self.__add_synthetic_column('same_special most', self.synth_df['same_special all'])
         self.synth_df.loc[999, 'same_special most'] = '&&^%'
 
     def __check_same_special_chars(self, test_id):
-        # todo: in display, add a column listing the special chars
         num_pairs, pairs = self.__get_string_column_pairs_unique()
         if num_pairs > self.max_combinations:
             if self.verbose >= 1:
@@ -13709,7 +13982,11 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_1, col_name_2],
                 test_series,
-                f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same special characters'
+                f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same special characters',
+          display_info={
+                    "Special Chars A": [str(list(set(x)))[1:-1] for x in special_col_1],
+                    "Special Chars B": [str(list(set(x)))[1:-1] for x in special_col_2]
+                }
             )
 
     def __generate_a_prefix_of_b(self):
@@ -14232,6 +14509,21 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('large_given_prefix most', self.synth_df['large_given_prefix all'])
         self.synth_df.loc[999, 'large_given_prefix most'] = 290
 
+        # Date columns
+        dates_arr = []
+        for i in range(100):
+            y = np.random.randint(1990, 2025, 1)[0]
+            dates_arr.append(datetime.datetime.strptime(f"01-7-{y}", "%d-%m-%Y"))
+        for i in range(100):
+            y = np.random.randint(1980, 1989, 1)[0]
+            dates_arr.append(datetime.datetime.strptime(f"01-7-{y}", "%d-%m-%Y"))
+        for i in range(self.num_synth_rows - 200):
+            y = np.random.randint(1970, 1979, 1)[0]
+            dates_arr.append(datetime.datetime.strptime(f"01-7-{y}", "%d-%m-%Y"))
+        self.__add_synthetic_column('large_given_prefix date_all', dates_arr)
+        self.__add_synthetic_column('large_given_prefix date_most', self.synth_df['large_given_prefix date_all'])
+        self.synth_df.loc[999, 'large_given_prefix date_most'] = datetime.datetime.strptime(f"01-7-1986", "%d-%m-%Y")
+
     def __check_large_given_prefix(self, test_id):
         # Determine if there are too many combinations to execute
         total_combinations = len(self.string_cols) * (len(self.numeric_cols) + len(self.date_cols))
@@ -14256,7 +14548,7 @@ class DataConsistencyChecker:
             col_vals = self.orig_df[col_name_1].astype(str).apply(replace_special_with_space)
 
             # Check the column's values are usually more than 1 word
-            word_arr = col_vals.str.split() # todo: call self.get_word_counts_dict()
+            word_arr = col_vals.str.split()  # todo: call self.get_word_counts_dict()
             word_counts_arr = pd.Series([len(x) for x in word_arr])
             if word_counts_arr.quantile(0.75) <= 1:
                 continue
@@ -14322,7 +14614,8 @@ class DataConsistencyChecker:
                         q1 = pd.to_datetime(sub_df[col_name_2]).quantile(0.25, interpolation='midpoint')
                         q3 = pd.to_datetime(sub_df[col_name_2]).quantile(0.75, interpolation='midpoint')
                         try:
-                            upper_limit_subset = q3 + (self.iqr_limit * (q3 - q1))
+                            # Use a coeffiecient of 1.5 for dates, which tend to vary much less than numeric values.
+                            upper_limit_subset = q3 + (1.5 * (q3 - q1))
                         except:
                             continue
 
@@ -14604,8 +14897,9 @@ class DataConsistencyChecker:
             for col_name_3 in self.numeric_cols + self.date_cols:
                 test_series = [True] * self.num_rows
                 col_upper_limit, col_q2, col_q3 = upper_limits_dict[col_name_3]
-                col_q2_limit = col_q2 * 0.9
-                col_q3_limit = col_q3 * 0.9
+                if col_name_3 in self.numeric_cols:
+                    col_q2_limit = col_q2 * 0.9
+                    col_q3_limit = col_q3 * 0.9
 
                 # found_many is set to True if we find any subset where many rows are flagged. In this case, we end
                 # early, as exceptions are only flagged if they are few.
@@ -14899,7 +15193,7 @@ class DataConsistencyChecker:
         # are correlated when holding the values in the string/binary column constant.
         for col_idx, col_cond in enumerate(self.string_cols + self.binary_cols):
             if self.verbose >= 2:
-                print((f" Examining column {col_idx} of {len(self.string_cols + self.binary_cols)} string and binary "
+                print((f"  Examining column {col_idx} of {len(self.string_cols + self.binary_cols)} string and binary "
                        f"columns"))
             vals = self.orig_df[col_cond].unique()
             if len(vals) > 10:
@@ -15146,6 +15440,9 @@ class DataConsistencyChecker:
         Given a set of columns, referred to as Column A, Column B, and Column C, check if Column C is consistently
         the same value as in either Column A or Column B, but not consistently the same as Column A or as Column B.
         This is done for string, numeric, and date columns, but not binary.
+
+        Handling null values: A and C are considered a match if both are Null, and not a match if one, but not both,
+        is Null. Similar for B and C.
         """
         def check_triple():
             if (col_name_c == col_name_a) or (col_name_c == col_name_b):
@@ -15174,9 +15471,9 @@ class DataConsistencyChecker:
                 return
 
             # Test if either A or B is almost never equal to C
-            if cols_same_count_dict[tuple(sorted([col_name_a, col_name_c]))] < self.contamination_level:
+            if cols_same_count_dict[tuple(sorted([col_name_a, col_name_c]))] < math.sqrt(self.num_rows):
                 return
-            if cols_same_count_dict[tuple(sorted([col_name_b, col_name_c]))] < self.contamination_level:
+            if cols_same_count_dict[tuple(sorted([col_name_b, col_name_c]))] < math.sqrt(self.num_rows):
                 return
 
             # Test on a sample
@@ -15202,7 +15499,17 @@ class DataConsistencyChecker:
                     [col_name_a, col_name_b, col_name_c],
                     test_series,
                     (f'The values in "{col_name_c}" are consistently the same as those in either "{col_name_a}" '
-                     f'or "{col_name_b}".')
+                     f'or "{col_name_b}".'),
+                    display_info={'Same Column': [
+                        "BOTH" if ((a == b) or (a_na and b_na))
+                        else col_name_a if ((c == a) or (c_na and a_na))
+                        else col_name_b if ((c == b) or (c_na and b_na))
+                        else "NONE"
+                        for a, b, c, a_na, b_na, c_na in
+                        zip(self.orig_df[col_name_a], self.orig_df[col_name_b], self.orig_df[col_name_c],
+                            self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
+                            self.orig_df[col_name_c].isna())]
+                    }
                 )
                 reported_dict[columns_tuple] = True
 
@@ -15215,7 +15522,7 @@ class DataConsistencyChecker:
         most_freq_value_dict = self.get_count_most_freq_value_dict()
         most_freq_value_limit = self.num_rows * 0.9
 
-        # Check pairs of numeric columns
+        # Check triples of numeric columns
         num_combos = calc_num_combos(len(self.numeric_cols))
         if num_combos > self.max_combinations:
             if self.verbose >= 1:
@@ -15231,7 +15538,7 @@ class DataConsistencyChecker:
                 for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                     check_triple()
 
-        # Check pairs of string columns
+        # Check triples of string columns
         num_combos = calc_num_combos(len(self.string_cols))
         if num_combos > self.max_combinations:
             if self.verbose >= 1:
@@ -15247,7 +15554,7 @@ class DataConsistencyChecker:
                 for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
                     check_triple()
 
-        # Check pairs of date columns
+        # Check triples of date columns
         num_combos = calc_num_combos(len(self.date_cols))
         if num_combos > self.max_combinations:
             if self.verbose >= 1:
@@ -15427,7 +15734,7 @@ class DataConsistencyChecker:
         for col_idx_1 in range(len(self.orig_df.columns)-3):
             col_name_1 = self.orig_df.columns[col_idx_1]
             if self.verbose >= 2 and col_idx_1 > 0 and col_idx_1 % 25 == 0:
-                print(f"  Processing column {col_idx_1} of {len(self.orig_df.columns)} columns")
+                print(f"  Examining column {col_idx_1} of {len(self.orig_df.columns)} columns")
             for col_idx_2 in range(col_idx_1+1, len(self.orig_df.columns)):
                 col_name_2 = self.orig_df.columns[col_idx_2]
                 if column_types_dict[col_name_1] != column_types_dict[col_name_2]:
