@@ -804,7 +804,7 @@ class DataConsistencyChecker:
                                          True, True, False, False),
 
             # Tests on one string/binary column and two numeric
-            'CORRELATED_GIVEN_VALUE':   (('Check if two numeric columns are correlated if conditioning on a string or'
+            'CORRELATED_GIVEN_VALUE':   (('Check if two numeric columns are correlated if conditioning on a string or '
                                          'binary column.'),
                                          self.__check_corr_given_val, self.__generate_corr_given_val,
                                          True, True, False, False),
@@ -2077,7 +2077,7 @@ class DataConsistencyChecker:
                         return
 
                     if row_id_list:
-                        if row_id_list_df[self.get_results_col_name(test_id, columns_set)].any() == False:
+                        if not row_id_list_df[self.get_results_col_name(test_id, columns_set)].any():
                             continue
 
                     # If columns_set_arr is specified, only report issues with some overlap of columns with
@@ -2111,10 +2111,10 @@ class DataConsistencyChecker:
                     else:
                         print_text("A strong pattern, and exceptions to the pattern, were found.\n")
                     if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
-                                   'GROUPED_STRINGS', 'PREDICT_NULL_DT']:
+                                   'GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC', 'PREDICT_NULL_DT']:
                         # These display a decision tree or other special output, so the formatting must be preserved.
                         print_text(f"**Description**:")
-                        print(sub_summary.iloc[0]['Description of Pattern'])
+                        print_text(sub_summary.iloc[0]['Description of Pattern'])
                     else:
                         multiline_desc = wrap(sub_summary.iloc[0]['Description of Pattern'], 100)
                         print_text(f"**Description**: {'<br>'.join(multiline_desc)}")
@@ -2158,7 +2158,7 @@ class DataConsistencyChecker:
                                        'GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC']:
                             print()
                             print_text(("Showing the first flagged example with the 5 rows before and 5 rows after (if "
-                                   "available):"))
+                                        "available):"))
                             self.__draw_sample_set_rows(
                                 flagged_df[display_cols],
                                 test_id,
@@ -2597,7 +2597,8 @@ class DataConsistencyChecker:
                 ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
 
             if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
-                xylim = (min(df[col_name_1].min(), df[col_name_2].min()), max(df[col_name_1].max(), df[col_name_2].max()))
+                xylim = (min(df[col_name_1].astype(float).min(), df[col_name_2].astype(float).min()),
+                         max(df[col_name_1].astype(float).max(), df[col_name_2].astype(float).max()))
 
             if test_id in ['RARE_COMBINATION']:
                 # Use a kde plot as the background
@@ -2982,8 +2983,11 @@ class DataConsistencyChecker:
         elif test_id in ['C_IS_A_OR_B']:
             df['SAME AS'] = pd.Series(display_info['Same Column']).loc[df.index]
         elif test_id in ['SAME_SPECIAL_CHARS']:
-            df['SPECIAL CHARS 1'] = pd.Series(display_info['Special Chars A']).loc[df.index]
-            df['SPECIAL CHARS 2'] = pd.Series(display_info['Special Chars B']).loc[df.index]
+            df['SPECIAL CHARS A'] = pd.Series(display_info['Special Chars A']).loc[df.index]
+            df['SPECIAL CHARS B'] = pd.Series(display_info['Special Chars B']).loc[df.index]
+        elif test_id in ['TWO_PAIRS']:
+            df['A and B Match'] = pd.Series(display_info['match_1_2_arr']).loc[df.index]
+            df['C and D Match'] = pd.Series(display_info['match_3_4_arr']).loc[df.index]
 
         df = df.sort_index()
         if is_notebook():
@@ -3003,8 +3007,8 @@ class DataConsistencyChecker:
             display_info=display_info,
             is_patterns=False)
 
-    def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, group_results=False, is_patterns=False,
-                                 display_info=None):
+    def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, show_consecutive=False, sort_col=None,
+                                 is_patterns=False, display_info=None):
         """
         Return a random set of n_examples values from the specified columns that were not flagged by the
         specified test in the specified columns. This handles specific tests by balancing the the rows displayed
@@ -3019,8 +3023,11 @@ class DataConsistencyChecker:
         n_examples: int
             The maximum number of examples to return.
 
-        group_results: bool
+        show_consecutive: bool
             If True, this will return consecutive rows. This used for tests where row order is relevant.
+
+        sort_col: string
+            If specified, sort by this before returning a consecutive set of rows, if show_consecutive is True.
 
         is_patterns: bool
             Set True if this is being called to display examples of a pattern, in which case there are no exceptions.
@@ -3166,6 +3173,10 @@ class DataConsistencyChecker:
             df_v2_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
             df_v2_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v2_null) - (len(df_both) // 2))
             df = pd.concat([df_both, df_v1_null, df_v1_not_null, df_v2_null, df_v2_not_null])
+        elif test_id in ['TWO_PAIRS']:
+            df_match = self.orig_df[np.array(display_info['match_1_2_arr']) == True].head(n_examples // 2)
+            df_not_match = self.orig_df[np.array(display_info['match_1_2_arr']) == False].head(n_examples // 2)
+            df = pd.concat([df_match, df_not_match])
 
         # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
         # create a df simply trying to reduce the number of Null values.
@@ -3192,9 +3203,12 @@ class DataConsistencyChecker:
         row_idxs = df.index
         if not is_patterns:
             df = self.orig_df.loc[row_idxs][list(self.col_to_original_cols_dict[results_col_name])]
-        if group_results:
+        if show_consecutive:
             start_point = np.random.randint(0, len(df)-n_examples)
-            return df.iloc[start_point: start_point + n_examples]
+            if sort_col:
+                return df.sort_values(sort_col).iloc[start_point: start_point + n_examples]
+            else:
+                return df.iloc[start_point: start_point + n_examples]
         else:
             return df.sample(n=min(len(df), n_examples), random_state=0)
 
@@ -3210,11 +3224,19 @@ class DataConsistencyChecker:
             return
 
         show_consecutive = test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC',
-                                       'COLUMN_TENDS_ASC','COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM',
+                                       'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM',
                                        'GROUPED_STRINGS_BY_NUMERIC']
+
+        sort_col = None
+        if test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
+            sort_col = cols[0]
+
         consecutive_str = ""
         if show_consecutive:
-            consecutive_str = " (showing a consecutive set of rows)"
+            sort_msg = ""
+            if sort_col:
+                sort_msg = f' sorted by {sort_col}'
+            consecutive_str = f" (showing a consecutive set of rows{sort_msg})"
 
         print()
         if is_patterns:
@@ -3225,7 +3247,8 @@ class DataConsistencyChecker:
         vals = self.__get_sample_not_flagged(
             test_id,
             columns_set,
-            group_results=show_consecutive,
+            show_consecutive=show_consecutive,
+            sort_col=sort_col,
             is_patterns=is_patterns,
             display_info=display_info
         )
@@ -7471,6 +7494,12 @@ class DataConsistencyChecker:
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
+            # Skip where the columns have many null values
+            if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.5):
+                continue
+            if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.5):
+                continue
+
             # This is more robust than checking the cumulative sum, which can be thrown off by missing or
             # inaccurate values.
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
@@ -9512,6 +9541,13 @@ class DataConsistencyChecker:
         self.synth_df.at[999, 'predict_null most'] = 833
 
     def __check_predict_null(self, test_id):
+        """
+        This creates a set of binary classifiers, in the form of small, interpretable decision trees, to predict the
+        null values in each column. Each model uses all other columns, other than those that have Null values in
+        approximately the same rows. The MATCHED_MISSING test is intended to detect where two or more columns have
+        missing values in the same rows. Often datasets have multiple columns with in-sync missing values. This test,
+        however, attempts to predict those missing values from the other columns that are not in sync.
+        """
 
         # Set the seed to ensure the DT behaves the same each execution of this test
         random.seed(0)
@@ -12804,7 +12840,7 @@ class DataConsistencyChecker:
                 test_series,
                 (f'The values in column "{col_name}" have word count with 25th percentile {q1} words and 75th '
                  f'percentile {q3} words'),
-                f' Flagging any values with over {upper_limit} words.',
+                f' Flagging any values with over {math.floor(upper_limit)} words.',
                 allow_patterns=False
             )
 
@@ -13008,11 +13044,15 @@ class DataConsistencyChecker:
                 for idx in idxs:
                     test_series[self.orig_df.sort_values(sort_col).index[idx]] = False
 
+        sort_msg = ""
+        if sort_col:
+            sort_msg = f" when sorted by {sort_col}"
+
         self.__process_analysis_binary(
             test_id,
             pattern_cols,
             test_series,
-            f'The values in "{col_name}" are consistently grouped together. The overall order is: {groups_str}'
+            f'The values in "{col_name}" are consistently grouped together{sort_msg}. The overall order is: {groups_str}'
         )
 
     def __check_grouped_strings(self, test_id):
@@ -13940,8 +13980,9 @@ class DataConsistencyChecker:
             [''.join(np.random.choice(['$', '%', '#', '@', '!'], 10)) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('same_special rand_b', self.synth_df['same_special rand_a'].str[:1] +
                                     ''.join(np.random.choice(list(string.ascii_lowercase), 3)))
+        # Test that Á is not considered a special character.
         self.__add_synthetic_column('same_special all', self.synth_df['same_special rand_b'].str[:] +
-                                    ''.join(np.random.choice(list(string.ascii_lowercase), 10)))
+                                    'Á'.join(np.random.choice(list(string.ascii_lowercase), 10)))
         self.__add_synthetic_column('same_special most', self.synth_df['same_special all'])
         self.synth_df.loc[999, 'same_special most'] = '&&^%'
 
@@ -13983,7 +14024,7 @@ class DataConsistencyChecker:
                 [col_name_1, col_name_2],
                 test_series,
                 f'Columns "{col_name_1}" and "{col_name_2}" consistently share the same special characters',
-          display_info={
+                display_info={
                     "Special Chars A": [str(list(set(x)))[1:-1] for x in special_col_1],
                     "Special Chars B": [str(list(set(x)))[1:-1] for x in special_col_2]
                 }
@@ -14208,31 +14249,45 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        n_unique_dict = self.get_nunique_dict()
+        is_missing_dict = self.get_is_missing_dict()
+
+        percentiles_dict = {}
+        for col_name in self.string_cols:
+            percentiles_dict[col_name] = self.orig_df[col_name].rank(pct=True)
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
 
-            if self.orig_df[col_name_1].nunique(dropna=True) < 3:
+            # Check both columns have a significant number of unique values
+            if n_unique_dict[col_name_1] < 3:
                 continue
-            if self.orig_df[col_name_2].nunique(dropna=True) < 3:
+            if n_unique_dict[col_name_2] < 3:
                 continue
-            vals_arr_1 = pd.Series([x for x in self.orig_df[col_name_1] if not is_missing(x)])
-            vals_arr_2 = pd.Series([x for x in self.orig_df[col_name_2] if not is_missing(x)])
-            if vals_arr_1.nunique() <= 3:
+
+            # Check neither column has too many missing values
+            if is_missing_dict[col_name_1].sum() > (self.num_rows * 0.75):
                 continue
-            if vals_arr_2.nunique() <= 3:
+            if is_missing_dict[col_name_2].sum() > (self.num_rows * 0.75):
                 continue
-            if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.75):
+
+            # Test first on a sample
+            vals_arr_1 = self.sample_df[col_name_1].astype(str)
+            vals_arr_2 = self.sample_df[col_name_2].astype(str)
+            spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
+            if spearancorr < 0.9:
                 continue
-            if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.75):
-                continue
+
+            vals_arr_1 = self.orig_df[col_name_1].astype(str)
+            vals_arr_2 = self.orig_df[col_name_2].astype(str)
 
             # The class variable, self.spearman_corr, covers only numeric columns, so we calculate the correlation here.
             spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
 
             if spearancorr >= 0.95:
-                col_1_percentiles = self.orig_df[col_name_1].rank(pct=True)
-                col_2_percentiles = self.orig_df[col_name_2].rank(pct=True)
+                col_1_percentiles = percentiles_dict[col_name_1]
+                col_2_percentiles = percentiles_dict[col_name_2]
 
                 # Test for positive correlation
                 test_series = np.array([abs(x-y) < 0.1 for x, y in zip(col_1_percentiles, col_2_percentiles)])
@@ -15687,20 +15742,6 @@ class DataConsistencyChecker:
 
     def __check_two_pairs(self, test_id):
 
-        # # Determine if there are too many combinations to execute
-        # num_numeric = len(self.numeric_cols)
-        # num_string = len(self.string_cols)
-        # num_binary = len(self.binary_cols)
-        # num_date = len(self.date_cols)
-        # num_pairs = math.comb(num_numeric, 2) + math.comb(num_string, 2) + math.comb(num_binary, 2) + \
-        #             math.comb(num_date, 2)
-        # num_combinations = (num_pairs * (num_pairs - 1)) / 2
-        # if num_combinations > self.max_combinations:
-        #     if self.verbose >= 1:
-        #         print((f"  Skipping testing pairs of pairs of columns. There are {num_combinations:,} combinations. "
-        #                f"max_combinations is currently set to {self.max_combinations:,}."))
-        #     return
-
         # Get the column type of each column
         column_types_dict = {}
         for col_name in self.binary_cols:
@@ -15712,18 +15753,18 @@ class DataConsistencyChecker:
         for col_name in self.date_cols:
             column_types_dict[col_name] = 3
 
-        is_na_dict = {}
-        for col_name in self.orig_df.columns:
-            is_na_dict[col_name] = self.orig_df[col_name].isna()
-
         sample_is_na_dict = {}
         for col_name in self.orig_df.columns:
             sample_is_na_dict[col_name] = self.sample_df[col_name].isna()
 
+        is_na_dict = {}
+        for col_name in self.orig_df.columns:
+            is_na_dict[col_name] = self.orig_df[col_name].isna()
+
         # Set the minimum number of rows where 2 columns must match and, also, must not match. We require a minimum
         # amount of both.
-        match_okay_limit = self.num_rows / 10.0
         match_sample_okay_limit = len(self.sample_df) / 10.0
+        match_okay_limit = self.num_rows / 10.0
 
         # To avoid calculating the matching for pairs of columns multiple times, we cache their matching.
         sample_pairs_match_bool_dict = {}
@@ -15830,10 +15871,15 @@ class DataConsistencyChecker:
                             test_id,
                             [col_name_1, col_name_2, col_name_3, col_name_4],
                             test_series,
-                            (f'Columns "{col_name_1}" and "{col_name_2}" have equal values in the same rows as '
-                             f'"{col_name_3}" and "{col_name_4}"')
-                        ) # todo: give stats about how often 1==2, and 3==4 and 1!=2.
-                        # todo: when list exaples, give examples where match & where don't
+                            (f'Columns "{col_name_1}" and "{col_name_2}" match {match_1_2_arr.count(True)} times and '
+                             f'mismatch {match_1_2_arr.count(False)} times. '
+                             f'Columns "{col_name_3}" and "{col_name_4}" match {match_3_4_arr.count(True)} times and '
+                             f'mismatch {match_3_4_arr.count(False)} times. '
+                             f'Columns "{col_name_1}" and "{col_name_2}" have equal values in the same rows as '
+                             f'"{col_name_3}" and "{col_name_4}"'
+                             ),
+                            display_info={'match_1_2_arr': match_1_2_arr, 'match_3_4_arr': match_3_4_arr}
+                        )
 
     ##################################################################################################################
     # Data consistency checks for sets of columns of any type
