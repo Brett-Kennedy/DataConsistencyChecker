@@ -167,6 +167,11 @@ We may look at each test as covering one of three cases related to patterns: 1) 
 ## Sort Order for Examined Data
 Where applicable, the dataframe should be sorted before running any tests. In many cases, there is no natural order to the data, but where there is, several of the tests check for patterns such as columns containing consistently increasing or decreasing values, repeating patterns in columns, and so on. Where the data is, for example, collected from SQL before running DataConsistencyChecker, the row order may other than the natural order of the data, and sorting by the relevant columns first will be useful.
 
+## Code / ID values
+Some tests on string columns are specific to columns with code or ID values, such that the individual characters in the values may have meaning. For example, with value X7333, it may be relevant that the first character is an 'X', or that the subsequent characters are 4 numeric characters. Or if two columns in a row have values X39 and X42, while another row has BB and BA, it may be relevant that in the first row, both start with X and both have two numeric digits, while the two values in the next row both have two uppercase alphabetic values, both starting with B. 
+
+Where it is known that no columns represent ID or code values, these tests may be skipped, setting include_code_tests to False in check_data_quality(). As well, clear_results() may be called with clear_code_tests set to True to clear any results related to these tests if check_data_quality() is called including them, but subsequent evaluation finds no meaningful patterns of this type. The API get_tests_for_codes() may be called to get a list of the tests of this type.  
+
 ## Synthetic Data
 The tool provides an API to generate synthetic data, which has been designed to provide columns that will be flagged by the tests, such that each test flags at least one column or set of columns. This may be useful for new users to help understand the tests, as they provide useful examples, and may be altered to determine when specifically the tests flag or do not flag patterns. The synthetic data is also used by the unit tests to help ensure consistent behaviour as the tests are expanded and improved. 
 
