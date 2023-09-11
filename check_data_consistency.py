@@ -6154,21 +6154,33 @@ class DataConsistencyChecker:
 
     def __generate_few_neighbors(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: None. This test does not support patterns.
+        Patterns with exception: values in 'few neighbors most' are consistently close to their neighbors, with one
+            exception. Similar for 'few neighbors date_most'.
         """
         self.__add_synthetic_column('few neighbors rand',
                                     [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('few neighbors all',
-                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000)
-                                                                                                            for _ in range(100)])
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
+                                    [random.randint(10_000, 20_000) for _ in range(100)])
         self.__add_synthetic_column('few neighbors most',
-                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] + [random.randint(10_000, 20_000)
-                                                                                                            for _ in range(99)] + [5000])
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
+                                    [random.randint(10_000, 20_000) for _ in range(99)] + [5000])
+
+        date_1 = datetime.datetime.strptime("01-7-2018", "%d-%m-%Y")
+        date_2 = datetime.datetime.strptime("01-7-2025", "%d-%m-%Y")
+        self.__add_synthetic_column('few neighbors date_most',
+            [date_1 + relativedelta(days=(i + np.random.randint(-50, 50))) for i in range(self.num_synth_rows-100)] +
+            [date_2 + relativedelta(days=(i + np.random.randint(-50, 50))) for i in range(99)] +
+            [datetime.datetime.strptime("01-7-2023", "%d-%m-%Y")])
 
     def __check_few_neighbors(self, test_id):
         """
         Handling Null values: Null values do not establish or violate a pattern.
+
+        This operates on the sorted values, not considering the original row orders.
+
+        The test examines all numeric and date columns.
         """
 
         # This test does not identify patterns, but does identify rows that are distant from both the nearest point
@@ -6203,19 +6215,55 @@ class DataConsistencyChecker:
                     allow_patterns=False
                 )
 
+        for col_name in self.date_cols:
+            sorted_vals = copy.copy(pd.to_datetime(self.orig_df[col_name]).values)
+            sorted_vals.sort()
+            sorted_vals = pd.Series(sorted_vals)
+            diff_from_prev = sorted_vals.diff(1)
+            diff_from_next = sorted_vals.diff(-1)
+            diff_threshold = (pd.to_datetime(self.orig_df[col_name]).max() - pd.to_datetime(self.orig_df[col_name]).min()) / 10.0
+
+            test_arr = [True if (x == x) and (y == y) and (abs(x) > diff_threshold) and (abs(y) > diff_threshold)
+                        else False for x, y in zip(diff_from_prev, diff_from_next)]
+            num_isolated_points = test_arr.count(True)
+
+            if num_isolated_points > 0:
+                # Flag the correct rows. We currently have their indexes based on a sorted array.
+                vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
+                test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
+                self.__process_analysis_binary(
+                    test_id,
+                    [col_name],
+                    test_series,
+                    (f"The test marked any values more than {diff_threshold.days} days away from both the next "
+                     "smallest and next largest values in the column"),
+                    allow_patterns=False
+                )
+
     def __generate_few_within_range(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'few in range all' consistently has values with other similar values.
+        Patterns with exception: 'few in range most' consistently has values with other similar values, with three
+            exceptions -- a set of three numbers similar to each other, but few other values. Similar for
+            'few in range date_most'.
         """
         self.__add_synthetic_column('few in range rand',
                                     [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('few in range all',
-                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-200)] +
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows - 200)] +
                                     [random.randint(10_000, 20_000) for _ in range(200)])
         self.__add_synthetic_column('few in range most',
-                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-200)] +
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows - 200)] +
                                     [random.randint(10_000, 20_000) for _ in range(197)] + [5000, 5001, 5002])
+
+        date_1 = datetime.datetime.strptime("01-7-2018", "%d-%m-%Y")
+        date_2 = datetime.datetime.strptime("01-7-2025", "%d-%m-%Y")
+        self.__add_synthetic_column('few in range date_most',
+            [date_1 + relativedelta(days=(np.random.randint(-50, 50))) for _ in range(self.num_synth_rows - 200)] +
+            [date_2 + relativedelta(days=(np.random.randint(-50, 50))) for _ in range(197)] +
+            [datetime.datetime.strptime("01-7-2023", "%d-%m-%Y"),
+             datetime.datetime.strptime("02-7-2023", "%d-%m-%Y"),
+             datetime.datetime.strptime("03-7-2023", "%d-%m-%Y")])
 
     def __check_few_within_range(self, test_id):
         """
@@ -6229,6 +6277,7 @@ class DataConsistencyChecker:
         """
 
         num_bins = 50
+
         for col_name in self.numeric_cols:
             # Skip columns with any non-numeric values
             if len(self.numeric_vals[col_name]) < self.num_rows:
@@ -6274,6 +6323,47 @@ class DataConsistencyChecker:
                 "The column consistently contains values that have several similar values in the column",
                 (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
                  f"their and the neigboring bins (width {bin_width:.4f})"))
+
+        for col_name in self.date_cols:
+            # Skip columns with few unique values
+            if self.orig_df[col_name].nunique() < num_bins:
+                continue
+
+            bins = []
+            min_val = self.orig_df[col_name].min()
+            max_val = self.orig_df[col_name].max()
+            col_range = max_val - min_val
+            bin_width = col_range / num_bins
+            for i in range(num_bins + 2):
+                bins.append(min_val + (i * bin_width))
+            bin_labels = [int(x) for x in range(len(bins)-1)]
+            binned_values = pd.cut(pd.to_datetime(self.orig_df[col_name]), bins=bins, labels=bin_labels)
+            bin_counts = binned_values.value_counts()
+
+            rare_bins = []
+            for bin_id in bin_labels[3:-3]:
+                rows_count = bin_counts.loc[bin_id-3] + \
+                             bin_counts.loc[bin_id-2] + \
+                             bin_counts.loc[bin_id-1] + \
+                             bin_counts.loc[bin_id]   + \
+                             bin_counts.loc[bin_id+1] + \
+                             bin_counts.loc[bin_id+2] + \
+                             bin_counts.loc[bin_id+3]
+                if (bin_counts.sort_index().loc[bin_id+1:].sum() > (self.num_rows / 10.0)) and \
+                        (bin_counts.sort_index().loc[:bin_id].sum() > (self.num_rows / 10.0)) and \
+                        (rows_count < self.contamination_level) and (rows_count > 0):
+                    rare_bins.append(bin_id)
+            if len(rare_bins) == 0:
+                continue
+            test_series = np.array([x not in rare_bins for x in binned_values])
+
+            self.__process_analysis_binary(
+                test_id,
+                [col_name],
+                test_series,
+                "The column consistently contains values that have several similar values in the column",
+                (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
+                 f"their and the neigboring bins (width {bin_width.days} days)"))
 
     def __generate_very_small(self):
         """
