@@ -2781,8 +2781,13 @@ class DataConsistencyChecker:
         # The first column is the string/binary value and the second is the numeric/date value
         # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is somewhat
         # kludgy.
-        fig, ax = plt.subplots(figsize=(4, 4))
-        s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
+        fig, ax = plt.subplots(figsize=(8, 4))
+        if cols[1] in self.numeric_cols:
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[0], x=cols[1])
+        else:
+            df = self.orig_df[cols].copy()
+            df['Days Since Min Date'] = (pd.to_datetime(self.orig_df[cols[1]]) - pd.to_datetime(self.orig_df[cols[1]]).min()).dt.days
+            s = sns.boxplot(data=df, orient='h', y=cols[0], x='Days Since Min Date')
         plt.show()
 
         # Also draw a histogram of the relevant classes.
@@ -3583,12 +3588,14 @@ class DataConsistencyChecker:
             plt.tight_layout()
             plt.show()
 
-            avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
-            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
-            s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
-            s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
-            plt.tight_layout()
-            plt.show()
+            if cols[2] in self.numeric_cols:
+                # use aggfunc='quantile' for date columns
+                avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
+                fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
+                s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
+                s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
+                plt.tight_layout()
+                plt.show()
 
             # Also draw a histogram of the relevant classes.
             fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
@@ -6322,7 +6329,7 @@ class DataConsistencyChecker:
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
                 (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
-                 f"their and the neigboring bins (width {bin_width:.4f})"))
+                 f"their and the neighboring bins (width {bin_width:.4f})"))
 
         for col_name in self.date_cols:
             # Skip columns with few unique values
@@ -6363,7 +6370,7 @@ class DataConsistencyChecker:
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
                 (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
-                 f"their and the neigboring bins (width {bin_width.days} days)"))
+                 f"their and the neighboring bins (width {bin_width.days} days)"))
 
     def __generate_very_small(self):
         """
@@ -6478,7 +6485,7 @@ class DataConsistencyChecker:
                                     [random.randint(1, 2000) * 13.3 for _ in range(self.num_synth_rows-1)] + [30_000])
 
     def __check_multiple_constant(self, test_id):
-        # todo: it is also possible to look at the gaps between values to find the common denomimator
+        # todo: it is also possible to look at the gaps between values to find the common denominator
         # todo: this considers only constants greater than 1.0, but in some cases, constants less than 1.0 may be
         # meaningful. Eg a constant of .25 or .5 is meaningless if the values are all integers, but is meaningful
         # if most values have decimals.
@@ -6780,22 +6787,17 @@ class DataConsistencyChecker:
 
     def __generate_much_larger(self):
         """
-        Patterns without exceptions:
-            'much larger all' is consistently much larger than 'much larger rand', but this test is not in the
-            shortlist of patterns to list.
-        Patterns with exception:
-            'much larger most' is consistently much larger than 'much larger rand', with one exception: row 99 has a
-            similar value.
+        Patterns without exceptions: 'much larger all' is consistently much larger than 'much larger rand', but this
+            test is not in the shortlist of patterns to list.
+        Patterns with exception: 'much larger most' is consistently much larger than 'much larger rand', with one
+            exception: row 99 has a similar value.
         """
-        self.__add_synthetic_column(
-            'much larger rand',
-            [random.randint(1, 100) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column(
-            'much larger all',
-            [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column(
-            'much larger most',
-            [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows-1)] + [50])
+        self.__add_synthetic_column('much larger rand',
+                                    [random.randint(1, 100) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('much larger all',
+                                    [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('much larger most',
+                                    [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows-1)] + [50])
 
     def __check_much_larger(self, test_id):
 
@@ -7229,6 +7231,7 @@ class DataConsistencyChecker:
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
             vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = abs(vals_arr_1 * vals_arr_2)
+
             # Get the median absolute deviation of the products, normalized by the median
             nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
                 if np.nanmedian(test_series_a) != 0 \
@@ -7295,10 +7298,12 @@ class DataConsistencyChecker:
             nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
                 if statistics.median(sample_series) != 0 \
                 else 0.0
+
             # Skip if the variance in the ratios (measured as median absolute deviation) is too large relative to
             # the median for the column.
             if abs(nmad) > 0.01:
                 continue
+
             # Skip if there is a trivial ratio, if the columns are the same, or the negative of each other, for which
             # there are specific tests.
             if statistics.median(sample_series) in [1.0, -1.0, 0.0]:
@@ -7307,6 +7312,7 @@ class DataConsistencyChecker:
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
             vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = list(map(safe_div, vals_arr_1, vals_arr_2))
+
             # Get the median absolute deviation of the ratios, normalized by the median
             nmad = np.nanmedian(np.absolute(test_series_a - np.nanmedian(test_series_a))) / np.nanmedian(test_series_a) \
                 if np.nanmedian(test_series_a) != 0 \
@@ -7366,6 +7372,7 @@ class DataConsistencyChecker:
             val_arr_1 = self.numeric_vals_filled[col_name_1]
             val_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series = np.where(val_arr_2 != 0, val_arr_1 / val_arr_2, val_arr_1).tolist()
+
             # Remove cases where there is trivially an even multiple
             if (test_series.count(1) + test_series.count(0) + test_series.count(-1) + \
                 test_series.count(np.inf)) > self.contamination_level:
@@ -7416,7 +7423,6 @@ class DataConsistencyChecker:
             bins[0] = bins[0] - (bin_width / 10.0)
             bins[-1] = bins[-1] + (bin_width / 10.0)
             bin_labels = [int(x) for x in range(len(bins)-1)]
-            #vals_arr = convert_to_numeric(self.orig_df[col_name], self.column_medians[col_name])
             vals_arr = self.numeric_vals_filled[col_name]
             binned_values = pd.cut(vals_arr, bins, labels=bin_labels)
             return binned_values, bins
@@ -11644,14 +11650,25 @@ class DataConsistencyChecker:
         """
         Patterns without exceptions: 'bin_match_others all' is consistently true iff 'bin_match_others rand_a' ==
             'bin_match_others rand_b'
-        Patterns with exception: similar for 'bin_match_others most', with 1 exception
+        Patterns with exception: similar for 'bin_match_others most', with one exception. As well,
+            'bin_match_others date_most' is consitently true iff 'bin_match_others date_rand_a' matches
+            'bin_match_others date_rand_b', with one exception.
         """
         self.__add_synthetic_column('bin_match_others rand_a', np.random.randint(1, 10, self.num_synth_rows))
         self.__add_synthetic_column('bin_match_others rand_b', np.random.randint(1, 5, self.num_synth_rows))
         self.__add_synthetic_column('bin_match_others all',
-                                    self.synth_df['bin_match_others rand_a'] == self.synth_df['bin_match_others rand_b'])
+            self.synth_df['bin_match_others rand_a'] == self.synth_df['bin_match_others rand_b'])
         self.__add_synthetic_column('bin_match_others most', self.synth_df['bin_match_others all'])
         self.synth_df.loc[999, 'bin_match_others most'] = not self.synth_df.loc[999, 'bin_match_others most']
+
+        test_date1 = datetime.datetime.strptime("5-8-2020", "%d-%m-%Y")
+        self.__add_synthetic_column('bin_match_others date_rand_a',
+            [test_date1 + relativedelta(days=(np.random.randint(1, 5))) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('bin_match_others date_rand_b',
+            [test_date1 + relativedelta(days=(np.random.randint(1, 5))) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('bin_match_others date_most',
+            self.synth_df['bin_match_others date_rand_a'] == self.synth_df['bin_match_others date_rand_b'])
+        self.synth_df.loc[999, 'bin_match_others date_most'] = not self.synth_df.loc[999, 'bin_match_others date_most']
 
     def __check_binary_two_others_match(self, test_id):
         """
@@ -14609,18 +14626,31 @@ class DataConsistencyChecker:
 
     def __generate_large_given(self):
         """
-        Patterns without exceptions: None
+        Patterns without exceptions: None. This test does not generate patterns.
         Patterns with exception: 'large_given most' contains one row with value 290, which is common for the column
-            but not common when 'large_given rand' is 'C'
+            but not common when 'large_given rand' is 'C'. As well, 'large_given date_most' contains one row with
+            value 01-8-2016, which is common for the column, but not common when 'large_given rand' is 'C'.
         """
         self.__add_synthetic_column('large_given rand', ['A']*100 + ["B"]*100 + ['C']*(self.num_synth_rows - 200))
-        self.__add_synthetic_column('large_given all', np.concatenate([
-            np.random.randint(200, 300, 100),
-            np.random.randint(100, 200, 100),
-            np.random.randint(0, 100, (self.num_synth_rows - 200))
-        ]))
+        self.__add_synthetic_column('large_given all',
+            np.concatenate([
+                np.random.randint(200, 300, 100),
+                np.random.randint(100, 200, 100),
+                np.random.randint(0, 100, (self.num_synth_rows - 200))
+            ]))
         self.__add_synthetic_column('large_given most', self.synth_df['large_given all'])
         self.synth_df.loc[999, 'large_given most'] = 290
+
+        test_date1 = datetime.datetime.strptime("01-7-2016", "%d-%m-%Y")
+        test_date2 = datetime.datetime.strptime("01-7-2015", "%d-%m-%Y")
+        test_date3 = datetime.datetime.strptime("01-7-2014", "%d-%m-%Y")
+        self.__add_synthetic_column('large_given date_most',
+            np.concatenate([
+                [test_date1 + relativedelta(days=np.random.randint(1, 300)) for _ in range(100)],
+                [test_date2 + relativedelta(days=np.random.randint(1, 300)) for _ in range(100)],
+                [test_date3 + relativedelta(days=np.random.randint(1, 300)) for _ in range(self.num_synth_rows - 200)]
+            ]))
+        self.synth_df.loc[999, 'large_given date_most'] = datetime.datetime.strptime("01-8-2016", "%d-%m-%Y")
 
     def __check_large_given(self, test_id):
 
@@ -14728,7 +14758,8 @@ class DataConsistencyChecker:
         """
         Patterns without exceptions: None. This test does not generate patterns.
         Patterns with exception: 'small_given most' has one row with value 5, which is not small generally, but is
-            small when 'small_given rand' has value 'C'.
+            small when 'small_given rand' has value 'C'. As well, 'small_given date_most' contains one row with
+            value 01-8-2016, which is common for the column, but not common when 'small_given rand' is 'C'.
         """
         self.__add_synthetic_column('small_given rand', ['A']*100 + ["B"]*100 + ['C']*(self.num_synth_rows - 200))
         self.__add_synthetic_column('small_given all',
@@ -14739,6 +14770,17 @@ class DataConsistencyChecker:
             ]))
         self.__add_synthetic_column('small_given most', self.synth_df['small_given all'])
         self.synth_df.loc[999, 'small_given most'] = 5
+
+        test_date1 = datetime.datetime.strptime("01-7-2014", "%d-%m-%Y")
+        test_date2 = datetime.datetime.strptime("01-7-2015", "%d-%m-%Y")
+        test_date3 = datetime.datetime.strptime("01-7-2016", "%d-%m-%Y")
+        self.__add_synthetic_column('small_given date_most',
+            np.concatenate([
+                [test_date1 + relativedelta(days=np.random.randint(1, 400)) for _ in range(100)],
+                [test_date2 + relativedelta(days=np.random.randint(1, 400)) for _ in range(100)],
+                [test_date3 + relativedelta(days=np.random.randint(1, 400)) for _ in range(self.num_synth_rows - 200)]
+            ]))
+        self.synth_df.loc[999, 'small_given date_most'] = datetime.datetime.strptime("01-8-2014", "%d-%m-%Y")
 
     def __check_small_given(self, test_id):
         # Determine if there are too many combinations to execute
@@ -15170,9 +15212,10 @@ class DataConsistencyChecker:
 
     def __generate_large_given_pair(self):
         """
-        Patterns without exceptions: None
-        Patterns with exception: For all 3 columns, Row 998 contains a value in 'large_given_pair most' which is
-            common, but not for 'd', 'b' in the two string columns.
+        Patterns without exceptions: None. This test does not generate patterns.
+        Patterns with exception: Row 998 contains a value in 'large_given_pair most' which is common, but not for
+            'd', 'b' in the two string columns. As well, Row 998 contains a a value for 'large_given_pair date_most'
+            that is common for the column, but not with 'd' and 'b' in the two string columns.
         Values not flagged: Row 999 contains a rare combination of values, so it is not possible to check for
             rare numeric values given these.
         """
@@ -15188,13 +15231,25 @@ class DataConsistencyChecker:
         data = np.vstack([data[:self.num_synth_rows-1], rare_vals])
         self.__add_synthetic_column('large_given_pair rand_a', data[:, 0])
         self.__add_synthetic_column('large_given_pair rand_b', data[:, 1])
-        self.__add_synthetic_column('large_given_pair all', np.concatenate([
-                                        np.random.randint(200, 300, 100),
-                                        np.random.randint(100, 200, 100),
-                                        np.random.randint(0, 100, (self.num_synth_rows - 200))
-                                    ]))
+        self.__add_synthetic_column('large_given_pair all',
+            np.concatenate([
+                np.random.randint(200, 300, 100),
+                np.random.randint(100, 200, 100),
+                np.random.randint(0, 100, (self.num_synth_rows - 200))
+            ]))
         self.__add_synthetic_column('large_given_pair most', self.synth_df['large_given_pair all'])
         self.synth_df.loc[998, 'large_given_pair most'] = 290
+
+        test_date1 = datetime.datetime.strptime("01-7-2016", "%d-%m-%Y")
+        test_date2 = datetime.datetime.strptime("01-7-2015", "%d-%m-%Y")
+        test_date3 = datetime.datetime.strptime("01-7-2014", "%d-%m-%Y")
+        self.__add_synthetic_column('large_given_pair date_most',
+            np.concatenate([
+                [test_date1 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
+                [test_date2 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
+                [test_date3 + relativedelta(days=np.random.randint(1, 300)) for _ in range(self.num_synth_rows - 400)]
+            ]))
+        self.synth_df.loc[998, 'large_given_pair date_most'] = datetime.datetime.strptime("01-8-2018", "%d-%m-%Y")
 
     def __check_large_given_pair(self, test_id):
         """
@@ -15252,6 +15307,9 @@ class DataConsistencyChecker:
                 if col_name_3 in self.numeric_cols:
                     col_q2_limit = col_q2 * 0.9
                     col_q3_limit = col_q3 * 0.9
+                else:
+                    col_q2_limit = col_q2
+                    col_q3_limit = col_q3
 
                 # found_many is set to True if we find any subset where many rows are flagged. In this case, we end
                 # early, as exceptions are only flagged if they are few.
@@ -15292,6 +15350,7 @@ class DataConsistencyChecker:
                             res = num_vals <= upper_limit
                         else:
                             q1 = pd.to_datetime(sub_df[col_name_3]).quantile(0.25, interpolation='midpoint')
+                            q2 = pd.to_datetime(sub_df[col_name_3]).quantile(0.50, interpolation='midpoint')
                             q3 = pd.to_datetime(sub_df[col_name_3]).quantile(0.75, interpolation='midpoint')
                             try:
                                 upper_limit = q3 + (self.iqr_limit * (q3 - q1))
@@ -15331,14 +15390,12 @@ class DataConsistencyChecker:
 
     def __generate_small_given_pair(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
-        """
-        """
-        Patterns without exceptions:
-        Patterns with exception: Row 999 contains a rare combination of values, so it is not possible to check for
-            rare numeric values given these. Row 998 contains a value in 'large_given_pair most' which is common, but
-            not for 'd', 'b' in the two string columns.
+        Patterns without exceptions: None. This test does not generate patterns.
+        Patterns with exception: Row 998 contains a value in 'small_given_pair most' which is common, but not for
+            'd', 'b' in the two string columns. As well, Row 998 contains a a value for 'small_given_pair date_most'
+                that is common for the column, but not with 'd' and 'b' in the two string columns.
+        Values not flagged: Row 999 contains a rare combination of values, so it is not possible to check for
+            rare numeric values given these.
         """
         common_vals = [
             ['a', 'a'],
@@ -15359,6 +15416,17 @@ class DataConsistencyChecker:
         ]))
         self.__add_synthetic_column('small_given_pair most', self.synth_df['small_given_pair all'])
         self.synth_df.loc[998, 'small_given_pair most'] = 4
+
+        test_date1 = datetime.datetime.strptime("01-7-2014", "%d-%m-%Y")
+        test_date2 = datetime.datetime.strptime("01-7-2015", "%d-%m-%Y")
+        test_date3 = datetime.datetime.strptime("01-7-2016", "%d-%m-%Y")
+        self.__add_synthetic_column('large_given_pair date_most',
+            np.concatenate([
+                [test_date1 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
+                [test_date2 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
+                [test_date3 + relativedelta(days=np.random.randint(1, 300)) for _ in range(self.num_synth_rows - 400)]
+            ]))
+        self.synth_df.loc[998, 'large_given_pair date_most'] = datetime.datetime.strptime("01-8-2014", "%d-%m-%Y")
 
     def __check_small_given_pair(self, test_id):
         """
