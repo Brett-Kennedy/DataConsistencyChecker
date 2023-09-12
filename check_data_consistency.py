@@ -30,6 +30,7 @@ from multiprocessing import Process, Queue
 
 # Visualization
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import seaborn as sns
 
 # Warnings
@@ -1448,7 +1449,7 @@ class DataConsistencyChecker:
         self.safe_results_dict = self.results_dict.copy()
         self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
 
-        return self.get_exceptions_summary()
+        return self.get_exceptions_list()
 
     ##################################################################################################################
     # Public methods to output information about the tool, unrelated to any specific dataset or test execution
@@ -1611,7 +1612,7 @@ class DataConsistencyChecker:
         ret_list = list(set(ret_list))
         return ret_list
 
-    def get_patterns_summary(self, test_exclude_list=None, column_exclude_list=None, show_short_list_only=True):
+    def get_patterns_list(self, test_exclude_list=None, column_exclude_list=None, show_short_list_only=True):
         """
         This returns a dataframe containing a list of all, or some, of the identified patterns that had no exceptions.
         Which patterns are included is controlled by the parameters. Each row of the returned dataframe represents
@@ -1645,10 +1646,10 @@ class DataConsistencyChecker:
                 print_text("Some patterns not shown. Set show_short_list_only to False to see additional patterns.")
         return self._clean_column_names(df.drop(columns=['Display Information']))
 
-    def get_exceptions_summary(self):
+    def get_exceptions_list(self):
         """
         Returns a dataframe containing a row for each pattern that was discovered with exceptions. This has a similar
-        format to the dataframe returned by get_patterns_summary, with one additional column representing the number
+        format to the dataframe returned by get_patterns_list(), with one additional column representing the number
         of exceptions found. The dataframe has columns for: test id, the set of columns involved in the pattern,
         a description of the pattern and exceptions, and the number of exceptions.
         """
@@ -2089,7 +2090,11 @@ class DataConsistencyChecker:
                         print_text("Pattern found (without exceptions)")
                         print()
                         print_text("**Description**:")
-                        print_text(sub_patterns.iloc[0]['Description of Pattern'])
+                        if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
+                                       'PREDICT_NULL_DT']:
+                            print(sub_patterns.iloc[0]['Description of Pattern'])
+                        else:
+                            print_text(sub_patterns.iloc[0]['Description of Pattern'])
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
                         if include_examples:
                             self.__display_examples(
@@ -2148,11 +2153,15 @@ class DataConsistencyChecker:
                         print_text("Unusual values were found.\n")
                     else:
                         print_text("A strong pattern, and exceptions to the pattern, were found.\n")
-                    if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
-                                   'GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC', 'PREDICT_NULL_DT']:
-                        # These display a decision tree or other special output, so the formatting must be preserved.
+                    if test_id in ['GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC']:
+                        # These display special output, so the formatting must be preserved.
                         print_text(f"**Description**:")
                         print_text(sub_summary.iloc[0]['Description of Pattern'])
+                    elif test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
+                                     'PREDICT_NULL_DT']:
+                        # These display a decision tree, so the formatting must be preserved.
+                        print_text(f"**Description**:")
+                        print(sub_summary.iloc[0]['Description of Pattern'])
                     else:
                         multiline_desc = wrap(sub_summary.iloc[0]['Description of Pattern'], 100)
                         print_text(f"**Description**: {'<br>'.join(multiline_desc)}")
@@ -2387,9 +2396,9 @@ class DataConsistencyChecker:
                 print(title + ":")
             func()
 
-        display_api_results(self.get_patterns_summary(), 'Patterns Summary (short list only)')
+        display_api_results(self.get_patterns_list(), 'Patterns List (short list only)')
         display_api_results(self.summarize_patterns_by_test_and_feature(), 'Patterns by Test and Feature')
-        display_api_results(self.get_exceptions_summary(), 'Exceptions Summary')
+        display_api_results(self.get_exceptions_list(), 'Exceptions List')
         display_api_results(self.summarize_exceptions_by_test_and_feature(), 'Exceptions Summary by Test and Feature')
         display_api_results(self.summarize_exceptions_by_test(), 'Exceptions Summary by Test')
         display_api_results(self.summarize_patterns_and_exceptions(), 'Summary of Patterns and Exceptions (all tests)')
@@ -3574,6 +3583,15 @@ class DataConsistencyChecker:
             plt.show()
 
         elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
+
+            def highlight_cells():
+                for i in flagged_df.index:
+                    v0 = flagged_df.loc[i, cols[0]]
+                    v1 = flagged_df.loc[i, cols[1]]
+                    patch_x = counts_df.index.tolist().index(v0)
+                    patch_y = counts_df.columns.tolist().index(v1)
+                    ax.add_patch(Rectangle((patch_x, patch_y), 1, 1, fill=False, edgecolor='yellow', lw=3))
+
             results_col_name = self.get_results_col_name(test_id, columns_set)
             results_col = self.test_results_df[results_col_name]
             flagged_idxs = np.where(results_col)
@@ -3581,23 +3599,27 @@ class DataConsistencyChecker:
             vals = flagged_df[[cols[0], cols[1]]].drop_duplicates()
             nvals = len(vals)
 
+            # Present a heatmap of the counts of each pair
             counts_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]])
             fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
             s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
             s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
             plt.tight_layout()
+            highlight_cells()
             plt.show()
 
+            # Present a heatmap of the average value of col[2] for each pair
             if cols[2] in self.numeric_cols:
-                # use aggfunc='quantile' for date columns
+                # Use aggfunc='quantile' for date columns
                 avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
                 fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
                 s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
                 s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
                 plt.tight_layout()
+                highlight_cells()
                 plt.show()
 
-            # Also draw a histogram of the relevant classes.
+            # Present a histogram of the relevant classes
             fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
             for v_idx in range(nvals):
                 v0 = vals.iloc[v_idx][cols[0]]
@@ -7281,6 +7303,7 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_2].nunique() < min_unique_vals:
                 continue
 
+            # Check if both columns have too many zeros.
             if (count_zeros_dict[col_name_1] > self.contamination_level) and \
                     (count_zeros_dict[col_name_2] > self.contamination_level):
                 continue
@@ -15420,13 +15443,13 @@ class DataConsistencyChecker:
         test_date1 = datetime.datetime.strptime("01-7-2014", "%d-%m-%Y")
         test_date2 = datetime.datetime.strptime("01-7-2015", "%d-%m-%Y")
         test_date3 = datetime.datetime.strptime("01-7-2016", "%d-%m-%Y")
-        self.__add_synthetic_column('large_given_pair date_most',
+        self.__add_synthetic_column('small_given_pair date_most',
             np.concatenate([
                 [test_date1 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
                 [test_date2 + relativedelta(days=np.random.randint(1, 300)) for _ in range(200)],
                 [test_date3 + relativedelta(days=np.random.randint(1, 300)) for _ in range(self.num_synth_rows - 400)]
             ]))
-        self.synth_df.loc[998, 'large_given_pair date_most'] = datetime.datetime.strptime("01-8-2014", "%d-%m-%Y")
+        self.synth_df.loc[998, 'small_given_pair date_most'] = datetime.datetime.strptime("01-8-2014", "%d-%m-%Y")
 
     def __check_small_given_pair(self, test_id):
         """
