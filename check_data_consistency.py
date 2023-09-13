@@ -5221,7 +5221,7 @@ class DataConsistencyChecker:
                 # Do not flag rare values, as there is another test for that.
                 rare_values = []
                 for v in self.orig_df[col_name].unique():
-                    if self.orig_df[col_name].tolist().count(v) < self.contamination_level:
+                    if (v != v) or (self.orig_df[col_name].tolist().count(v) < self.contamination_level):
                         rare_values.append(v)
 
                 # Create a binary (one-hot) column for each value for each lag. Sklearn decision trees can not work
@@ -5252,7 +5252,10 @@ class DataConsistencyChecker:
                     continue
 
                 # Test simply predicting the previous value
+                y_train_numeric = y_train_numeric.fillna(y_train_numeric.mode())
                 y_lag_1_numeric = y_lag_1_numeric.fillna(y_lag_1_numeric.mode())
+                y_train_numeric = y_train_numeric.replace([np.inf, -np.inf, None, np.NaN, pd.NaT], y_train_numeric.mode()[0])
+                y_lag_1_numeric = y_lag_1_numeric.replace([np.inf, -np.inf, None, np.NaN, pd.NaT], y_lag_1_numeric.mode()[0])
                 f1_naive = f1_score(y_train_numeric, y_lag_1_numeric, average='micro')
                 if f1_naive >= (f1 - 0.05):
                     continue
