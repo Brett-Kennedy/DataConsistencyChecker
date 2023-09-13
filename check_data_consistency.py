@@ -221,7 +221,7 @@ class DataConsistencyChecker:
             'MATCHED_MISSING':          ('', 'Check if two columns have missing values consistently in the same rows.',
                                          self.__check_matched_missing, self.__generate_matched_missing,
                                          True, True, False, False),
-            'UNMATCHED_MISSING':        ('Check if two columns have null values consitently in different rows',
+            'UNMATCHED_MISSING':        ('Check if two columns have null values consistently in different rows',
                                          ('Check if two columns both frequently have null values, but consistently '
                                           'not in the same rows.'),
                                          self.__check_unmatched_missing, self.__generate_unmatched_missing,
@@ -2612,8 +2612,8 @@ class DataConsistencyChecker:
 
     def __display_rows_with_tests(self, sorted_df, n_rows, check_score=False):
         """
-        Display a set of dataframes, one per row in the original data, up to n_rows rows, each including the original row
-        and the issues found in it, across all tests on all features.
+        Display a set of dataframes, one per row in the original data, up to n_rows rows, each including the original
+        row and the issues found in it, across all tests on all features.
 
         sorted_df: dataframe
             a sorted version of self.test_results_df
@@ -3302,11 +3302,11 @@ class DataConsistencyChecker:
             df_v1_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v1_null) - (len(df_both) // 2))
             df_v2_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
             df_v2_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v2_null) - (len(df_both) // 2))
-            df = pd.concat([df_both, df_v1_null, df_v1_not_null, df_v2_null, df_v2_not_null])
+            df = pd.concat([df_both, df_v1_null, df_v1_not_null, df_v2_null, df_v2_not_null])[cols]
         elif test_id in ['TWO_PAIRS']:
             df_match = self.orig_df[np.array(display_info['match_1_2_arr']) == True].head(n_examples // 2)
             df_not_match = self.orig_df[np.array(display_info['match_1_2_arr']) == False].head(n_examples // 2)
-            df = pd.concat([df_match, df_not_match])
+            df = pd.concat([df_match, df_not_match])[cols]
 
         # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
         # create a df simply trying to reduce the number of Null values.
@@ -5730,7 +5730,7 @@ class DataConsistencyChecker:
                 if arr2.nunique() < math.sqrt(self.num_rows):
                     return False
 
-            same_indicator = [x == y or is_missing(x) or is_missing(y) for x, y in zip(arr1, arr2)]
+            same_indicator = [x == y or (is_missing(x) and is_missing(y)) for x, y in zip(arr1, arr2)]
 
             # Exclude column pairs which are not the same value in at least 10% of rows
             if same_indicator.count(True) < (len(arr1) * 0.1):
@@ -5776,7 +5776,7 @@ class DataConsistencyChecker:
         num_pairs, col_pairs = self.__get_column_pairs_unique()
         if num_pairs > self.max_combinations:
             if self.verbose >= 1:
-                print((f"  Skipping testing pairs of numeric columns. There are {num_pairs:,} pairs. "
+                print((f"  Skipping testing pairs of columns. There are {num_pairs:,} pairs. "
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
@@ -12174,7 +12174,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} leading spaces (minimum: '
-                 f'{test_series_counts.min()}, maximum: {test_series_counts.max()}'),
+                 f'{test_series_counts.min()}, maximum: {test_series_counts.max()})'),
                 'with significantly more or less leading spaces'
             )
 
@@ -12222,7 +12222,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} trailing spaces (minimum: '
-                 f'{test_series.min()}, maximum: {test_series.max()}'),
+                 f'{test_series_counts.min()}, maximum: {test_series_counts.max()})'),
                 'with significantly more or less trailing spaces'
             )
 
@@ -12483,7 +12483,7 @@ class DataConsistencyChecker:
         def get_non_alphanumeric(x):
             if x.isalnum():
                 return []
-            return [c for c in x if not str(c).isalnum()]
+            return [c for c in x if (not str(c).isalnum()) and (not c == '')]
 
         for col_name in self.string_cols:
             # Skip columns which contain only alphanumeric characters
@@ -13427,6 +13427,8 @@ class DataConsistencyChecker:
 
         test_series = np.array([1]*self.num_rows)
         groups_str = ""
+        group_lengths = []
+
         # Loop through each unique value and find the indexes where it occurs.
         # We then identify the runs of each unique value and flag any short runs.
         for v in col_df[col_name].dropna().unique():
@@ -13442,8 +13444,10 @@ class DataConsistencyChecker:
             group_starts = sorted([x for x in (set(group_starts)) if x == x])
             group_ends = sorted([x for x in (set(group_ends)) if x == x])
             groups_str += f'\nValue: "{v}": rows {group_starts[0]:.0f} to {group_ends[0]:.0f}'
+            group_lengths.append(group_ends[0] - group_starts[0] + 1)
             for i in range(1, len(group_starts)):
                 groups_str += f', {group_starts[i]:.0f} to {group_ends[i]:.0f}'
+                group_lengths.append(group_ends[i] - group_starts[i] + 1)
 
             if num_same != ideal_same:
                 for i in range(len(group_starts)):
@@ -13451,6 +13455,10 @@ class DataConsistencyChecker:
                     if group_len < (len(idxs) * 0.5):
                         for j in range(int(group_starts[i]), int(group_ends[i]+1)):
                             test_series[j] = False
+
+        # All all runs are of length 1, skip this column
+        if max(group_lengths) == 1:
+            return
 
         pattern_cols = [col_name]
         if sort_col:
@@ -13947,8 +13955,13 @@ class DataConsistencyChecker:
             if (col_std_dev_len_dict[col_name_1] < 2.0) or (col_std_dev_len_dict[col_name_2] < 2.0):
                 continue
 
+            if self.orig_df[col_name_1].apply(is_missing).sum() > (self.num_rows * 0.75):
+                continue
+            if self.orig_df[col_name_2].apply(is_missing).sum() > (self.num_rows * 0.75):
+                continue
+
             test_series = [0.9 < x/y < 1.1 for x, y in zip(char_len_dict[col_name_1], char_len_dict[col_name_2])]
-            test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+            test_series = test_series | (self.orig_df[col_name_1].isna() & self.orig_df[col_name_2].isna())
             self.__process_analysis_binary(
                 test_id,
                 [col_name_1, col_name_2],
@@ -14415,11 +14428,11 @@ class DataConsistencyChecker:
         for col_name_1, col_name_2 in pairs:
             # Test on a sample.
             special_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
-            special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_1]
+            special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_1]
             if [len(x) > 0 for x in special_col_1].count(False) > 1:
                 continue
             special_col_2 = self.sample_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
-            special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_2]
+            special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_2]
             if [len(x) > 0 for x in special_col_2].count(False) > 1:
                 continue
             test_series = [set(x) == set(y) for x, y in zip(special_col_1, special_col_2)]
@@ -14428,11 +14441,11 @@ class DataConsistencyChecker:
 
             # Test on the full columns
             special_col_1 = self.orig_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
-            special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_1]
+            special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_1]
             if [len(x) > 0 for x in special_col_1].count(False) > self.contamination_level:
                 continue
             special_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
-            special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()))] for x in special_col_2]
+            special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_2]
             if [len(x) > 0 for x in special_col_2].count(False) > self.contamination_level:
                 continue
             test_series = [set(x) == set(y) for x, y in zip(special_col_1, special_col_2)]
@@ -14510,7 +14523,7 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_1, col_name_2],
                 test_series,
-                f'Columns "{col_name_1}" is consistently the same as the first characters of "{col_name_2}"'
+                f'The column "{col_name_1}" is consistently the same as the first characters of "{col_name_2}"'
             )
 
     def __generate_a_suffix_of_b(self):
@@ -14570,7 +14583,7 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_1, col_name_2],
                 test_series,
-                f'Columns "{col_name_1}" is consistently the same as the last characters of "{col_name_2}"'
+                f'The column "{col_name_1}" is consistently the same as the last characters of "{col_name_2}"'
             )
 
     def __generate_b_contains_a(self):
@@ -14630,7 +14643,7 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_1, col_name_2],
                 test_series,
-                (f'Columns "{col_name_1}" is consistently contained within "{col_name_2}", but not the first or last '
+                (f'The column "{col_name_1}" is consistently contained within "{col_name_2}", but not the first or last '
                  f'characters')
             )
 
