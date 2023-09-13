@@ -3099,7 +3099,8 @@ class DataConsistencyChecker:
             df['Number Unique Values'] = df.apply(lambda x: len(set(x)), axis=1)
         elif test_id in ['NEGATIVE_VALUES_PER_ROW']:
             df['Number Negative Values'] = df.applymap(lambda x: isinstance(x, numbers.Number) and x < 0).sum(axis=1)
-        elif test_id in ['DECISION_TREE_CLASSIFIER', 'DECISION_TREE_REGRESSOR', 'PREV_VALUES_DT', 'LINEAR_REGRESSION']:
+        elif test_id in ['DECISION_TREE_CLASSIFIER', 'DECISION_TREE_REGRESSOR', 'PREV_VALUES_DT', 'LINEAR_REGRESSION',
+                         'PREDICT_NULL_DT']:
             df["PREDICTION"] = display_info['Pred'].loc[df.index]
         elif test_id in ['CORRELATED_NUMERIC', 'CORRELATED_DATES']:
             df['Column 1 Percentile'] = display_info['col_1_percentiles'].loc[df.index]
@@ -3239,17 +3240,14 @@ class DataConsistencyChecker:
                 df_v0 = self.orig_df[self.orig_df[cols[2]] == v0].head(n_examples // 2)
                 df_v1 = self.orig_df[self.orig_df[cols[2]] == v1].head(n_examples // 2)
                 df = pd.concat([df_v0, df_v1])[cols]
-        elif test_id in ['MATCHED_MISSING', 'UNMATCHED_MISSING']:
-            col_name_1, col_name_2 = cols[0], cols[1]
-            df_v_null = self.orig_df[cols][(self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
-            df = pd.concat([df_v_null, df_v_non_null])
         elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'ALL_ZERO_OR_ALL_NON_ZERO']:
+            # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
             df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0)].head(n_examples // 2)
             df = pd.concat([df_v_zero, df_v_non_zero])
         elif test_id in ['SAME_OR_CONSTANT']:
+            # Show where col1 == col2 and where doesn't (in both cases where col1 is not null)
             col_name_1, col_name_2 = cols
             df_same = self.orig_df[cols][
                 (self.orig_df[col_name_1] == self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
@@ -3258,61 +3256,52 @@ class DataConsistencyChecker:
                 (self.orig_df[col_name_1] != self.orig_df[col_name_2]) & self.orig_df[col_name_1].notna()
                 ].head(n_examples // 2)
             df = pd.concat([df_same, df_not_same])
-        elif test_id in ['NEGATIVE']:
-            col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples // 2)
-            df = pd.concat([df_v_zero, df_v_neg])
         elif test_id in ['POSITIVE']:
+            # Show where col == 0 and where is > 0
             col_name_1 = cols[0]
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
             df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
             df = pd.concat([df_v_zero, df_v_pos])
         elif test_id in ['ALL_POS_OR_ALL_NEG']:
+            # Show where col1 is positive and negative
             col_name_1 = cols[0]
             df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
             df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples // 2)
             df = pd.concat([df_v_pos, df_v_neg])
-        elif test_id in ['EVEN_MULTIPLE']:  # todo: this should cover many tests. cover null & not null, unless there are no nulls
+        elif test_id in ['EVEN_MULTIPLE', 'PREDICT_NULL_DT', 'MATCHED_MISSING', 'UNMATCHED_MISSING']:
+            # Show where col 1 is null and non-null
             col_name_1, col_name_2 = cols[0], cols[1]
-            df_v_null = self.orig_df[cols][
-                (self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
+            df_v_null = self.orig_df[cols][(self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
             num_non_null = n_examples - len(df_v_null)
-            df_v_non_null = self.orig_df[cols][
-                (~self.orig_df[col_name_1].apply(is_missing))].head(num_non_null)
-            df = pd.concat([df_v_null, df_v_non_null])
-        elif test_id in ['DECISION_TREE_CLASSIFIER']:
-            target_col = cols[-1]
-            vc = self.orig_df[target_col].value_counts()
-            vals = vc.index[:3]  # Try to cover the 3 most common values
-            num_vals = len(vals)
-            dfs_arr = []
-            for i in range(num_vals):
-                df_v = self.orig_df[cols][(self.orig_df[target_col] == vals[i])].head(n_examples // num_vals)
-                dfs_arr.append(df_v)
-            df = pd.concat(dfs_arr)
-        elif test_id in ['PREDICT_NULL_DT']:
-            col_target = cols[-1]
-            df_v_null = self.orig_df[cols][(self.orig_df[col_target].apply(is_missing))].head(n_examples // 2)
-            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_target].apply(is_missing))].head(n_examples // 2)
+            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_name_1].apply(is_missing))].head(num_non_null)
             df = pd.concat([df_v_null, df_v_non_null])
         elif test_id in ['C_IS_A_OR_B']:
+            # Show examples where C matches both A and B, where the same column is col1 (where it is and is not null),
+            # and where the same column is col2 (where it is and is not null).
             df_both = self.orig_df[np.array(display_info['Same Column']) == 'BOTH'].head(n_examples // 3)
-            df_v1_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
-            df_v1_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v1_null) - (len(df_both) // 2))
-            df_v2_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].isna())].head(n_examples // 4)
-            df_v2_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) & (self.orig_df[cols[2]].notna())].head((n_examples // 2) - len(df_v2_null) - (len(df_both) // 2))
+            df_v1_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) &
+                                      (self.orig_df[cols[2]].isna())].head(n_examples // 4)
+            df_v1_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[0]) &
+                                          (self.orig_df[cols[2]].notna())].head((n_examples // 2) -
+                                                                                len(df_v1_null) - (len(df_both) // 2))
+            df_v2_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) &
+                                      (self.orig_df[cols[2]].isna())].head(n_examples // 4)
+            df_v2_not_null = self.orig_df[(np.array(display_info['Same Column']) == cols[1]) &
+                                          (self.orig_df[cols[2]].notna())].head((n_examples // 2) -
+                                                                                len(df_v2_null) - (len(df_both) // 2))
             df = pd.concat([df_both, df_v1_null, df_v1_not_null, df_v2_null, df_v2_not_null])[cols]
         elif test_id in ['TWO_PAIRS']:
+            # Show where the first pair match and where they do not
             df_match = self.orig_df[np.array(display_info['match_1_2_arr']) == True].head(n_examples // 2)
             df_not_match = self.orig_df[np.array(display_info['match_1_2_arr']) == False].head(n_examples // 2)
             df = pd.concat([df_match, df_not_match])[cols]
 
         # If we do not yet have a df (the test was not specified above, or no rows matched the conditions), we
-        # create a df simply trying to reduce the number of Null values.
+        # create a df simply trying to reduce the number of Null values and showing unique values in the last column.
         if (df is None) or (len(df) == 0):
             # Test that test_results_df does not have duplicate values in the index
-            assert (self.test_results_df is None) or (len(self.test_results_df.index) == len(set(self.test_results_df.index)))
+            assert (self.test_results_df is None) or \
+                   (len(self.test_results_df.index) == len(set(self.test_results_df.index)))
             cols = list(cols)  # Ensure cols is not in tuple format
             df = self.orig_df[cols]
             for col in cols:
@@ -3320,8 +3309,26 @@ class DataConsistencyChecker:
                 mask = sub_df[col].notna()
                 if mask.tolist().count(True) >= 5:
                     df = df[mask]
-        if len(df) == 0:  # This shouldn't happen; the column should only be added if there are some patterns
-            return None
+            if len(df) == 0:  # This shouldn't happen; the column should only be added if there are some patterns
+                return None
+
+            # Try to get a good set of non-null unique values
+            last_col = cols[-1]
+            vc = df[last_col].value_counts()
+            vals = list(vc.index[:11])  # Try to cover the 3 to 10 most common values
+            num_vals = len(vals)
+            dfs_arr = []
+            num_examples_found = 0
+            num_per_value = 1
+            if num_vals < n_examples:
+                num_per_value = n_examples // num_vals
+            for v in vals:
+                if num_examples_found >= n_examples:
+                    break
+                df_v = df[cols][(df[last_col] == v)].head(num_per_value)
+                num_examples_found += len(df_v)
+                dfs_arr.append(df_v)
+            df = pd.concat(dfs_arr)
 
         # Remove rows that were flagged. If is_patterns is True, no rows were flagged, and we skip this check.
         if not is_patterns:
@@ -5833,8 +5840,8 @@ class DataConsistencyChecker:
 
     def __generate_negative_values(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'negative all' consistently contains negative values
+        Patterns with exception: 'negative most' consistently contains negative values with one exception.
         """
         self.__add_synthetic_column('negative rand', [-random.random() + 0.5 for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('negative all', [-random.random() for _ in range(self.num_synth_rows)])
@@ -5843,7 +5850,7 @@ class DataConsistencyChecker:
     def __check_negative_values(self, test_id):
         for col_name in self.numeric_cols:
             vals_arr = convert_to_numeric(self.orig_df[col_name], -1)
-            test_series = (self.orig_df[col_name].isna()) | (vals_arr <= 0)
+            test_series = (self.orig_df[col_name].isna()) | (vals_arr < 0)
             self.__process_analysis_binary(
                 test_id,
                 [col_name],
@@ -6233,7 +6240,7 @@ class DataConsistencyChecker:
             'unusual_number all' has a strong pattern, as all values are within 1 order of magnitude.
         Patterns with exception: 'unusual_number most' has a strong pattern, with most values having a value within an
             order of magnitude of each other, with one value many orders of magnitude larger. 'unusual_number rand'
-            may occasionally randomly generate unsual values as well, which may be flagged as exceptions.
+            may occasionally randomly generate unusual values as well, which may be flagged as exceptions.
         """
         self.__add_synthetic_column('unusual_number rand',
                                     [random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)])
@@ -6253,9 +6260,10 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name],
                 test_series,
-                (f"This test checks for values of an unusual order of magnitude, etc. Each value is described in terms "
-                 f"of its order, or powers of 10. For example 10 is order 1, 100 is order 2, 1000 is order 3, etc. "
-                 f"All numbers are rounded to the nearest order of magnitude, which may be 0 for numbers less than 5.0. "
+                (f"This test checks for values of an unusual order of magnitude. Each value is described in terms "
+                 f"of its order, or power of 10. For example 10 is of order 1, 100 is of order 2, 1000 is of order 3. "
+                 f"All numbers are rounded to the nearest integer order of magnitude. For example, 3.0 will be "
+                 f"considered of order 0, and 7.0 of order 1. "
                  f"The column contains values in the range {self.numeric_vals[col_name].min()} to "
                  f"{self.numeric_vals[col_name].max()}, and consistently in the order of"),
                 "",
@@ -7399,8 +7407,8 @@ class DataConsistencyChecker:
             vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
             vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
             sample_series = list(map(safe_div, vals_arr_1, vals_arr_2))
-            nmad = scipy.stats.median_abs_deviation(sample_series) / statistics.median(sample_series) \
-                if statistics.median(sample_series) != 0 \
+            nmad = scipy.stats.median_abs_deviation(sample_series) / np.nanmedian(sample_series) \
+                if np.nanmedian(sample_series) != 0 \
                 else 0.0
 
             # Skip if the variance in the ratios (measured as median absolute deviation) is too large relative to
@@ -7410,7 +7418,7 @@ class DataConsistencyChecker:
 
             # Skip if there is a trivial ratio, if the columns are the same, or the negative of each other, for which
             # there are specific tests.
-            if statistics.median(sample_series) in [1.0, -1.0, 0.0]:
+            if np.nanmedian(sample_series) in [1.0, -1.0, 0.0]:
                 continue
 
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
@@ -7429,14 +7437,16 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The ratio of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{statistics.median(test_series_a)}')
+                     f'{np.nanmedian(test_series_a)}')
                 )
 
     def __generate_even_multiple(self):
-        self.__add_synthetic_column('even multiple rand', [random.randint(1, 1_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('even multiple all', random.randint(1, 1_000) * self.synth_df['even multiple rand'])
-        self.__add_synthetic_column('even multiple most', self.synth_df['even multiple all'])
-        self.synth_df.at[999, 'even multiple most'] = self.synth_df.at[999, 'even multiple most'] * 1.25
+        self.__add_synthetic_column('even_multiple rand',
+                                    [random.randint(1, 1_000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('even_multiple all',
+                                    np.random.randint(1, 1_000, 1000) * self.synth_df['even_multiple rand'])
+        self.__add_synthetic_column('even_multiple most', self.synth_df['even_multiple all'])
+        self.synth_df.at[999, 'even_multiple most'] = self.synth_df.at[999, 'even_multiple most'] * 1.25
 
     def __check_even_multiple(self, test_id):
         """
@@ -7481,6 +7491,7 @@ class DataConsistencyChecker:
             if (test_series.count(1) + test_series.count(0) + test_series.count(-1) + \
                 test_series.count(np.inf)) > self.contamination_level:
                 continue
+
             test_series = [float(x).is_integer() for x in test_series]
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
@@ -9982,7 +9993,7 @@ class DataConsistencyChecker:
                     test_series,
                     f'The Null values in column "{col_name}" are consistently predictable from {cols} based using a '
                     f'decision tree with the following rules: \n{rules}',
-                    display_info={'Pred': pd.Series(y_pred)}
+                    display_info={'Pred': pd.Series(y_pred).replace({True: 'Null', False: 'Non-Null'})}
                 )
 
     ##################################################################################################################
@@ -12992,6 +13003,11 @@ class DataConsistencyChecker:
             if patterns_arr.nunique() > 1:
                 continue
 
+            # Skip where the main pattern is simply 'X', meaning all alpha-numeric characters
+            vc = patterns_arr.value_counts()
+            if vc.index[0] == 'X':
+                continue
+
             patterns_arr = self.orig_df[col_name].apply(get_str_format)
             vc = patterns_arr.value_counts()
             if len(vc) > self.contamination_level:
@@ -13267,8 +13283,8 @@ class DataConsistencyChecker:
 
     def __generate_longest_words(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: None. This test does not generate patterns.
+        Patterns with exception: 'long_word most' has one unusually long word.
         """
         self.__add_synthetic_column('long_word all',
             [[''.join(random.choice(string.ascii_letters) for _ in range(np.random.randint(1, 12)))][0]
@@ -13301,7 +13317,7 @@ class DataConsistencyChecker:
                 test_series,
                 (f'The words in column "{col_name}" have lengths with 25th percentile {q1} characters and 75th '
                  f'percentile {q3} characters'),
-                f' Flagging any values with words over {upper_limit} characters.',
+                f' Flagging any values with words over {math.floor(upper_limit)} characters.',
                 allow_patterns=False
             )
 
