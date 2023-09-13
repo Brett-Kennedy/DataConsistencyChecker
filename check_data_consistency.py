@@ -5252,6 +5252,7 @@ class DataConsistencyChecker:
                     continue
 
                 # Test simply predicting the previous value
+                y_lag_1_numeric = y_lag_1_numeric.fillna(y_lag_1_numeric.mode())
                 f1_naive = f1_score(y_train_numeric, y_lag_1_numeric, average='micro')
                 if f1_naive >= (f1 - 0.05):
                     continue
@@ -5341,9 +5342,6 @@ class DataConsistencyChecker:
                     test_df = df.iloc[look_back_range:][cols_used]
                     x_test = test_df.drop(columns=[col_name])
                     y_test = test_df[col_name]
-
-                    # x_test = x_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
-                    # y_test = y_test.replace([np.inf, -np.inf, np.NaN, None], sys.maxsize)
 
                     regr = DecisionTreeRegressor(max_leaf_nodes=look_back_range, random_state=0)
                     regr.fit(x_test, y_test)
