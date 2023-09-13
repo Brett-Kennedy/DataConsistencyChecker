@@ -113,9 +113,9 @@ An example where one column was found to be the sum of two other columns with tw
 ![example](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/images/img3.jpg)
 
 
-**Demo_Test Demo**
+**Test_Demo API Demo**
 
-The [Demo Test Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_Test_Method.ipynb) notebook demonstrates the test_demo() API, which provides examples of a specified test ID using the provided synthetic data. 
+The [Test_Demo API Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_Test_Method.ipynb) notebook demonstrates the test_demo() API, which provides examples of a specified test ID using the provided synthetic data. 
 
 ## Performance
 The tool typically runs in under a minute for small files and under 30 minutes even for very large files, with hundreds of thousands of rows and hundreds of columns. However, it is often useful to specify to execute the tool quicker, especially if calling it frequently, or with many datasets. Several techniques to speed the execution are listed here:
