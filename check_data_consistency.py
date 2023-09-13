@@ -200,8 +200,9 @@ class DataConsistencyChecker:
         self.test_dict = {
 
             # Tests on single columns of any type
-            'MISSING_VALUES':           ('', ('Check if all values in a column are consistently present / consistently '
-                                              'missing.'),
+            'MISSING_VALUES':           ('Check if all values in a column are consistently present / missing',
+                                         ('Check if all values in a column are consistently present / consistently '
+                                          'missing.'),
                                          self.__check_missing, self.__generate_missing,
                                          False, True, True, False),
             'RARE_VALUES':              ('', 'Check if there are any rare values in a column.',
@@ -220,7 +221,8 @@ class DataConsistencyChecker:
             'MATCHED_MISSING':          ('', 'Check if two columns have missing values consistently in the same rows.',
                                          self.__check_matched_missing, self.__generate_matched_missing,
                                          True, True, False, False),
-            'UNMATCHED_MISSING':        ('', ('Check if two columns both frequently have null values, but consistently '
+            'UNMATCHED_MISSING':        ('Check if two columns have null values consitently in different rows',
+                                         ('Check if two columns both frequently have null values, but consistently '
                                           'not in the same rows.'),
                                          self.__check_unmatched_missing, self.__generate_unmatched_missing,
                                          True, True, False, False),
@@ -1511,6 +1513,36 @@ class DataConsistencyChecker:
         # to ID and code values.
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_CODE]]
 
+    def demo_test(self, test_id):
+        """
+        This provides a demo of a single test.
+
+        This creates and displays synthetic demo data, runs the specified test on the demo data, and outputs the
+        results, calling display_detailed_results().
+
+        For most tests, the associated synthetic test data has three to five columns. The columns are named in two parts
+        with the first indicating the test the synthetic data is designed to test and demonstrate, and the other part
+        indicating if the column is part of a pattern with or without an exception. Typically those named 'rand' or
+        'rand_XXX' do not have a pattern, but may be involved in patterns spanning multiple columns. Those named
+        'all' are part of a pattern with no exceptions (and sometimes other patterns as well). Those named 'most' are
+        part of patterns with exceptions, indicating the pattern holds for most, but not all, rows.
+        """
+
+        if test_id not in self.test_dict.keys():
+            print(f"Error {test_id} is not a valid test")
+
+        synth_df = self.generate_synth_data(all_cols=False, execute_list=[test_id], add_nones='none')
+        print_text(f"## {test_id}")
+        print_text(f"### Synthetic Data:")
+        if is_notebook():
+            display(synth_df)
+        else:
+            print(synth_df)
+
+        self.verbose = 2
+        self.init_data(synth_df)
+        self.check_data_quality(execute_list=[test_id])
+        self.display_detailed_results(show_short_list_only=False)
 
     ##################################################################################################################
     # Public methods to output statistics about the dataset, unrelated to any tests executed.
@@ -1653,9 +1685,17 @@ class DataConsistencyChecker:
         of exceptions found. The dataframe has columns for: test id, the set of columns involved in the pattern,
         a description of the pattern and exceptions, and the number of exceptions.
         """
-        if self.exceptions_summary_df is None:
+
+        def clean_col_names(x):
+            col_name = x['Column(s)']
+            test_id = x['Test ID']
+            return self.__get_condensed_col_list(test_id, col_name)
+
+        if self.exceptions_summary_df is None or self.exceptions_summary_df.empty:
             return None
-        return self.exceptions_summary_df.drop(columns=['Display Information'])
+        df = self.exceptions_summary_df.drop(columns=['Display Information']).copy()
+        df['Column(s)'] = df.apply(clean_col_names, axis=1)
+        return df
 
     def get_exceptions(self):
         """
@@ -1758,17 +1798,16 @@ class DataConsistencyChecker:
             test_arr = [test_id]
             test_arr.extend([0]*len(self.orig_df.columns))
 
-            flagged_cols = []
             for i in test_sub_df.index:
+                num_exceptions = test_sub_df.loc[i, 'Number of Exceptions']
                 sub_df_row_cols = test_sub_df.loc[i]['Column(s)']
                 sub_df_row_cols = [x.lstrip('"').rstrip('"') for x in sub_df_row_cols.split(" AND ")]
-                flagged_cols.extend(sub_df_row_cols)
-            flagged_cols = list(set(flagged_cols))
+                for col_name in sub_df_row_cols:
+                    col_idx = self.orig_df.columns.tolist().index(col_name)
+                    test_arr[col_idx + 1] += num_exceptions
 
-            for col_idx, col_name in enumerate(self.orig_df.columns):
-                if col_name in flagged_cols:
-                    test_arr[col_idx + 1] += 1
             summary_arr.append(test_arr)
+
         cols = ['Test ID']
         cols.extend(self.orig_df.columns)
         df = pd.DataFrame(summary_arr, columns=cols)
@@ -1780,6 +1819,42 @@ class DataConsistencyChecker:
             s.set(ylabel=None)
             plt.show()
 
+        # Replace any 0 values with a blank to make the display more clear.
+        df = df.replace(0, '')
+
+        return df
+
+    def summarize_patterns_by_test(self, heatmap=False):
+        """
+        Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
+        was found.
+
+        heatmap: bool
+            If True, a heatmap of the results are displayed
+        """
+
+        if self.patterns_df is None:
+            return None
+
+        g = self.patterns_df.groupby('Test ID')
+        df = pd.DataFrame({
+            'Test ID': list(g.groups),
+            'Number of Columns Flagged': list(g['Column(s)'].nunique())
+        })
+
+        # Use the consistent ordering for the tests
+        df['Test ID'] = df['Test ID'].astype("category")
+        df['Test ID'] = df['Test ID'].cat.set_categories(self.get_test_list())
+        df = df.sort_values(['Test ID'])
+
+        df = df.set_index("Test ID", drop=True)
+        if heatmap:
+            fig, ax = plt.subplots(figsize=(len(df.columns) * 0.5, len(df) * 0.5))
+            s = sns.heatmap(df, cmap='Blues', linewidths=0.75, linecolor='black', annot=True, fmt="d")
+            s.set(ylabel=None)
+            s.set(xticklabels=[])
+            print("Counts: Number Columns Flagged at Least Once, and Total Number of Issues:")
+            plt.show()
         return df
 
     def summarize_exceptions_by_test(self, heatmap=False):
@@ -1868,8 +1943,8 @@ class DataConsistencyChecker:
         """
         Loops through each test specified, and each feature specified, and presents a detailed description of each. If
         filters are not specified, the set of identified patterns, with and without exceptions, can be very long in
-        some cases, and the method will not be able to display them. In this case, additional filters should be
-        specified.
+        some cases, and in these cases, the method will not be able to display them. In this case, additional filters
+        should be specified.
 
         test_id_list: Array of test IDs
             If specified, only these will be displayed. If None, all tests for which there is information to be display
@@ -1945,13 +2020,7 @@ class DataConsistencyChecker:
                 print()
                 print(hyphens)
 
-            if test_id in ['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']:
-                s = "Column(s): This test executes over all columns"
-            elif test_id in ['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
-                             'LARGE_AVG_RANK_PER_ROW']:
-                s = "Column(s): This test executes over all numeric columns"
-            else:
-                s = f"Column(s): {col_name}"
+            s = f"Columns(s): {self.__get_condensed_col_list(test_id, col_name)}"
             if is_notebook():
                 display(Markdown(f"### {s}"))
             else:
@@ -2088,13 +2157,12 @@ class DataConsistencyChecker:
                         print_test_header(test_id)
                         print_column_header(columns_set, test_id)
                         print_text("Pattern found (without exceptions)")
-                        print()
-                        print_text("**Description**:")
                         if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
                                        'PREDICT_NULL_DT']:
+                            print_text("**Description**:")
                             print(sub_patterns.iloc[0]['Description of Pattern'])
                         else:
-                            print_text(sub_patterns.iloc[0]['Description of Pattern'])
+                            print_text(f"**Description**: {sub_patterns.iloc[0]['Description of Pattern']}")
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
                         if include_examples:
                             self.__display_examples(
@@ -2504,6 +2572,16 @@ class DataConsistencyChecker:
     ##################################################################################################################
     # Private helper methods to support outputting the results of the analysis in various ways
     ##################################################################################################################
+
+    def __get_condensed_col_list(self, test_id, col_name):
+        if test_id in ['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']:
+            s = "This test executes over all columns"
+        elif test_id in ['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
+                         'LARGE_AVG_RANK_PER_ROW']:
+            s = "This test executes over all numeric columns"
+        else:
+            s = col_name
+        return s
 
     def __get_rows_flagged(self, test_id, col_name):
         """
@@ -3585,11 +3663,11 @@ class DataConsistencyChecker:
         elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
 
             def highlight_cells():
-                for i in flagged_df.index:
-                    v0 = flagged_df.loc[i, cols[0]]
-                    v1 = flagged_df.loc[i, cols[1]]
-                    patch_x = counts_df.index.tolist().index(v0)
-                    patch_y = counts_df.columns.tolist().index(v1)
+                for row_idx in flagged_df.index:
+                    v0 = flagged_df.loc[row_idx, cols[0]]
+                    v1 = flagged_df.loc[row_idx, cols[1]]
+                    patch_x = counts_df.columns.tolist().index(v1)
+                    patch_y = counts_df.index.tolist().index(v0)
                     ax.add_patch(Rectangle((patch_x, patch_y), 1, 1, fill=False, edgecolor='yellow', lw=3))
 
             results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -3620,7 +3698,7 @@ class DataConsistencyChecker:
                 plt.show()
 
             # Present a histogram of the relevant classes
-            fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
+            fig, ax = plt.subplots(nrows=1, ncols=nvals, sharey=True, figsize=(nvals*4, 4))
             for v_idx in range(nvals):
                 v0 = vals.iloc[v_idx][cols[0]]
                 v1 = vals.iloc[v_idx][cols[1]]
@@ -4030,7 +4108,11 @@ class DataConsistencyChecker:
 
         if (self.num_rows - self.contamination_level) <= num_true < self.num_rows:
             if allow_patterns:
-                summary_str = f'{pattern_string}, with exceptions {exception_str}'
+                if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
+                               'PREDICT_NULL_DT']:
+                    summary_str = f'{pattern_string}'
+                else:
+                    summary_str = f'{pattern_string}, with exceptions {exception_str}'
             else:
                 summary_str = f'{pattern_string}, {exception_str}'
             summary_str = summary_str.replace(" .", ".").replace("..", ".").replace(".,", ",")
@@ -4932,7 +5014,6 @@ class DataConsistencyChecker:
             if (self.num_rows - self.contamination_level) < num_null < self.num_rows:
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     null_arr,
                     f"The column contains values that are consistently NULL"
@@ -4940,7 +5021,6 @@ class DataConsistencyChecker:
             if 0 <= num_null < self.contamination_level:
                 self.__process_analysis_binary(
                     test_id,
-                    col_name,
                     [col_name],
                     non_null_arr,
                     f"The column contains values that are consistently non-NULL"
@@ -5049,7 +5129,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column contains values that are consistently unique",
-                f"including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated values)"
+                f"including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated value(s))"
             )
 
     def __generate_prev_values_dt(self):
@@ -5687,7 +5767,7 @@ class DataConsistencyChecker:
                         test_id,
                         [col_name_1, col_name_2],
                         col_values,
-                        (f'The values in "{col_name_2}" are consistently either the same as those in "{col_name_1}, '
+                        (f'The values in "{col_name_2}" are consistently either the same as those in "{col_name_1}", '
                          f'or one of {common_alternatives}'))
             else:
                 return False
@@ -5774,9 +5854,9 @@ class DataConsistencyChecker:
         Patterns without exceptions:
         Patterns with exception:
         """
-        self.__add_synthetic_column('num decimals rand', [random.random() for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('num decimals all',  [round(random.random(), 2) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('num decimals most',
+        self.__add_synthetic_column('num_decimals rand', [random.random() for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('num_decimals all',  [round(random.random(), 2) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('num_decimals most',
                                     [round(random.random(), 2) for _ in range(self.num_synth_rows-2)] + [0.5665] + [0.00083838383334445])
 
     def __check_number_decimals(self, test_id):
@@ -5832,12 +5912,12 @@ class DataConsistencyChecker:
         Patterns with exception: 'most' consistently has values ending in a small set of values after
             the decimal point, with 1 exception.
         """
-        self.__add_synthetic_column('rare_decimals_rand',
+        self.__add_synthetic_column('rare_decimals rand',
                                     [np.random.random() * 1000.0 for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('rare_decimals_all',
+        self.__add_synthetic_column('rare_decimals all',
                                     [np.random.randint(1, 100) + np.random.choice([0.49, 0.98, 0.99])
                                      for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('rare_decimals_most',
+        self.__add_synthetic_column('rare_decimals most',
                                     [np.random.randint(1, 100) + np.random.choice([0.49, 0.98, 0.99])
                                      for _ in range(self.num_synth_rows - 1)] + [5.74])
 
@@ -5925,11 +6005,11 @@ class DataConsistencyChecker:
         Patterns without exceptions: 'col desc all' is consistently decreasing.
         Patterns with exception: 'col desc most' is consistently decreasing, with one exception.
         """
-        self.__add_synthetic_column('col desc rand',
+        self.__add_synthetic_column('col_desc rand',
                                     [random.random() for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('col desc all',
+        self.__add_synthetic_column('col_desc all',
                                     sorted([round(random.random(), 2) for _ in range(self.num_synth_rows)], reverse=True))
-        self.__add_synthetic_column('col desc most',
+        self.__add_synthetic_column('col_desc most',
                                     sorted([round(random.random(), 2) for _ in range(self.num_synth_rows-1)], reverse=True) + [5.1])
 
         test_date = datetime.datetime.strptime("1-1-2000", "%d-%m-%Y")
@@ -9838,11 +9918,8 @@ class DataConsistencyChecker:
             # Drop any columns that have almost the same set of Null values as the target column
             matching_cols = []
             for col_name_2 in x_df.columns:
-                try:
-                    if abs(num_missing_dict[col_name] - num_missing_dict[col_name_2]) > self.contamination_level:
-                        continue
-                except:
-                    x = 9
+                if abs(num_missing_dict[col_name] - num_missing_dict[col_name_2]) > self.contamination_level:
+                    continue
                 num_matching = len([1 for x, y in zip(is_missing_dict[col_name], is_missing_dict[col_name_2]) if x == y])
                 if num_matching > (self.num_rows - self.contamination_level):
                     matching_cols.append(col_name_2)
@@ -9865,11 +9942,14 @@ class DataConsistencyChecker:
                     x_df[num_col] = self.numeric_vals_filled[num_col]
                     x_df[num_col] = x_df[num_col].fillna(self.column_medians[num_col])
 
-            # Create, fit, and test the DT
-            clf = DecisionTreeClassifier(max_leaf_nodes=4, random_state=0)
-            clf.fit(x_df, target_col)
-            y_pred = clf.predict(x_df)
-            f1_dt = metrics.f1_score(target_col, y_pred, average='macro')
+            # Create, fit, and test the DT. We create as simple of a tree as possible to get a good level of accuracy.
+            for max_leaf_nodes in range(2, 9):
+                clf = DecisionTreeClassifier(max_leaf_nodes=max_leaf_nodes, random_state=0)
+                clf.fit(x_df, target_col)
+                y_pred = clf.predict(x_df)
+                f1_dt = metrics.f1_score(target_col, y_pred, average='macro')
+                if f1_dt > 0.9:
+                    break
 
             if f1_dt > 0.9:
                 rules = tree.export_text(clf)
