@@ -2901,24 +2901,47 @@ class DataConsistencyChecker:
         plt.tight_layout()
         plt.show()
 
-    def __draw_network_plot(self, test_id):
-        nodes = ["A", "B", "C", "D", "E"]
-        edges = [("A", "B"), ("A", "C"), ("C", "D"), ("D", "E")]
-        positions = {
-            "A": (0, 50),
-            "B": (10, 20),
-            "C": (10, 70),
-            "D": (30, 50),
-            "E": (40, 50),
-        }
+    def __plot_larger_relationship(self, test_id, cols, columns_set, show_exceptions, display_info):
+        for col_pairs in display_info['patterns_pairs_arr']:
+            self.__plot_scatter_plot(test_id, col_pairs, columns_set, show_exceptions, display_info)
+        self.__draw_network_plot(cols, display_info['patterns_pairs_arr'])
 
-        plt.figure()
+    def __draw_network_plot(self, nodes, edges):
+        """
+        Each node represents one feature in the original data, and each edge represents an larger than relationship.
+        """
+
+        # Include the x position with each node and sort these left to right
+        nodes = [(node, self.column_medians[node]) for node in nodes]
+        nodes = sorted(nodes, key=lambda x: x[1])
+
+        # Define the location of each node.
+        x_vals = [node[1] for node in nodes]
+        min_x_val = min(x_vals)
+        max_x_val = max(x_vals)
+        range_x_vals = max_x_val - min_x_val
+        positions = {}
+        prev_y = -1
+        for node_idx, node in enumerate(nodes):
+            y_pos = 50
+            if node_idx > 0:
+                diff_x = node[1] - nodes[node_idx-1][1]
+                relative_diff_x = diff_x / range_x_vals
+                y_diff = (1.0 - relative_diff_x) * 100
+                if prev_y >= 50:
+                    y_pos = prev_y - (y_diff / 2)
+                else:
+                    y_pos = prev_y + (y_diff / 2)
+            positions[node[0]] = (node[1], y_pos)
+            prev_y = y_pos
+
+        plt.figure(figsize=(max(4, len(nodes) * 2), 4))
 
         # Draw the nodes
         for node in nodes:
-            posn = positions[node]
+            posn = positions[node[0]]
             plt.scatter(posn[0], posn[1], label=node, s=500, c='skyblue')
-            plt.text(posn[0], posn[1]-10, node, fontsize=12, color='black', fontweight='bold', ha='center', va='center')
+            plt.text(posn[0], posn[1]-10, node, fontsize=9, color='black', fontweight='bold', ha='center', va='center')
 
         # Draw the edges
         for edge in edges:
@@ -2928,7 +2951,7 @@ class DataConsistencyChecker:
             p_1y = positions[node_0][1]
             p_2x = positions[node_1][0]
             p_2y = positions[node_1][1]
-            plt.plot([p_1x, p_2x], [p_1y, p_2y], 'k-')
+            plt.arrow(p_1x, p_1y, p_2x - p_1x, p_2y - p_1y, length_includes_head=True, head_width=3, head_length=3)
 
         plt.axis('off')
         plt.ylim(0, 100)
@@ -3444,10 +3467,15 @@ class DataConsistencyChecker:
                        'EARLY_DATES', 'LATE_DATES']:
             self.__plot_distribution(test_id, cols[0], show_exceptions)
 
-        if test_id in ['LARGER', 'MUCH_LARGER', 'SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE',
+        if test_id in ['LARGER', 'MUCH_LARGER']:
+            if len(cols) == 2:
+                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+            else:
+                self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
+        if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
                        'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE',
-                       'BINARY_MATCHES_VALUES', 'CORRELATED_DATES']:
+                       'BINARY_MATCHES_VALUES']:
             self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
 
         if test_id in ['SAME_VALUES']:
@@ -6819,11 +6847,13 @@ class DataConsistencyChecker:
 
     def __generate_larger(self):
         """
-        Patterns without exceptions: 'larger all' is consistently larger than 'larger rand'
+        Patterns without exceptions: 'larger all_2' is consisently larger than 'larger all', which is consistently
+            larger than 'larger rand'
         Patterns with exception: 'larger most' is consistently larger than 'larger rand' with 1 exception
         """
         self.__add_synthetic_column('larger rand', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('larger all',  [random.randint(200, 300) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('larger all_2',  [random.randint(400, 500) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('larger most', [random.randint(200, 300) for _ in range(self.num_synth_rows-1)] + [50])
 
     def __check_larger(self, test_id):
@@ -6841,6 +6871,7 @@ class DataConsistencyChecker:
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         larger_dict = self.get_larger_pairs_dict(print_status=True)
+        larger_pairs_arr = []
 
         for cols_idx, (col_name_1, col_name_2) in enumerate(col_pairs):
             test_series = larger_dict[tuple([col_name_1, col_name_2])]
@@ -6884,16 +6915,50 @@ class DataConsistencyChecker:
                 (vals_arr_1 / vals_arr_2) > 10.0,
                 False
             )
-            order_mag_larger_series = order_mag_larger_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+            #order_mag_larger_series = order_mag_larger_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             if sample_series.tolist().count(False) < self.contamination_level:
                 continue
 
+            if test_series.tolist().count(False) > 0:
+                self.__process_analysis_binary(
+                    test_id,
+                    [col_name_1, col_name_2],
+                    test_series,
+                    f'"{col_name_1}" is consistently larger than "{col_name_2}"'
+                )
+            else:
+                larger_pairs_arr.append([col_name_1, col_name_2])
+
+        patterns_arr = []  # The set of unique columns in each pattern
+        patterns_pairs_arr = []  # The set of pair-wise relationships between columns in each pattern
+        for col_name_1, col_name_2 in larger_pairs_arr:
+            found_existing_pattern = False
+            for p_idx, p in enumerate(patterns_arr):
+                if (col_name_1 in p) or (col_name_2 in p):
+                    patterns_arr[p_idx].append(col_name_1)
+                    patterns_arr[p_idx].append(col_name_2)
+                    patterns_arr[p_idx] = list(set(patterns_arr[p_idx]))
+                    patterns_pairs_arr[p_idx].append([col_name_1, col_name_2])
+                    found_existing_pattern = True
+                    break
+            if not found_existing_pattern:
+                patterns_arr.append([col_name_1, col_name_2])
+                patterns_pairs_arr.append([[col_name_1, col_name_2]])
+
+        for pattern_idx, cols in enumerate(patterns_arr):
+            if len(cols) == 2:
+                desc = f'"{patterns_pairs_arr[pattern_idx][0]}" is consistently larger than "{patterns_pairs_arr[pattern_idx][1]}"'
+            else:
+                desc = "There is a consistent relationship in size of values between the the columns."
+
             self.__process_analysis_binary(
                 test_id,
-                [col_name_1, col_name_2],
-                test_series,
-                f'"{col_name_1}" is consistently larger than "{col_name_2}"',
-                allow_patterns=self.check_columns_same_scale_2(col_name_1, col_name_2, order=10)
+                cols,
+                [True]*self.num_rows,
+                #f'"{col_name_1}" is consistently larger than "{col_name_2}"',
+                desc,
+                # allow_patterns=self.check_columns_same_scale_2(col_name_1, col_name_2, order=10)
+                display_info={'patterns_pairs_arr': patterns_pairs_arr[pattern_idx]}
             )
 
     def __generate_much_larger(self):
