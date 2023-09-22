@@ -16323,6 +16323,15 @@ class DataConsistencyChecker:
                     zip(self.orig_df[col_name_a], self.orig_df[col_name_b], self.orig_df[col_name_c],
                         self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
                         self.orig_df[col_name_c].isna())]
+                
+                # Determine again how often C matched A and B. The test above allowed cases where it equalled both
+                if matching_arr.count(col_name_a) < self.contamination_level:
+                    return
+                if matching_arr.count(col_name_b) < self.contamination_level:
+                    return
+
+                # Calculating where they match on Null values is simply to include this information in the pattern
+                # description
                 matching_on_none_arr = [
                     "BOTH" if (a_na and b_na)
                     else col_name_a if (c_na and a_na)
