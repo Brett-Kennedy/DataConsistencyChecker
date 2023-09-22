@@ -2730,7 +2730,7 @@ class DataConsistencyChecker:
 
             if test_id in ['RARE_COMBINATION']:
                 # Use a kde plot as the background
-                s = sns.kdeplot(data=self.orig_df,
+                s = sns.kdeplot(data=df,
                                 x=col_name_1,
                                 y=col_name_2,
                                 fill=True,
@@ -3584,8 +3584,7 @@ class DataConsistencyChecker:
                 self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
-                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE',
-                       'BINARY_MATCHES_VALUES']:
+                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']: # zzzz
             self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
 
         if test_id in ['SAME_VALUES']:
@@ -3720,7 +3719,7 @@ class DataConsistencyChecker:
                 sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
             plt.show()
 
-        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
+        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
             df2 = self.orig_df[cols].copy()
             col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
             df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
@@ -4512,7 +4511,7 @@ class DataConsistencyChecker:
 
             vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
             vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
-            sample_series = ((vals_arr_1 - vals_arr_2) >= 0) | \
+            sample_series = ((vals_arr_1 - vals_arr_2) > 0) | \
                             self.sample_df[col_name_1].isna().values | \
                             self.sample_df[col_name_2].isna().values
             if sample_series.tolist().count(False) > 1:
@@ -4521,7 +4520,7 @@ class DataConsistencyChecker:
 
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
             vals_arr_2 = self.numeric_vals_filled[col_name_2]
-            test_series = ((vals_arr_1 - vals_arr_2) >= 0) | \
+            test_series = ((vals_arr_1 - vals_arr_2) > 0) | \
                           self.orig_df[col_name_1].isna() | \
                           self.orig_df[col_name_2].isna()
             self.larger_pairs_dict[key] = test_series
@@ -12248,6 +12247,22 @@ class DataConsistencyChecker:
 
     def __check_binary_matches_sum(self, test_id):
 
+        def check_nulls_matching(bin_col, num_col_1, num_col_2):
+            """
+            Check if either numeric value is mostly Null for either of the binary values.
+            """
+            sub_df_v0 = self.orig_df[[bin_col, num_col_1, num_col_2]][self.orig_df[bin_col] == val0]
+            if sub_df_v0[num_col_1].isna().sum() > (len(sub_df_v0) * 0.75):
+                return False
+            if sub_df_v0[num_col_2].isna().sum() > (len(sub_df_v0) * 0.75):
+                return False
+            sub_df_v1 = self.orig_df[[bin_col, num_col_1, num_col_2]][self.orig_df[bin_col] == val0]
+            if sub_df_v1[num_col_1].isna().sum() > (len(sub_df_v1) * 0.75):
+                return False
+            if sub_df_v1[num_col_2].isna().sum() > (len(sub_df_v1) * 0.75):
+                return False
+            return True
+
         if len(self.binary_cols) == 0:
             return
 
@@ -12333,6 +12348,8 @@ class DataConsistencyChecker:
                     # Test on the full columns
                     test_series = [True if (x == val0 and y <= threshold) or (x == val1 and y >= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col], sum_arr)]
+                    if not check_nulls_matching(bin_col, num_col_1, num_col_2):
+                        continue
                     test_series = test_series | \
                                   self.orig_df[bin_col].isna() | \
                                   self.orig_df[num_col_1].isna() | \
@@ -12363,6 +12380,8 @@ class DataConsistencyChecker:
                     # Test on the full columns
                     test_series = [True if (x == val1 and y > threshold) or (x == val0 and y <= threshold) else False
                                    for x, y in zip(self.orig_df[bin_col], sum_arr)]
+                    if not check_nulls_matching(bin_col, num_col_1, num_col_2):
+                        continue
                     test_series = test_series | \
                                   self.orig_df[bin_col].isna() | \
                                   self.orig_df[num_col_1].isna() | \
