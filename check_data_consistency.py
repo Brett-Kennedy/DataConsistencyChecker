@@ -16323,7 +16323,7 @@ class DataConsistencyChecker:
                     zip(self.orig_df[col_name_a], self.orig_df[col_name_b], self.orig_df[col_name_c],
                         self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
                         self.orig_df[col_name_c].isna())]
-                
+
                 # Determine again how often C matched A and B. The test above allowed cases where it equalled both
                 if matching_arr.count(col_name_a) < self.contamination_level:
                     return
@@ -16341,6 +16341,11 @@ class DataConsistencyChecker:
                     zip(self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
                         self.orig_df[col_name_c].isna())]
 
+                null_frac_both_str = ""
+                if matching_arr.count("BOTH") > 0:
+                    null_frac_both_str = (f'({matching_on_none_arr.count("BOTH") * 100.0 / matching_arr.count("BOTH"):.3f}' 
+                                          f'% of these on Null values)')
+
                 self.__process_analysis_binary(
                     test_id,
                     [col_name_a, col_name_b, col_name_c],
@@ -16351,9 +16356,7 @@ class DataConsistencyChecker:
                      f'matches "{col_name_b}" {matching_arr.count(col_name_b)} times '
                      f'({matching_on_none_arr.count(col_name_b) * 100.0 / matching_arr.count(col_name_b):.3f}% of '
                      f'these on Null values); '
-                     f'matches both {matching_arr.count("BOTH")} times '
-                     f'({matching_on_none_arr.count("BOTH") * 100.0 / matching_arr.count("BOTH"):.3f}% of these on '
-                     f'Null values); '
+                     f'matches both {matching_arr.count("BOTH")} times {null_frac_both_str}; '                     
                      f'and matches neither {matching_arr.count("NONE")} times. '
                      f'The values in "{col_name_c}" are consistently the same as those in either "{col_name_a}" '
                      f'or "{col_name_b}"'),
