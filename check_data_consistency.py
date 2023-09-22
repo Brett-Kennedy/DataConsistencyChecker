@@ -1306,9 +1306,6 @@ class DataConsistencyChecker:
 
         run_parallel: bool
             If set True, the tests will be run in parallel, which can reduce overall execution time.
-
-        Returns:
-            This returns the exceptions_summary dataframe.
         """
 
         if self.orig_df is None or len(self.orig_df) == 0:
@@ -1458,8 +1455,6 @@ class DataConsistencyChecker:
         self.safe_test_results_df = self.test_results_df.copy()
         self.safe_results_dict = self.results_dict.copy()
         self.safe_test_results_by_column_np = self.test_results_by_column_np.copy()
-
-        return self.get_exceptions_list()
 
     ##################################################################################################################
     # Public methods to output information about the tool, unrelated to any specific dataset or test execution
@@ -1614,7 +1609,7 @@ class DataConsistencyChecker:
         display_df = pd.concat([df1, df2])
 
         print()
-        print("Assigned column types and example rows:")
+        print_text("Assigned column types and example rows:")
         if is_notebook():
             display(display_df)
         else:
@@ -13154,8 +13149,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].astype(str).str.isalnum().tolist().count(False) == 0:
                 continue
 
-            # Get the set of special characters in each value
-            special_chars_list = self.orig_df[col_name].astype(str).apply(get_non_alphanumeric)
+            # Get the set of special characters in each value. Do not include space characters. 
+            special_chars_list = self.orig_df[col_name].astype(str).apply(get_non_alphanumeric).replace(" ", "")
 
             # Remove any empty lists
             special_chars_list = [x for x in special_chars_list if len(x)]
@@ -13761,7 +13756,8 @@ class DataConsistencyChecker:
             test_id,
             pattern_cols,
             test_series,
-            f'The values in "{col_name}" are consistently grouped together{sort_msg}. The overall order is: {groups_str}'
+            (f'The values in "{col_name}" are consistently grouped together{sort_msg}. The overall order is: '
+             f'{groups_str}.')
         )
 
     def __check_grouped_strings(self, test_id):
@@ -14310,11 +14306,17 @@ class DataConsistencyChecker:
 
     def __generate_similar_num_words(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'sim_num_words rand_b' and 'sim_num_words all' both have similar numbers of words
+            row by row (though in this example the word count is also consistent within the columns).
+        Patterns with exception: 'sim_num_words most' and 'sim_num_words rand_b' consistently have similar numbers of
+            words. As do 'sim_num_words most' and 'sim_num_words all'
         """
         self.__add_synthetic_column('sim_num_words rand_a',
-            [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(3, 6))) for _ in range(self.num_synth_rows)])
+            [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(2, 8)))
+             for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('sim_num_words rand_b',
+            [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(4, 6)))
+             for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('sim_num_words all',
             [' '.join(np.random.choice(list(string.ascii_lowercase), 5)) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('sim_num_words most',
@@ -14352,7 +14354,7 @@ class DataConsistencyChecker:
             if len(word_counts_1.value_counts()) == 1 and len(word_counts_2.value_counts()) == 1:
                 continue
             similarity_series = [abs(x - y) for x, y in zip(word_counts_1, word_counts_2)]
-            for test_threshold in range(3, -1, -1):
+            for test_threshold in range(2, -1, -1):
                 test_series = [x <= test_threshold for x in similarity_series]
                 test_series = (test_series | self.orig_df[col_name_1].isnull()) | self.orig_df[col_name_2].isnull()
                 if test_series.tolist().count(False) < self.contamination_level:
