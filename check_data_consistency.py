@@ -6385,12 +6385,12 @@ class DataConsistencyChecker:
             order of magnitude of each other, with one value many orders of magnitude larger. 'unusual_number rand'
             may occasionally randomly generate unusual values as well, which may be flagged as exceptions.
         """
-        self.__add_synthetic_column('unusual_number rand',
-                                    [random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('unusual_number all',
-                                    [random.randint(1, 5) * 100 for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('unusual_number most',
+                                    [random.randint(4, 8) * 100 for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('unusual_number most_1',
                                     [random.randint(1, 5) * 100 for _ in range(self.num_synth_rows-1)] + [999_999_999])
+        self.__add_synthetic_column('unusual_number most_2',
+                                    [random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)])
 
     def __check_unusual_order_magnitude(self, test_id):
         for col_name in self.numeric_cols:
@@ -6404,7 +6404,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 (f"This test checks for values of an unusual order of magnitude. Each value is described in terms "
-                 f"of its order, or power of 10. For example 10 is of order 1, 100 is of order 2, 1000 is of order 3. "
+                 f"of its order, or power of 10. For example, 10 is of order 1, 100 is of order 2, 1000 is of order 3. "
                  f"All numbers are rounded to the nearest integer order of magnitude. For example, 3.0 will be "
                  f"considered of order 0, and 7.0 of order 1. "
                  f"The column contains values in the range {self.numeric_vals[col_name].min()} to "
@@ -7701,12 +7701,18 @@ class DataConsistencyChecker:
                 )
 
     def __generate_even_multiple(self):
+        """
+        Patterns without exceptions: 'even_multiple all' is consistently an even integer multiple of
+            'even_multiple rand'
+        Patterns with exception: 'even_multiple most' is consistently an even integer multiple of
+            'even_multiple rand' with one exception
+        """
         self.__add_synthetic_column('even_multiple rand',
                                     [random.randint(1, 1_000) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('even_multiple all',
                                     np.random.randint(1, 1_000, 1000) * self.synth_df['even_multiple rand'])
         self.__add_synthetic_column('even_multiple most', self.synth_df['even_multiple all'])
-        self.synth_df.at[999, 'even_multiple most'] = self.synth_df.at[999, 'even_multiple most'] * 1.25
+        self.synth_df.at[999, 'even_multiple most'] = self.synth_df.at[999, 'even_multiple most'] * 1.25 + 1
 
     def __check_even_multiple(self, test_id):
         """
@@ -16317,14 +16323,29 @@ class DataConsistencyChecker:
                     zip(self.orig_df[col_name_a], self.orig_df[col_name_b], self.orig_df[col_name_c],
                         self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
                         self.orig_df[col_name_c].isna())]
+                matching_on_none_arr = [
+                    "BOTH" if (a_na and b_na)
+                    else col_name_a if (c_na and a_na)
+                    else col_name_b if (c_na and b_na)
+                    else "NONE"
+                    for a_na, b_na, c_na in
+                    zip(self.orig_df[col_name_a].isna(), self.orig_df[col_name_b].isna(),
+                        self.orig_df[col_name_c].isna())]
 
                 self.__process_analysis_binary(
                     test_id,
                     [col_name_a, col_name_b, col_name_c],
                     test_series,
-                    (f'Column "{col_name_c}" matches "{col_name_a}" {matching_arr.count(col_name_a)} '
-                     f'times; matches "{col_name_b}" {matching_arr.count(col_name_b)} times; matches both '
-                     f'{matching_arr.count("BOTH")} times; and matches neither {matching_arr.count("NONE")} times. '
+                    (f'Column "{col_name_c}" matches "{col_name_a}" {matching_arr.count(col_name_a)} times '
+                     f'({matching_on_none_arr.count(col_name_a) * 100.0 / matching_arr.count(col_name_a):.3f}% of '
+                     f'these on Null values); ' 
+                     f'matches "{col_name_b}" {matching_arr.count(col_name_b)} times '
+                     f'({matching_on_none_arr.count(col_name_b) * 100.0 / matching_arr.count(col_name_b):.3f}% of '
+                     f'these on Null values); '
+                     f'matches both {matching_arr.count("BOTH")} times '
+                     f'({matching_on_none_arr.count("BOTH") * 100.0 / matching_arr.count("BOTH"):.3f}% of these on '
+                     f'Null values); '
+                     f'and matches neither {matching_arr.count("NONE")} times. '
                      f'The values in "{col_name_c}" are consistently the same as those in either "{col_name_a}" '
                      f'or "{col_name_b}"'),
                     display_info={'Same Column': matching_arr}
@@ -16880,7 +16901,8 @@ class DataConsistencyChecker:
         Patterns with exception: Row 999, over all numeric columns, has values with, on average, low percentiles.
         """
         for i in range(10):
-            self.__add_synthetic_column(f'small_avg_rank_rand_{i}', [random.random() for _ in range(self.num_synth_rows -1)] + [0.000001])
+            self.__add_synthetic_column(f'small_avg_rank_rand_{i}',
+                                        [random.random() for _ in range(self.num_synth_rows - 1)] + [0.000001])
 
     def __check_small_avg_rank_per_row(self, test_id):
         rand_df = pd.DataFrame()
