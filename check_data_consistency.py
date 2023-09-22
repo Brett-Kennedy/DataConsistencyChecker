@@ -13149,8 +13149,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].astype(str).str.isalnum().tolist().count(False) == 0:
                 continue
 
-            # Get the set of special characters in each value. Do not include space characters. 
-            special_chars_list = self.orig_df[col_name].astype(str).apply(get_non_alphanumeric).replace(" ", "")
+            # Get the set of special characters in each value. Do not include space characters.
+            special_chars_list = self.orig_df[col_name].astype(str).apply(get_non_alphanumeric)
 
             # Remove any empty lists
             special_chars_list = [x for x in special_chars_list if len(x)]
@@ -13161,6 +13161,8 @@ class DataConsistencyChecker:
 
             # Get the unique set of special characters
             special_chars_list = list(set([item for sublist in special_chars_list for item in sublist]))
+            if ' ' in special_chars_list:
+                special_chars_list.remove(' ')
 
             # Examine each special character and determine if it is in most values
             common_special_chars_list = []
