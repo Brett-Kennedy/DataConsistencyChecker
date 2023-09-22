@@ -2769,7 +2769,7 @@ class DataConsistencyChecker:
                         ax.set_ylim(ylim)
                 ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
             else:
-                s = sns.scatterplot(data=self.orig_df,
+                s = sns.scatterplot(data=df,
                                     x=col_name_1,
                                     y=col_name_2,
                                     color='blue',
@@ -5635,9 +5635,9 @@ class DataConsistencyChecker:
                             continue
                         pattern_cols = [x.lstrip('"').rstrip('"') for x in existing_pattern[1].split(" AND ")]
                         if col_name_1 in pattern_cols or col_name_2 in pattern_cols:
-                            if col_name_1 not in existing_pattern[1]:
+                            if f'"{col_name_1}"' not in existing_pattern[1]:
                                 existing_pattern[1] += f' AND "{col_name_1}"'
-                            if col_name_2 not in existing_pattern[1]:
+                            if f'"{col_name_1}"' not in existing_pattern[1]:
                                 existing_pattern[1] += f' AND "{col_name_2}"'
                             existing_pattern[2] = (f'The columns consistently have missing values in the same rows, '
                                                    f'with {num_missing_1} missing values.')
@@ -7240,6 +7240,7 @@ class DataConsistencyChecker:
 
         nunique_dict = self.get_nunique_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
+        cols_same_count_dict = self.get_cols_same_count_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose and len(numeric_pairs_list) > 5000 and pair_idx > 0 and pair_idx % 5000 == 0:
@@ -7253,7 +7254,7 @@ class DataConsistencyChecker:
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
-            # Skip where there are many null or zero values
+            # Skip where there are many null or zero values, including cases where either is Null
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.75):
                 continue
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.75):
@@ -7261,6 +7262,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].tolist().count(0) > (self.num_rows * 0.75):
                 continue
             if self.orig_df[col_name_2].tolist().count(0) > (self.num_rows * 0.75):
+                continue
+            if self.orig_df[[col_name_1, col_name_2]].isna().sum(axis=1).replace(2, 1).sum() > (self.num_rows * 0.50):
                 continue
 
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
@@ -7276,7 +7279,9 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_1, col_name_2],
                 test_series,
-                f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their ratio')
+                (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their ratio (with '
+                 f'{cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]} rows having identical values)')
+            )
 
     def __generate_similar_wrt_difference(self):
         """
@@ -7298,13 +7303,14 @@ class DataConsistencyChecker:
 
         nunique_dict = self.get_nunique_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
+        cols_same_count_dict = self.get_cols_same_count_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose and (pair_idx > 0) and (pair_idx % 5000) == 0:
                     print(f"  Examining column set {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
             # Skip columns that have few unique values.
-            # todo: ensure this is a constistent mimimum for all tests, make it a class variable
+            # todo: ensure this is a consistent mimimum for all tests, make it a class variable
             if (nunique_dict[col_name_1] < 10) or (nunique_dict[col_name_2] < 10):
                 continue
 
@@ -7316,6 +7322,8 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.75):
                 continue
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.75):
+                continue
+            if self.orig_df[[col_name_1, col_name_2]].isna().sum(axis=1).replace(2, 1).sum() > (self.num_rows * 0.50):
                 continue
 
             diff_medians = abs(self.column_medians[col_name_1] - self.column_medians[col_name_2])
@@ -7331,7 +7339,8 @@ class DataConsistencyChecker:
                 [col_name_1, col_name_2],
                 test_series,
                 (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their absolute '
-                 f'difference'))
+                 f'difference (with {cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]} rows having '
+                 f'identical values)'))
 
     def __generate_similar_to_inverse(self):
         """
@@ -13187,7 +13196,7 @@ class DataConsistencyChecker:
                 vc2 = list_2.value_counts()
                 if (self.orig_df[col_name].isna().sum() + vc1.iloc[0]) >= (self.num_rows - self.contamination_level):
                     common_posn = vc1.index[0]
-                    common_posn_str = str(common_posn)
+                    common_posn_str = str(common_posn + 1)
                     test_series = self.orig_df[col_name].astype(str).str.find(c) == common_posn
                 elif (self.orig_df[col_name].isna().sum() + vc2.iloc[0]) >= (self.num_rows - self.contamination_level):
                     common_posn = vc2.index[0]
