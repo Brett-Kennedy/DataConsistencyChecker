@@ -3571,7 +3571,8 @@ class DataConsistencyChecker:
             if draw_diagonal:
                 plt.plot(xlim, ylim)
             plt.xticks(rotation=60)
-            plt.legend().remove()
+            if plt.legend():
+                plt.legend().remove()
             plt.show()
 
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
@@ -4060,12 +4061,21 @@ class DataConsistencyChecker:
     def get_similar_cols(self, full_cols_arr, include_self, lower_divisor, upper_multiplier,
                          check_larger_false=False, check_larger_true=False):
         """
-        Used by __check_sum_of_columns, as well as min, max, and mean
+        Used by __check_sum_of_columns, as well as min, max, and mean.
+        This finds, for each numeric column, the set of other numeric columns that may reasonably be related to it.
+        For min(), we look for columns larger, but not drastically larger. For max() and sum() columns that are
+        smaller, but not drastically smaller. For mean(), columns of similar values, and for sum().
+
+        lower_divisor and  upper_multiplier specify the range of median values we can accept.
+
+        if check_larger_false is True (for min()), we check that the current column is not larger than any added cols.
+        if check_larger_true is True (for max()), we check that the current column is not smaller than any added cols
         """
 
         # Get information about which columns have the same values
         cols_same_bool_dict = self.get_cols_same_bool_dict(force=True)
 
+        # Each key in larger_dict is a pair of columns, (A, B), where A > B consistently, row by row.
         larger_dict = self.get_larger_or_equal_pairs_with_bool_dict()
 
         similar_cols_dict = {}
@@ -4086,10 +4096,13 @@ class DataConsistencyChecker:
                     # Ensure the columns are correlated with col_name. Any columns summing to col_name should be
                     corr = self.pearson_corr.loc[col_name, c]
                     if corr > 0.2:
-                        if not cols_same_bool_dict[tuple(sorted([col_name, c]))]:
+                        # Create a tuple representing the pair of features. If the tuple is in larger_dict and True,
+                        # col_name is then larger, row by row, than c.
+                        pair_tuple = tuple([col_name, c])
+                        if not cols_same_bool_dict[tuple(sorted([col_name, c]))]: # cols_same_bool_dict uses sorted column names as the key
                             if (not check_larger_false and not check_larger_true) or \
-                                    (check_larger_false and (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == False)) or \
-                                    (check_larger_true and (tuple([col_name, c]) in larger_dict) and (larger_dict[tuple([col_name, c])] == True)):
+                                    (check_larger_false and ((pair_tuple not in larger_dict) or (larger_dict[pair_tuple] == False))) or \
+                                    (check_larger_true and (pair_tuple in larger_dict) and (larger_dict[pair_tuple] == True)):
                                 similar_cols.append(c)
                                 similar_cols_idxs.append(c_idx)
             similar_cols_dict[col_name] = similar_cols
@@ -4494,6 +4507,15 @@ class DataConsistencyChecker:
         return self.lower_limits_dict
 
     def get_larger_pairs_dict(self, allow_equal, print_status=False):
+        """
+        Populates self.larger_pairs_dict and self.larger_or_equal_pairs_dict. There is an element for each
+        pair of numeric columns where one column is potentially larger than the other (or larger than or equal to),
+        row by row.
+        For any given pair of columns, A and B, the dictionary may have a key of (A, B) or (B, A), or may have neither.
+        Where the dictionary contains (A, B), this indicates A is potentially larger than B, given their medians.
+        The value for the tuple will indicate, row by row, where A is, in fact, larger than B.
+        """
+
         if self.larger_pairs_dict:
             if allow_equal:
                 return self.larger_or_equal_pairs_dict
@@ -4538,13 +4560,19 @@ class DataConsistencyChecker:
         return self.larger_pairs_dict
 
     def get_larger_pairs_with_bool_dict(self):
+        """
+        Populates self.larger_pairs_with_bool_dict, which has a key for each pair of columns, (A, B) where A is
+        potentially larger than B, based on their medians. The value for each key is a boolean value indicating
+        if A is actually, row by row, larger than B consistently, with no more than self.contamination_level exceptions.
+        """
         if self.larger_pairs_with_bool_dict:
             return self.larger_pairs_with_bool_dict
-        larger_dict = self.get_larger_pairs_dict()
         self.larger_pairs_with_bool_dict = {}
+        larger_dict = self.get_larger_pairs_dict(allow_equal=False)
         for key in larger_dict.keys():
             if larger_dict[key] is not None:
-                self.larger_pairs_with_bool_dict[key] = larger_dict[key].tolist().count(True) > self.contamination_level
+                self.larger_pairs_with_bool_dict[key] = \
+                    larger_dict[key].tolist().count(True) > self.contamination_level
             else:
                 self.larger_pairs_with_bool_dict[key] = False
         return self.larger_pairs_with_bool_dict
@@ -4552,11 +4580,12 @@ class DataConsistencyChecker:
     def get_larger_or_equal_pairs_with_bool_dict(self):
         if self.larger_or_equal_pairs_with_bool_dict:
             return self.larger_or_equal_pairs_with_bool_dict
-        larger_or_equal_dict = self.get_larger_pairs_dict(allow_equal=True)
         self.larger_or_equal_pairs_with_bool_dict = {}
+        larger_or_equal_dict = self.get_larger_pairs_dict(allow_equal=True)
         for key in larger_or_equal_dict.keys():
             if larger_or_equal_dict[key] is not None:
-                self.larger_or_equal_pairs_with_bool_dict[key] = larger_or_equal_dict[key].tolist().count(True) > self.contamination_level
+                self.larger_or_equal_pairs_with_bool_dict[key] = \
+                    larger_or_equal_dict[key].tolist().count(True) > self.contamination_level
             else:
                 self.larger_or_equal_pairs_with_bool_dict[key] = False
         return self.larger_or_equal_pairs_with_bool_dict
@@ -7053,7 +7082,8 @@ class DataConsistencyChecker:
                 if (self.column_medians[col_name_2] < col_1_q1) or (self.column_medians[col_name_2] > col_1_q3):
                     continue
             else:
-                # Test for an order of magnitude difference on the full column. If true, this is redundant with MUCH_LARGER.
+                # Test for an order of magnitude difference on the full column. If true, this is redundant with
+                # MUCH_LARGER.
                 vals_arr_1 = self.numeric_vals_filled[col_name_1]
                 vals_arr_2 = self.numeric_vals_filled[col_name_2]
                 order_mag_larger_series = np.where(
@@ -7061,7 +7091,9 @@ class DataConsistencyChecker:
                     (vals_arr_1 / vals_arr_2) > 10.0,
                     False
                 )
-                order_mag_larger_series = order_mag_larger_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                order_mag_larger_series = order_mag_larger_series | \
+                                          self.orig_df[col_name_1].isna() | \
+                                          self.orig_df[col_name_2].isna()
                 if order_mag_larger_series.tolist().count(False) < self.contamination_level:
                     continue
 
@@ -7092,6 +7124,11 @@ class DataConsistencyChecker:
                 patterns_pairs_arr.append([[col_name_1, col_name_2]])
 
         for pattern_idx, cols in enumerate(patterns_arr):
+
+            # Order the columns in the pattern based on their median values
+            col_medians = [self.column_medians[c] for c in cols]
+            cols = np.array(cols)[np.argsort(col_medians)]
+
             if len(cols) == 2:
                 desc = (f'"{patterns_pairs_arr[pattern_idx][0][0]}" is consistently larger than '
                         f'"{patterns_pairs_arr[pattern_idx][0][1]}"')
@@ -7229,6 +7266,10 @@ class DataConsistencyChecker:
                 patterns_pairs_arr.append([[col_name_1, col_name_2]])
 
         for pattern_idx, cols in enumerate(patterns_arr):
+            # Order the columns in the pattern based on their median values
+            col_medians = [self.column_medians[c] for c in cols]
+            cols = np.array(cols)[np.argsort(col_medians)]
+
             if len(cols) == 2:
                     desc = (f'"{patterns_pairs_arr[pattern_idx][0][0]}" is larger than '
                             f'"{patterns_pairs_arr[pattern_idx][0][1]}" consistently by an order of magnitude or more')
@@ -8103,13 +8144,13 @@ class DataConsistencyChecker:
     def __generate_running_sum(self):
         """
         Patterns without exceptions: 'run_sum all' is a running total of 'run sum rand'
-        Patterns with exception: 'run_sum most' is a running total of 'run sum rand' with the exception of row 500.
+        Patterns with exception: 'run_sum most' is a running total of 'run sum rand' with the exception of row 999.
             Note: this may be missed where Null values are added.
         """
         self.__add_synthetic_column('run_sum rand', [random.randint(1, 500) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('run_sum all', self.synth_df['run_sum rand'].cumsum())
         self.__add_synthetic_column('run_sum most', self.synth_df['run_sum all'])
-        self.synth_df.loc[500, 'run_sum most'] = 100
+        self.synth_df.loc[999, 'run_sum most'] = 100
 
     def __check_running_sum(self, test_id):
         num_pairs, numeric_pairs_list = self.__get_numeric_column_pairs()
@@ -8119,6 +8160,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
@@ -8127,6 +8170,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.5):
                 continue
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.5):
+                continue
+
+            # Skip where the two columns are very similar (suggesting a different relationship than a running sum)
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # This is more robust than checking the cumulative sum, which can be thrown off by missing or
@@ -13083,7 +13130,10 @@ class DataConsistencyChecker:
             if n_unique_dict[col_name] < 5:
                 continue
 
-            test_series = self.orig_df[col_name].fillna("").astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
+            test_series = (self.orig_df[col_name]
+                           .fillna("")
+                           .astype(str)
+                           .apply(lambda x: len([e for e in x if (not e.isalnum()) and (e != ' ')])))
             self.__process_analysis_counts(
                 test_id,
                 [col_name],
@@ -14599,14 +14649,14 @@ class DataConsistencyChecker:
 
             # Skip if the two columns are largely the same
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
-                return
+                continue
 
             # Test on a sample
             test_series = [x == y for x, y in zip(sample_first_words_dict[col_name_1], sample_first_words_dict[col_name_2])]
             if test_series.count(False) > 1:
                 continue
 
-            # Test on the full coluns
+            # Test on the full columns
             test_series = [x == y for x, y in zip(first_words_dict[col_name_1], first_words_dict[col_name_2])]
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
@@ -14688,7 +14738,7 @@ class DataConsistencyChecker:
 
             # Skip if the two columns are largely the same
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
-                return
+                continue
 
             # Test on a sample
             test_series = [x == y for x, y in zip(sample_last_words_dict[col_name_1], sample_last_words_dict[col_name_2])]
@@ -14707,14 +14757,17 @@ class DataConsistencyChecker:
 
     def __generate_same_alpha_chars(self):
         """
-        Patterns without exceptions: None
-        Patterns with exception: "same_alpha all" and "same_alpha most" consistently share the same alphabetic
+        Patterns without exceptions: "same_alpha rand" and "same_alpha all" consistently share the same alphabetic
+            characters
+        Patterns with exception: "same_alpha rand" and "same_alpha most" consistently share the same alphabetic
             characters, with 1 exception
+        Not Flagged: "same_alpha all" and "same_alpha most" consistently share the same alphabetic characters, but are
+            almost identical, so not flagged by this test.
         """
-        self.__add_synthetic_column('same_alpha rand_a',
+        self.__add_synthetic_column('same_alpha rand',
             [''.join(np.random.choice(list(string.ascii_lowercase), 10)) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('same_alpha all',
-            self.synth_df['same_alpha rand_a'].str[:1] + ''.join(np.random.choice(list(string.digits), 10)))
+            self.synth_df['same_alpha rand'].str[1:] + [str(np.random.choice(list(string.digits)))])
         self.__add_synthetic_column('same_alpha most', self.synth_df['same_alpha all'])
         self.synth_df.loc[999, 'same_alpha most'] = 'ABCDE'
 
@@ -14742,7 +14795,8 @@ class DataConsistencyChecker:
             alpha_col_2 = [[c for c in x if c and c.isalpha()] for x in alpha_col_2]
             if [len(x) > 0 for x in alpha_col_2].count(False) > 1:
                 continue
-            test_series = [set(x) == set(y) for x, y in zip(alpha_col_1, alpha_col_2)]
+            test_series = [len(set(x).intersection(set(y))) / len(set(x).union(set(y))) > 0.80
+                           for x, y in zip(alpha_col_1, alpha_col_2)]
             if test_series.count(False) > 1:
                 continue
 
@@ -14751,7 +14805,8 @@ class DataConsistencyChecker:
             alpha_col_1 = [[c for c in x if c and c.isalpha()] for x in alpha_col_1]
             alpha_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
             alpha_col_2 = [[c for c in x if c and c.isalpha()] for x in alpha_col_2]
-            test_series = [set(x) == set(y) for x, y in zip(alpha_col_1, alpha_col_2)]
+            test_series = [len(set(x).intersection(set(y))) / len(set(x).union(set(y))) > 0.80
+                           for x, y in zip(alpha_col_1, alpha_col_2)]
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
@@ -14762,13 +14817,15 @@ class DataConsistencyChecker:
 
     def __generate_same_numeric_chars(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'same_num rand' and 'same_num all' consistently have the same numeric characters
+        Patterns with exception: 'same_num rand' and 'same_num most' consistently have the same numeric characters, with
+            one exception
+        Not flagged: 'same_num most' and 'same_num all' are nearly identical, and not flagged by this test
         """
-        self.__add_synthetic_column('same_num rand_a',
-            [''.join(np.random.choice(list(string.digits), 10)) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('same_num rand',
+            [''.join(np.random.choice(list(string.digits), 12)) + 'A' for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('same_num all',
-            self.synth_df['same_num rand_a'].str[:1] + ''.join(np.random.choice(list(string.ascii_lowercase), 10)))
+            self.synth_df['same_num rand'] + ''.join(np.random.choice(list(string.ascii_lowercase))))
         self.__add_synthetic_column('same_num most', self.synth_df['same_num all'])
         self.synth_df.loc[999, 'same_num most'] = '1234'
 
@@ -14782,30 +14839,39 @@ class DataConsistencyChecker:
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
 
+        sample_digit_str_dict = {}
+        digit_str_dict = {}
+        for col_name in self.string_cols:
+            digits_col = self.sample_df[col_name].apply(lambda x: "" if is_missing(x) else x)
+            digits_col = [[c for c in x if c and c.isdigit()] for x in digits_col]
+            digits_col = [''.join(x) for x in digits_col]
+            sample_digit_str_dict[col_name] = digits_col
+
+            digits_col = self.orig_df[col_name].apply(lambda x: "" if is_missing(x) else x)
+            digits_col = [[c for c in x if c and c.isdigit()] for x in digits_col]
+            digits_col = [''.join(x) for x in digits_col]
+            digit_str_dict[col_name] = digits_col
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             # Skip if the two columns are largely the same
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 return
 
             # Test on a sample
-            digits_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
-            digits_col_1 = [[c for c in x if c and c.isdigit()] for x in digits_col_1]
+            digits_col_1 = sample_digit_str_dict[col_name_1]
             if [len(x) > 0 for x in digits_col_1].count(False) > 1:
                 continue
-            digits_col_2 = self.sample_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
-            digits_col_2 = [[c for c in x if c and c.isdigit()] for x in digits_col_2]
+            digits_col_2 = sample_digit_str_dict[col_name_2]
             if [len(x) > 0 for x in digits_col_2].count(False) > 1:
                 continue
-            test_series = [set(x) == set(y) for x, y in zip(digits_col_1, digits_col_2)]
+            test_series = [x == y for x, y in zip(digits_col_1, digits_col_2)]
             if test_series.count(False) > 1:
                 continue
 
             # Test on the full columns
-            digits_col_1 = self.orig_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
-            digits_col_1 = [[c for c in x if c and c.isdigit()] for x in digits_col_1]
-            digits_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
-            digits_col_2 = [[c for c in x if c and c.isdigit()] for x in digits_col_2]
-            test_series = [set(x) == set(y) for x, y in zip(digits_col_1, digits_col_2)]
+            digits_col_1 = digit_str_dict[col_name_1]
+            digits_col_2 = digit_str_dict[col_name_2]
+            test_series = [x == y for x, y in zip(digits_col_1, digits_col_2)]
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
             self.__process_analysis_binary(
                 test_id,
