@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'UNMATCHED_MISSING'
 random.seed(0)
 
-synth_patterns_cols = ['unmatched_missing_vals rand_a AND unmatched_missing_vals all']
-synth_exceptions_cols = ['unmatched_missing_vals rand_a AND unmatched_missing_vals most']
+synth_patterns_cols = ['"unmatched_missing_vals rand_a" AND "unmatched_missing_vals all"']
+synth_exceptions_cols = ['"unmatched_missing_vals rand_a" AND "unmatched_missing_vals most"']
 
 
 def test_real():

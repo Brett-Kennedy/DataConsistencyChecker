@@ -11,7 +11,8 @@ test_id = 'SMALL_GIVEN_VALUE'
 random.seed(0)
 
 synth_patterns_cols = []  # None for this test
-synth_exceptions_cols = ['"small_given rand" AND "small_given most"']
+synth_exceptions_cols = ['"small_given rand" AND "small_given most"',
+                         '"small_given rand" AND "small_given date_most"']
 
 
 def test_real():

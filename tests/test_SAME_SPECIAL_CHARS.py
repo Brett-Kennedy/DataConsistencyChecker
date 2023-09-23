@@ -10,8 +10,9 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SAME_SPECIAL_CHARS'
 random.seed(0)
 
-synth_patterns_cols = []
-synth_exceptions_cols = ['"same_special all" AND "same_special most"']
+synth_patterns_cols = ['"same_special rand_b" AND "same_special all"']
+synth_exceptions_cols = ['"same_special rand_b" AND "same_special most"',
+                         '"same_special all" AND "same_special most"']
 
 
 def test_real():

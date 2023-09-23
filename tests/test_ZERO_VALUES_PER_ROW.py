@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'ZERO_VALUES_PER_ROW'
 random.seed(0)
 
-synth_exceptions_cols = ['"zero_per_row_0" AND "zero_per_row_1" AND "zero_per_row_2" AND "zero_per_row_3"']
 synth_patterns_cols = []  # None
+synth_exceptions_cols = ['This test executes over all numeric columns']
 
 
 # No datasets with this pattern exist in the test set

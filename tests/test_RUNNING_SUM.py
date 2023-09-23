@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'RUNNING_SUM'
 random.seed(0)
 
-synth_patterns_cols = ['"run_sum all" AND "run_sum rand"']
-synth_exceptions_cols = ['"run_sum most" AND "run_sum rand"']
+synth_patterns_cols = ['"run_sum rand" AND "run_sum all"']
+synth_exceptions_cols = ['"run_sum rand" AND "run_sum most"']
 
 def test_real():
 	res = build_default_results()

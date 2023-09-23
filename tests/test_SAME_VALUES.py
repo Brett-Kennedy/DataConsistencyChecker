@@ -13,7 +13,8 @@ random.seed(0)
 synth_patterns_cols = ['"same rand" AND "same all"']
 synth_exceptions_cols = [
 	'"same rand" AND "same most"',
-	'"same all" AND "same most"'
+	'"same all" AND "same most"',
+	'"same rand_date" AND "same most_date"'
 ]
 
 

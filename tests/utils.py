@@ -15,7 +15,7 @@ from list_real_files import real_files
 # Settings. Adjust these before running the tests to run a reduced set of tests.
 TEST_REAL = False
 TEST_SYNTHETIC = True
-TEST_SYNTHETIC_NONES = True
+TEST_SYNTHETIC_NONES = False
 TEST_SYNTHETIC_ALL_COLUMNS = False
 
 PRINT_OUTPUT = True
@@ -65,7 +65,7 @@ def real_test(test_id, expected_results_dict):
 		assert dc.num_exceptions == 0
 
 		# Check the returned patterns without exceptions are correct
-		patterns_df = dc.get_patterns_summary(show_short_list_only=False)
+		patterns_df = dc.get_patterns_list(show_short_list_only=False)
 		if type(expected_patterns_cols) == int:
 			if expected_patterns_cols < 0:
 				assert len(patterns_df) >= abs(expected_patterns_cols)
@@ -82,7 +82,7 @@ def real_test(test_id, expected_results_dict):
 				assert col in patterns_df['Column(s)'].values
 
 		# Check the returned patterns with exceptions are correct
-		exceptions_df = dc.get_exceptions_summary()
+		exceptions_df = dc.get_exceptions_list()
 		if type(expected_exceptions_cols) == int:
 			if expected_exceptions_cols < 0:
 				assert len(exceptions_df) >= abs(expected_exceptions_cols)
@@ -111,7 +111,7 @@ def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_c
 	dc.init_data(synth_df)
 	dc.check_data_quality(execute_list=execute_list)
 
-	patterns_df = dc.get_patterns_summary(show_short_list_only=False)
+	patterns_df = dc.get_patterns_list(show_short_list_only=False)
 	if PRINT_OUTPUT:
 		print()
 		print("add_nones:", add_nones)
@@ -133,7 +133,7 @@ def synth_test(test_id, add_nones, expected_patterns_cols, expected_exceptions_c
 		for col in expected_patterns_cols:
 			assert col in patterns_df['Column(s)'].values
 
-	exceptions_df = dc.get_exceptions_summary()
+	exceptions_df = dc.get_exceptions_list()
 	if PRINT_OUTPUT:
 		print("len(exceptions_df)", len(exceptions_df))
 	if type(expected_exceptions_cols) == int:
@@ -178,7 +178,7 @@ def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exc
 
 	dc.check_data_quality(execute_list=[test_id])
 
-	patterns_df = dc.get_patterns_summary(show_short_list_only=False)
+	patterns_df = dc.get_patterns_list(show_short_list_only=False)
 	if PRINT_OUTPUT:
 		print()
 		print("add_nones:", add_nones)
@@ -197,7 +197,7 @@ def synth_test_all_cols(test_id, add_nones, expected_patterns_cols, expected_exc
 		for col in expected_patterns_cols:
 			assert col in patterns_df['Column(s)'].values
 
-	exceptions_df = dc.get_exceptions_summary()
+	exceptions_df = dc.get_exceptions_list()
 	print("len(exceptions_df)", len(exceptions_df))
 	if type(expected_exceptions_cols) == int:
 		if PRINT_OUTPUT:

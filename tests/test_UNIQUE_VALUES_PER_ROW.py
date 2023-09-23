@@ -11,7 +11,7 @@ test_id = 'UNIQUE_VALUES_PER_ROW'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"unique_per_row_0" AND "unique_per_row_1" AND "unique_per_row_2" AND "unique_per_row_3"']
+synth_exceptions_cols = ['This test executes over all columns']
 
 
 def test_real():

@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SIMILAR_WORDS'
 random.seed(0)
 
-synth_patterns_cols = []
-synth_exceptions_cols = ['"sim_words all" AND "sim_words most"']
+synth_patterns_cols = ['"sim_words rand" AND "sim_words all"']
+synth_exceptions_cols = ['"sim_words rand" AND "sim_words most"']
 
 
 def test_real():

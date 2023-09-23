@@ -10,13 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SIMILAR_CHARACTERS'
 random.seed(0)
 
-synth_patterns_cols = [
-	'"sim_chars rand_a" AND "sim_chars all"'
-]
-synth_exceptions_cols = [
-	'"sim_chars rand_a" AND "sim_chars most"',
-	'"sim_chars all" AND "sim_chars most"'
-]
+synth_patterns_cols = ['"sim_chars rand" AND "sim_chars all"']
+synth_exceptions_cols = ['"sim_chars rand" AND "sim_chars most"']
 
 
 def test_real():

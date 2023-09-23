@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'SIMILAR_PREVIOUS'
 random.seed(0)
 
-synth_patterns_cols = ['sim_prev_all']
-synth_exceptions_cols = ['sim_prev_most']
+synth_patterns_cols = ['sim_prev all']
+synth_exceptions_cols = ['sim_prev most', 'sim_prev date_most']
 
 
 def test_real():

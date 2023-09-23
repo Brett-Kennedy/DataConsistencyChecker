@@ -7,22 +7,20 @@ from check_data_consistency import DataConsistencyChecker
 
 from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
-test_id = 'SMALL_GIVEN_PAIR'
+test_id = 'SIMILAR_NUM_WORDS'
 random.seed(0)
 
-synth_patterns_cols = []
+synth_patterns_cols = [
+	'"sim_num_words rand_b" AND "sim_num_words all"'
+]
 synth_exceptions_cols = [
-	'"small_given_pair rand_a" AND "small_given_pair rand_b" AND "small_given_pair most"',
-	'"small_given_pair rand_a" AND "small_given_pair rand_b" AND "small_given_pair date_most"'
+	'"sim_num_words rand_b" AND "sim_num_words most"',
+	'"sim_num_words all" AND "sim_num_words most"'
 ]
 
 
 def test_real():
 	res = build_default_results()
-	res['SpeedDating'] = (0, 10497) # we need to address this, as it's flagging way too many
-	res['eucalyptus'] = (0, 4)
-	res['adult'] = (0, 16)
-	res['bank-marketing'] = (0, 16)
 	real_test(test_id, res)
 
 

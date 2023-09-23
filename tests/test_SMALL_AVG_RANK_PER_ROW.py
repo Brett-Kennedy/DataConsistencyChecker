@@ -11,7 +11,7 @@ test_id = 'SMALL_AVG_RANK_PER_ROW'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"small_avg_rank_rand_0" AND "small_avg_rank_rand_1" AND "small_avg_rank_rand_2" AND "small_avg_rank_rand_3" AND "small_avg_rank_rand_4" AND "small_avg_rank_rand_5" AND "small_avg_rank_rand_6" AND "small_avg_rank_rand_7" AND "small_avg_rank_rand_8" AND "small_avg_rank_rand_9"']
+synth_exceptions_cols = ['This test executes over all numeric columns']
 
 
 def test_real():
