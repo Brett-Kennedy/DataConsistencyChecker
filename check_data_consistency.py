@@ -1135,7 +1135,9 @@ class DataConsistencyChecker:
         self.lower_limits_dict = None
         self.upper_limits_dict = None
         self.larger_pairs_dict = None
+        self.larger_or_equal_pairs_dict = None
         self.larger_pairs_with_bool_dict = None
+        self.larger_or_equal_pairs_with_bool_dict = None
         self.is_missing_dict = None
         self.sample_is_missing_dict = None
         self.percentiles_dict = None
@@ -3584,7 +3586,7 @@ class DataConsistencyChecker:
                 self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
-                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']: # zzzz
+                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
             self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
 
         if test_id in ['SAME_VALUES']:
@@ -4064,7 +4066,7 @@ class DataConsistencyChecker:
         # Get information about which columns have the same values
         cols_same_bool_dict = self.get_cols_same_bool_dict(force=True)
 
-        larger_dict = self.get_larger_pairs_with_bool_dict()
+        larger_dict = self.get_larger_or_equal_pairs_with_bool_dict()
 
         similar_cols_dict = {}
         similar_cols_idxs_dict = {}
@@ -4491,11 +4493,14 @@ class DataConsistencyChecker:
             self.lower_limits_dict[col_name] = (lower_limit, q1, q3)
         return self.lower_limits_dict
 
-    def get_larger_pairs_dict(self, print_status=False):
+    def get_larger_pairs_dict(self, allow_equal, print_status=False):
         if self.larger_pairs_dict:
+            if allow_equal:
+                return self.larger_or_equal_pairs_dict
             return self.larger_pairs_dict
 
         self.larger_pairs_dict = {}
+        self.larger_or_equal_pairs_dict = {}
         num_pairs, col_pairs = self.__get_numeric_column_pairs()
         if num_pairs == 0 or col_pairs is None:
             return self.larger_pairs_dict
@@ -4511,7 +4516,7 @@ class DataConsistencyChecker:
 
             vals_arr_1 = self.sample_numeric_vals_filled[col_name_1]
             vals_arr_2 = self.sample_numeric_vals_filled[col_name_2]
-            sample_series = ((vals_arr_1 - vals_arr_2) > 0) | \
+            sample_series = ((vals_arr_1 - vals_arr_2) >= 0) | \
                             self.sample_df[col_name_1].isna().values | \
                             self.sample_df[col_name_2].isna().values
             if sample_series.tolist().count(False) > 1:
@@ -4524,6 +4529,12 @@ class DataConsistencyChecker:
                           self.orig_df[col_name_1].isna() | \
                           self.orig_df[col_name_2].isna()
             self.larger_pairs_dict[key] = test_series
+            test_series = ((vals_arr_1 - vals_arr_2) >= 0) | \
+                          self.orig_df[col_name_1].isna() | \
+                          self.orig_df[col_name_2].isna()
+            self.larger_or_equal_pairs_dict[key] = test_series
+        if allow_equal:
+            return self.larger_or_equal_pairs_dict
         return self.larger_pairs_dict
 
     def get_larger_pairs_with_bool_dict(self):
@@ -4537,6 +4548,18 @@ class DataConsistencyChecker:
             else:
                 self.larger_pairs_with_bool_dict[key] = False
         return self.larger_pairs_with_bool_dict
+
+    def get_larger_or_equal_pairs_with_bool_dict(self):
+        if self.larger_or_equal_pairs_with_bool_dict:
+            return self.larger_or_equal_pairs_with_bool_dict
+        larger_or_equal_dict = self.get_larger_pairs_dict(allow_equal=True)
+        self.larger_or_equal_pairs_with_bool_dict = {}
+        for key in larger_or_equal_dict.keys():
+            if larger_or_equal_dict[key] is not None:
+                self.larger_or_equal_pairs_with_bool_dict[key] = larger_or_equal_dict[key].tolist().count(True) > self.contamination_level
+            else:
+                self.larger_or_equal_pairs_with_bool_dict[key] = False
+        return self.larger_or_equal_pairs_with_bool_dict
 
     # todo: call this everywhere to reduce work
     def get_is_missing_dict(self):
@@ -5987,12 +6010,18 @@ class DataConsistencyChecker:
     def __check_negative_values(self, test_id):
         for col_name in self.numeric_cols:
             vals_arr = convert_to_numeric(self.orig_df[col_name], -1)
+            test_series_neg = (vals_arr <= 0)
+            if test_series_neg.tolist().count(False) > (self.num_rows * 0.75):
+                continue
             test_series = (self.orig_df[col_name].isna()) | (vals_arr <= 0)
             self.__process_analysis_binary(
                 test_id,
                 [col_name],
                 test_series,
-                "The column contains consistently zero or negative values")
+                (f"The column contains consistently zero or negative values (with "
+                 f"{(vals_arr == 0).tolist().count(True)} zero values and {self.orig_df[col_name].isna().sum()} null "
+                 f"values)")
+            )
 
     def __generate_number_decimals(self):
         """
@@ -6978,7 +7007,7 @@ class DataConsistencyChecker:
             return
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
-        larger_dict = self.get_larger_pairs_dict(print_status=True)
+        larger_dict = self.get_larger_pairs_dict(allow_equal=False, print_status=True)
         larger_pairs_arr = []
 
         q1_dict = {}
@@ -8428,7 +8457,9 @@ class DataConsistencyChecker:
 
                 # Test the relationship on a small sample of the full data
                 test_series_a = abs(self.sample_numeric_vals_filled[col_name_3] / \
-                                    abs(self.sample_numeric_vals_filled[col_name_1] - self.sample_numeric_vals_filled[col_name_2]))
+                    abs(self.sample_numeric_vals_filled[col_name_1] - self.sample_numeric_vals_filled[col_name_2]))
+                if test_series_a.isna().sum() > (self.num_rows * 0.75):
+                    continue
                 test_series_a = test_series_a.replace(np.NaN, 1.0)
                 test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
                 num_not_matching = test_series.tolist().count(False)
@@ -8516,6 +8547,8 @@ class DataConsistencyChecker:
             # Test the relationship on a small sample of the full data
             test_series_a = self.sample_numeric_vals_filled[col_name_3] / \
                             (self.sample_numeric_vals_filled[col_name_1] * self.sample_numeric_vals_filled[col_name_2])
+            if test_series_a.isna().sum() > (self.num_rows * 0.75):
+                continue
             test_series_a = test_series_a.replace(np.NaN, 1.0)
             test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
             num_not_matching = test_series.tolist().count(False)
@@ -8605,6 +8638,8 @@ class DataConsistencyChecker:
             # Test col1 / col2 on the full data
             test_series_a = self.numeric_vals_filled[col_name_3] / \
                             abs(self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2])
+            if test_series_a.isna().sum() > (self.num_rows * 0.75):
+                continue
             test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_3].isna()
             num_matching = test_series.tolist().count(True)
@@ -11010,6 +11045,10 @@ class DataConsistencyChecker:
 
     def __check_large_given_date(self, test_id):
 
+        # Ensure all 10 bins have at least 50 rows
+        if self.num_rows < 500:
+            return
+
         # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
         upper_limits_dict = self.get_columns_iqr_upper_limit()
 
@@ -11094,6 +11133,10 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('small_given_date most', [x for x in range(self.num_synth_rows - 1)] + [2])
 
     def __check_small_given_date(self, test_id):
+
+        # Ensure all 10 bins have at least 50 rows
+        if self.num_rows < 500:
+            return
 
         lower_limits_dict = self.get_columns_iqr_lower_limit()
 
@@ -13214,11 +13257,11 @@ class DataConsistencyChecker:
                 vc1 = list_1.value_counts()
                 vc2 = list_2.value_counts()
                 if (self.orig_df[col_name].isna().sum() + vc1.iloc[0]) >= (self.num_rows - self.contamination_level):
-                    common_posn = vc1.index[0]
+                    common_posn = int(vc1.index[0])
                     common_posn_str = str(common_posn + 1)
                     test_series = self.orig_df[col_name].astype(str).str.find(c) == common_posn
                 elif (self.orig_df[col_name].isna().sum() + vc2.iloc[0]) >= (self.num_rows - self.contamination_level):
-                    common_posn = vc2.index[0]
+                    common_posn = int(vc2.index[0])
                     common_posn_str = f"{common_posn} from the end"
                     test_series = (self.orig_df[col_name].astype(str).str.len() -
                                    self.orig_df[col_name].astype(str).str.rfind(c)) == common_posn
@@ -14187,22 +14230,26 @@ class DataConsistencyChecker:
 
     def __generate_similar_chars(self):
         """
-        Patterns without exceptions: The columns "sim_chars rand_a" and "sim_chars all" consistently have a similar
+        Patterns without exceptions: The columns "sim_chars rand" and "sim_chars all" consistently have a similar
             characters as each other
-        Patterns with exception: "sim_chars rand_a" and "sim_chars most" consistently have a similar characters as each
+        Patterns with exception: "sim_chars rand" and "sim_chars most" consistently have a similar characters as each
             other, with 1 exception
+        Not Flagged: "sim_chars all" and "sim_chars most" are almost identical, so not flagged by this test.
         """
-        self.__add_synthetic_column('sim_chars rand_a',
+        self.__add_synthetic_column('sim_chars rand',
             [[''.join(random.choice(alphanumeric) for _ in range(10))][0] for i in range(self.num_synth_rows)])
-        self.__add_synthetic_column('sim_chars all', self.synth_df['sim_chars rand_a'] + "a")
+        self.__add_synthetic_column('sim_chars all', self.synth_df['sim_chars rand'] + "a")
         self.__add_synthetic_column('sim_chars most', self.synth_df['sim_chars all'])
         self.synth_df.loc[999, 'sim_chars most'] = "abcd"
 
     def __check_similar_chars(self, test_id):
         """
-        This is intended for stings that appers to be ids, codes or other such strings, so this test only covers columns
-        that contain exactly one word in each value.
+        This is intended for stings that appear to be ids, codes or other such strings, so this test only covers
+        columns that contain exactly one word in each value.
         """
+
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for col_idx_1 in range(len(self.string_cols)-1):
             col_name_1 = self.string_cols[col_idx_1]
             col_vals = self.orig_df[col_name_1].astype(str).apply(replace_special_with_space)
@@ -14213,6 +14260,11 @@ class DataConsistencyChecker:
             chars_list_1 = [[""] if x is None else list(x) for x in col_vals]
             for col_idx_2 in range(col_idx_1 + 1, len(self.string_cols)):
                 col_name_2 = self.string_cols[col_idx_2]
+
+                # Skip if the two columns are largely the same
+                if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                    return
+
                 col_vals = self.orig_df[col_name_2].apply(replace_special_with_space)
                 word_counts = [0 if x is None else len(x) for x in col_vals.str.split()]
                 if max(word_counts) > 1:
@@ -14232,11 +14284,14 @@ class DataConsistencyChecker:
 
     def __generate_similar_num_chars(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: "sim_num_chars rand" AND "sim_num_chars all" consistently have a similar number of
+            characters
+        Patterns with exception: "sim_num_chars rand" AND "sim_num_chars most" consistently have a similar number of
+            characters, with 1 exception.
+        Not Flagged: "sim_num_chars all" AND "sim_num_chars most" are almost identical, so not flagged by this test.
         """
         num_chars_arr = [np.random.randint(0, 20) for _ in range(self.num_synth_rows)]
-        self.__add_synthetic_column('sim_num_chars rand_a',
+        self.__add_synthetic_column('sim_num_chars rand',
             [[''.join(random.choice(alphanumeric) for _ in range(num_chars_arr[i]))][0] for i in range(self.num_synth_rows)])
         self.__add_synthetic_column('sim_num_chars all',
             [[''.join(random.choice(alphanumeric) for _ in range(num_chars_arr[i]))][0] for i in range(self.num_synth_rows)])
@@ -14259,6 +14314,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if (col_std_dev_len_dict[col_name_1] < 2.0) or (col_std_dev_len_dict[col_name_2] < 2.0):
                 continue
@@ -14267,6 +14324,10 @@ class DataConsistencyChecker:
                 continue
             if self.orig_df[col_name_2].apply(is_missing).sum() > (self.num_rows * 0.75):
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             test_series = [0.9 < x/y < 1.1 for x, y in zip(char_len_dict[col_name_1], char_len_dict[col_name_2])]
             test_series = test_series | (self.orig_df[col_name_1].isna() & self.orig_df[col_name_2].isna())
@@ -14280,15 +14341,18 @@ class DataConsistencyChecker:
 
     def __generate_similar_words(self):
         """
-        Patterns without exceptions: None
-        Patterns with exception: The columns "sim_words all" and "sim_words most" consistently have a similar number
-            of words as each other, with exceptions
+        Patterns without exceptions: The columns "sim_words all" and "sim_words rand" consistently have a similar set of
+            words as each other
+        Patterns with exception: The columns "sim_words most" and "sim_words rand" consistently have a similar set of
+            words as each other, with exceptions
+        Not Flagged: "sim_words all" and "sim_words rand" consistently have a similar set of words, but the columns are
+            almost identical, so not flagged by this test.
         """
-        self.__add_synthetic_column('sim_words rand_a',
-            [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(3, 6)))
+        self.__add_synthetic_column('sim_words rand',
+            [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(5, 8)))
             for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('sim_words all', [x + " xx" for x in self.synth_df['sim_words rand_a']])
-        self.__add_synthetic_column('sim_words most', [x + " xx" for x in self.synth_df['sim_words rand_a']])
+        self.__add_synthetic_column('sim_words all', [x + " xx" for x in self.synth_df['sim_words rand']])
+        self.__add_synthetic_column('sim_words most', [x + " xx" for x in self.synth_df['sim_words rand']])
         self.synth_df.loc[999, 'sim_words most'] = 'abcdef'
 
     def __check_similar_words(self, test_id):
@@ -14307,6 +14371,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             word_counts_medians_1 = word_counts_medians[col_name_1]
             word_counts_medians_2 = word_counts_medians[col_name_2]
@@ -14316,6 +14382,10 @@ class DataConsistencyChecker:
                 continue
             if word_counts_medians_2 > (word_counts_medians_1 * 2):
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             word_lists_1 = pd.Series([x.split() if (not is_missing(x)) else [] for x in self.orig_df[col_name_1]])
             word_lists_2 = pd.Series([x.split() if (not is_missing(x)) else [] for x in self.orig_df[col_name_2]])
@@ -14369,6 +14439,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             word_counts_medians_1 = word_counts_medians[col_name_1]
             word_counts_medians_2 = word_counts_medians[col_name_2]
@@ -14378,6 +14450,10 @@ class DataConsistencyChecker:
                 continue
             if word_counts_medians_2 > (word_counts_medians_1 * 2):
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             word_counts_1 = word_counts_dict[col_name_1]
             word_counts_2 = word_counts_dict[col_name_2]
@@ -14502,6 +14578,8 @@ class DataConsistencyChecker:
             first_words_dict[col_name] = [x[0] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]
             sample_first_words_dict[col_name] = pd.Series([x[0] if (x and (len(x) > 0)) else "" for x in words_list_dict[col_name]]).loc[self.sample_df.index]
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for col_name_1, col_name_2 in pairs:
             # Skip columns that are primarily 1 word
             word_arr = words_list_dict[col_name_1]
@@ -14518,6 +14596,10 @@ class DataConsistencyChecker:
                 continue
             if nunique_dict[col_name_2] < 10:
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             # Test on a sample
             test_series = [x == y for x, y in zip(sample_first_words_dict[col_name_1], sample_first_words_dict[col_name_2])]
@@ -14585,6 +14667,8 @@ class DataConsistencyChecker:
             sample_last_words_dict[col_name] = pd.Series([x[-1] if (x and (len(x) > 0)) else ""
                                                           for x in words_list_dict[col_name]]).loc[self.sample_df.index]
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for col_name_1, col_name_2 in pairs:
             # Skip columns that are primarily 1 word
             word_arr = words_list_dict[col_name_1]
@@ -14601,6 +14685,10 @@ class DataConsistencyChecker:
                 continue
             if nunique_dict[col_name_2] < 10:
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             # Test on a sample
             test_series = [x == y for x, y in zip(sample_last_words_dict[col_name_1], sample_last_words_dict[col_name_2])]
@@ -14638,7 +14726,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
+
             # Test on a sample.
             alpha_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             alpha_col_1 = [[c for c in x if c and c.isalpha()] for x in alpha_col_1]
@@ -14686,7 +14780,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
+
             # Test on a sample
             digits_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             digits_col_1 = [[c for c in x if c and c.isdigit()] for x in digits_col_1]
@@ -14739,7 +14839,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for col_name_1, col_name_2 in pairs:
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
+
             # Test on a sample.
             special_col_1 = self.sample_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_1]
@@ -14805,6 +14911,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 500 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -14814,6 +14922,10 @@ class DataConsistencyChecker:
                 continue
             if is_missing_dict[col_name_2].tolist().count(True) > (self.num_rows / 2):
                 continue
+
+            # Skip if the two columns are largely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                return
 
             # Test first on a sample
             test_series = [True if (w or x) else ((len(y) < len(z)) and (y == z[:len(y)]))
@@ -15389,7 +15501,7 @@ class DataConsistencyChecker:
             vc = first_words.value_counts()
             common_values = []
             for v in vc.index:
-                if vc[v] > math.sqrt(self.num_rows):
+                if (vc[v] > math.sqrt(self.num_rows)) and (vc[v] > 50):
                     common_values.append(v)
 
             for col_name_2 in self.numeric_cols + self.date_cols:
@@ -15518,8 +15630,9 @@ class DataConsistencyChecker:
             vc = first_words.value_counts()
             common_values = []
             for v in vc.index:
-                if vc[v] > math.sqrt(self.num_rows):
+                if (vc[v] > math.sqrt(self.num_rows)) and (vc[v] > 50):
                     common_values.append(v)
+
             for col_name_2 in self.numeric_cols + self.date_cols:
                 test_series = [True] * self.num_rows
                 flagged_prefixes = []
