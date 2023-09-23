@@ -11,7 +11,10 @@ test_id = 'LARGE_GIVEN_VALUE'
 random.seed(0)
 
 synth_patterns_cols = []  # None for this test
-synth_exceptions_cols = ['"large_given rand" AND "large_given most"']
+synth_exceptions_cols = [
+	'"large_given rand" AND "large_given most"',
+	'"large_given rand" AND "large_given date_most"'
+]
 
 
 def test_real():

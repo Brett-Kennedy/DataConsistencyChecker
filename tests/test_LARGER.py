@@ -10,7 +10,7 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'LARGER'
 random.seed(0)
 
-synth_patterns_cols = ['"larger all" AND "larger rand"']
+synth_patterns_cols = ['"larger all_2" AND "larger most" AND "larger all" AND "larger rand"']  # the order can vary for these
 synth_exceptions_cols = ['"larger most" AND "larger rand"']
 
 

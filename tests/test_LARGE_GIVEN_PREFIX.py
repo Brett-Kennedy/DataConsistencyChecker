@@ -11,7 +11,10 @@ test_id = 'LARGE_GIVEN_PREFIX'
 random.seed(0)
 
 synth_patterns_cols = []  # None
-synth_exceptions_cols = ['"large_given_prefix rand" AND "large_given_prefix most"']
+synth_exceptions_cols = [
+	'"large_given_prefix rand" AND "large_given_prefix most"',
+	'"large_given_prefix rand" AND "large_given_prefix date_most"'
+]
 
 
 def test_real():

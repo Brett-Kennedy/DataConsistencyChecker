@@ -11,7 +11,7 @@ test_id = 'NEGATIVE_VALUES_PER_ROW'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['"neg_per_row_0" AND "neg_per_row_1" AND "neg_per_row_2" AND "neg_per_row_3"']
+synth_exceptions_cols = ['This test executes over all numeric columns']
 
 def test_real():
 	res = build_default_results()

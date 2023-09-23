@@ -11,7 +11,7 @@ test_id = 'MISSING_VALUES_PER_ROW'
 random.seed(0)
 
 synth_patterns_cols = []  # None
-synth_exceptions_cols = ['"miss_per_row_0" AND "miss_per_row_1" AND "miss_per_row_2" AND "miss_per_row_3"']
+synth_exceptions_cols = ['This test executes over all columns']
 
 
 def test_real():

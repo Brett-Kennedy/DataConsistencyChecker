@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'NUMBER_DECIMALS'
 random.seed(0)
 
-synth_patterns_cols = ['num decimals all']
-synth_exceptions_cols = ['num decimals rand', 'num decimals most']
+synth_patterns_cols = ['num_decimals all']
+synth_exceptions_cols = ['num_decimals rand', 'num_decimals most']
 
 
 def test_real():
