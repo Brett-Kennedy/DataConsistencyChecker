@@ -10,7 +10,7 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'LARGER_SAME_RANGE'
 random.seed(0)
 
-synth_patterns_cols = ['"larger_same_rng all_2" AND "larger_same_rng rand" AND "larger_same_rng all"']
+synth_patterns_cols = ['"larger_same_rng rand" AND "larger_same_rng all" AND "larger_same_rng all_2"']
 synth_exceptions_cols = ['"larger_same_rng most" AND "larger_same_rng rand"',
                          '"larger_same_rng most" AND "larger_same_rng all"']
 
