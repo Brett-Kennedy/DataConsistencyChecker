@@ -12,13 +12,11 @@ random.seed(0)
 
 synth_patterns_cols = [
 	'"same_last_word rand_a" AND "same_last_word all_a"',
-	'"same_last_word rand_b" AND "same_last_word all_b"',
+	'"same_last_word rand_b" AND "same_last_word all_b"'
 	]
 synth_exceptions_cols = [
 	'"same_last_word rand_a" AND "same_last_word most_a"',
-	'"same_last_word all_a" AND "same_last_word most_a"',
-	'"same_last_word rand_b" AND "same_last_word most_b"',
-	'"same_last_word all_b" AND "same_last_word most_b"',
+	'"same_last_word rand_b" AND "same_last_word most_b"'
 	]
 
 

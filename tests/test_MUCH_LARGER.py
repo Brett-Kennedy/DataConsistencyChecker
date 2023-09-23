@@ -10,7 +10,7 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'MUCH_LARGER'
 random.seed(0)
 
-synth_patterns_cols = ['"much larger all" AND "much larger rand"']
+synth_patterns_cols = ['"much larger rand" AND "much larger all"']
 synth_exceptions_cols = ['"much larger rand" AND "much larger most"']
 
 def test_real():
