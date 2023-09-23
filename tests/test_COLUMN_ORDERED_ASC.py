@@ -11,7 +11,7 @@ test_id = 'COLUMN_ORDERED_ASC'
 random.seed(0)
 
 synth_patterns_cols = ['col_asc all']
-synth_exceptions_cols = ['col_asc most']
+synth_exceptions_cols = ['col_asc most', 'col_asc date_most']
 
 
 def test_real():

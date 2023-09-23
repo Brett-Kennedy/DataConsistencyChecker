@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'EVEN_MULTIPLE'
 random.seed(0)
 
-synth_patterns_cols = ['"even multiple all" AND "even multiple rand"']
-synth_exceptions_cols = ['"even multiple most" AND "even multiple rand"']
+synth_patterns_cols = ['"even_multiple all" AND "even_multiple rand"']
+synth_exceptions_cols = ['"even_multiple most" AND "even_multiple rand"']
 
 
 def test_real():

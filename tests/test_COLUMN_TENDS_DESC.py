@@ -11,7 +11,7 @@ test_id = 'COLUMN_TENDS_DESC'
 random.seed(0)
 
 synth_patterns_cols = ['tends_desc all']
-synth_exceptions_cols = ['tends_desc most']
+synth_exceptions_cols = ['tends_desc most', 'tends_desc date_most']
 
 
 def test_real():

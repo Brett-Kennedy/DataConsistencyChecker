@@ -10,7 +10,7 @@ test_id = 'FEW_NEIGHBORS'
 random.seed(0)
 
 synth_patterns_cols = []
-synth_exceptions_cols = ['few neighbors most']
+synth_exceptions_cols = ['few neighbors most', 'few neighbors date_most']
 
 
 def test_real():

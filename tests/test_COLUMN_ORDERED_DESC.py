@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'COLUMN_ORDERED_DESC'
 random.seed(0)
 
-synth_patterns_cols = ['col desc 2']
-synth_exceptions_cols = ['col desc 3']
+synth_patterns_cols = ['col_desc all']
+synth_exceptions_cols = ['col_desc most', 'col_desc date_most']
 
 
 def test_real():

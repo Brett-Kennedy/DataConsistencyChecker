@@ -10,8 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'GROUPED_STRINGS'
 random.seed(0)
 
-synth_patterns_cols = ['"grouped_str all"']
-synth_exceptions_cols = ['"grouped_str most"']
+synth_patterns_cols = ['grouped_str all']
+synth_exceptions_cols = ['grouped_str most']
 
 
 def test_real():

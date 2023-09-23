@@ -11,7 +11,7 @@ test_id = 'FEW_WITHIN_RANGE'
 random.seed(0)
 
 synth_patterns_cols = ['few in range all']
-synth_exceptions_cols = ['few in range most']
+synth_exceptions_cols = ['few in range most', 'few in range date_most']
 
 
 def test_real():
