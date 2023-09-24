@@ -81,7 +81,7 @@ class DataConsistencyChecker:
             is used here.
 
         idr_limit: float
-            Interdecile range is used in several tests, particularly to identify very small values, as IQR can work
+            Inter-decile range is used in several tests, particularly to identify very small values, as IQR can work
             poorly where the values are strictly positive.
 
         max_combinations: int
@@ -187,6 +187,11 @@ class DataConsistencyChecker:
         # Variables used for calls to display_next()
         self.found_tests = []
         self.current_display_test = -1
+
+        # A data structure to represent how each test (for the tests that run on a single feature) measures up for
+        # each feature. This is saved as a dictionary during processing, then converted to a dataframe when requested.
+        self.single_test_summary_dict = {}
+        self.single_test_summary_df = None
 
         # Display options. There are relevant only when running this in a debugger or notebook.
         # Note: these can significantly slow down Jupyter in some environments, and so is set only for debugger
@@ -1399,6 +1404,10 @@ class DataConsistencyChecker:
                          zip(self.test_dict.keys(), range(len(self.test_dict.keys())))
                          if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
 
+        # Initialize the results for tests on single columns
+        self.single_test_summary_dict = {}
+        self.single_test_summary_df = None
+
         if run_parallel:
             process_arr = []
             with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -1657,6 +1666,22 @@ class DataConsistencyChecker:
         ret_list = list(set(ret_list))
         return ret_list
 
+    def get_single_feature_tests_matrix(self):
+        """
+        Returns a matrix with a column for every column in the original data and a row for each test executed. The cell
+        values contain the percent of rows matching the pattern associated with the test. In many cases, this will be
+        NaN (rendered as '-'), as not all tests execute on all columns. For example, tests for large numeric values
+        execute only on numeric columns. As well, for efficiency, many tests skip examining columns that have many null
+        values, many zero values, few or many unique values, etc. This in necessary to make the execution on many tests
+        tractable where there are many columns and/or many rows.
+        """
+
+        if self.single_test_summary_df is None:
+            self.single_test_summary_df = pd.DataFrame(self.single_test_summary_dict).T
+            self.single_test_summary_df = self.single_test_summary_df * 100.0 / self.num_rows
+            self.single_test_summary_df = self.single_test_summary_df.fillna("-")
+        return self.single_test_summary_df
+
     def get_patterns_list(self, test_exclude_list=None, column_exclude_list=None, show_short_list_only=True):
         """
         This returns a dataframe containing a list of all, or some, of the identified patterns that had no exceptions.
@@ -1689,6 +1714,10 @@ class DataConsistencyChecker:
             df = df[df['Test ID'].isin(self.get_patterns_shortlist())].copy()
             if len(df) < len_prev:
                 print_text("Some patterns not shown. Set show_short_list_only to False to see additional patterns.")
+
+        # Ensure the descriptions are not too long
+        df['Description of Pattern'] = df['Description of Pattern'].apply(truncate_description)
+
         return self._clean_column_names(df.drop(columns=['Display Information']))
 
     def get_exceptions_list(self):
@@ -1708,6 +1737,10 @@ class DataConsistencyChecker:
             return None
         df = self.exceptions_summary_df.drop(columns=['Display Information']).copy()
         df['Column(s)'] = df.apply(clean_col_names, axis=1)
+
+        # Ensure the descriptions are not too long
+        df['Description of Pattern'] = df['Description of Pattern'].apply(truncate_description)
+
         return df
 
     def get_exceptions(self):
@@ -2305,6 +2338,15 @@ class DataConsistencyChecker:
                             display_info=sub_summary.iloc[0]['Display Information'])
 
     def display_next(self):
+        """
+        This may be used where there are many results, and we wish to view detailed descriptions of all or most of
+        these. This API calls display_detailed_results() for one test at a time, for each test that identified at least
+        one pattern (with or without exceptions) during the last call to check_data_quality(). This allows, when working
+        with notebooks, for output to be spread over multiple cells, which can make viewing it simpler. Note though,
+        where many tests flag patterns, in most cases only a subset of these would be useful to examine in detail,
+        though this varies for different projects.
+        """
+
         self.display_detailed_results(test_id_list=[self.found_tests[self.current_display_test]])
         self.current_display_test += 1
 
@@ -3161,7 +3203,7 @@ class DataConsistencyChecker:
         elif test_id in ['NUMBER_ALPHANUMERIC_CHARS']:
             df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalnum()]))
         elif test_id in ['NUMBER_NON-ALPHANUMERIC_CHARS']:
-            df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
+            df['Num Non-Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
         elif test_id in ['NUMBER_CHARS', 'MANY_CHARS', 'FEW_CHARS']:
             df['Num Chars'] = df[col_name].astype(str).str.len()
         elif test_id in ['FIRST_CHAR_ALPHA', 'FIRST_CHAR_NUMERIC', 'FIRST_CHAR_SMALL_SET', 'FIRST_CHAR_UPPERCASE',
@@ -5230,6 +5272,11 @@ class DataConsistencyChecker:
         Handling null values: This test specifically checks for null values.
         """
 
+        single_test_results = {}
+        for col_name in self.orig_df.columns:
+            single_test_results[col_name] = self.orig_df[col_name].isna().sum()
+        self.single_test_summary_dict[test_id] = single_test_results
+
         for col_name in self.orig_df.columns:
             null_arr = self.orig_df[col_name].apply(is_missing)
             non_null_arr = ~null_arr
@@ -5272,6 +5319,8 @@ class DataConsistencyChecker:
         # todo: allow users to specify a set of common values, and just flag anything else. Or in the clear issues,
         #   allow to clear there.
 
+        single_test_results = {}
+
         # Check all column types except binary, where there are often rare values.
         for col_name in self.numeric_cols + self.date_cols + self.string_cols:
             if self.orig_df[col_name].nunique() > math.log2(self.num_rows):
@@ -5295,6 +5344,7 @@ class DataConsistencyChecker:
                     common_vals.append(v)
 
             test_series = ~self.orig_df[col_name].isin(rare_vals)
+            single_test_results[col_name] = test_series.tolist().count(False)
             self.__process_analysis_binary(
                 test_id,
                 [col_name],
@@ -5304,6 +5354,8 @@ class DataConsistencyChecker:
                 allow_patterns=False,
                 display_info={"counts": counts_series}
             )
+
+        self.single_test_summary_dict[test_id] = single_test_results
 
     def __generate_unique_values(self):
         """
@@ -5324,6 +5376,8 @@ class DataConsistencyChecker:
         test is useful for ID columns which should be unique, which are typically string or integer values. It will
         also check where datetime values should be unique.
         """
+
+        single_test_results = {}
 
         for col_name in self.orig_df.columns:
             # The values are not considered to be all unique if more than 1 Null value is present
@@ -5347,6 +5401,7 @@ class DataConsistencyChecker:
             counts_arr = self.orig_df[col_name].value_counts()
             repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
             test_series = [True if counts_arr[x] == 1 else False for x in self.orig_df[col_name]]
+            single_test_results[col_name] = test_series.count(False)
             self.__process_analysis_binary(
                 test_id,
                 [col_name],
@@ -5354,6 +5409,8 @@ class DataConsistencyChecker:
                 "The column contains values that are consistently unique",
                 f"including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated value(s))"
             )
+
+        self.single_test_summary_dict[test_id] = single_test_results
 
     def __generate_prev_values_dt(self):
         """
@@ -12800,15 +12857,16 @@ class DataConsistencyChecker:
 
     def __generate_first_char_uppercase(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'first_char_upper all' consistently starts with an upper case character
+        Patterns with exception: 'first_char_upper most' consistently starts with an upper case character, with one
+            exception.
         """
         self.__add_synthetic_column('first_char_upper rand',
-                                    [[''.join(random.choice(alphanumeric) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+            [[''.join(random.choice(alphanumeric) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('first_char_upper all',
-                                    [[''.join(random.choice(['A', 'B', 'C']) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+            [[''.join(random.choice(['A', 'B', 'C', 'Á']) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('first_char_upper most',
-                                    [[''.join(random.choice(['A', 'B', 'C']) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcde'])
+            [[''.join(random.choice(['A', 'B', 'C', 'Á']) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['abcde'])
 
     def __check_first_char_uppercase(self, test_id):
         for col_name in self.string_cols:
@@ -12822,8 +12880,7 @@ class DataConsistencyChecker:
             if value_lens_arr.quantile(0.9) <= 1:
                 continue
 
-            # todo: flags A with accent
-            test_series = self.orig_df[col_name].astype(str).str[:1].isin(list(string.ascii_uppercase))
+            test_series = self.orig_df[col_name].astype(str).str[:1].apply(is_uppercase)
             test_series = test_series | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
                 test_id,
@@ -17450,6 +17507,19 @@ def replace_special_with_space(x):
     if x in [np.inf, -np.inf, np.NaN]:
         return ""
     return ''.join([c if ((c in string.ascii_letters) or (c in string.digits)) else " " for c in x])
+
+
+def truncate_description(x):
+    if len(x) > 100:
+        x = x[:100] + "..."
+    return x
+
+
+def is_uppercase(x):
+    # We accept characters with and without accents, which is the ascii range 65 to 90, and 193 to 221
+    if x is None or x == '':
+        return False
+    return (65 <= ord(x) <= 90) or (193 <= ord(x) <= 221)
 
 
 def call_test(dc, test_id):
