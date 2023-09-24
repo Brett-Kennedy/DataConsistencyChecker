@@ -3227,6 +3227,13 @@ class DataConsistencyChecker:
         elif test_id in ['TWO_PAIRS']:
             df['A and B Match'] = pd.Series(display_info['match_1_2_arr']).loc[df.index]
             df['C and D Match'] = pd.Series(display_info['match_3_4_arr']).loc[df.index]
+        elif test_id in ['BINARY_TWO_OTHERS_MATCH']:
+            df['MATCH'] = pd.Series(display_info['Match']).loc[df.index]
+        elif test_id in ['MUCH_LARGER']:
+            df['RATIO'] = [safe_div(x, y) for x,y in zip(df[col_name_2], df[col_name_1])]
+        elif test_id in ['LARGER', 'LARGER_SAME_RANGE']:
+            if len(cols) == 2:
+                df['DIFF'] = df[col_name_1] - df[col_name_2]
 
         df = df.sort_index()
         if is_notebook():
@@ -3383,12 +3390,19 @@ class DataConsistencyChecker:
             df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
             df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples - len(df_v_pos))
             df = pd.concat([df_v_pos, df_v_neg])
-        elif test_id in ['EVEN_MULTIPLE', 'PREDICT_NULL_DT', 'MATCHED_MISSING', 'UNMATCHED_MISSING']:
+        elif test_id in ['EVEN_MULTIPLE', 'MATCHED_MISSING', 'UNMATCHED_MISSING']:
             # Show where col 1 is null and non-null
             col_name_1, col_name_2 = cols[0], cols[1]
             df_v_null = self.orig_df[cols][(self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
             num_non_null = n_examples - len(df_v_null)
             df_v_non_null = self.orig_df[cols][(~self.orig_df[col_name_1].apply(is_missing))].head(num_non_null)
+            df = pd.concat([df_v_null, df_v_non_null])
+        elif test_id in ['PREDICT_NULL_DT']:
+            # Show where col 2 is null and non-null
+            col_name_1, col_name_2 = cols[0], cols[1]
+            df_v_null = self.orig_df[cols][(self.orig_df[col_name_2].apply(is_missing))].head(n_examples // 2)
+            num_non_null = n_examples - len(df_v_null)
+            df_v_non_null = self.orig_df[cols][(~self.orig_df[col_name_2].apply(is_missing))].head(num_non_null)
             df = pd.concat([df_v_null, df_v_non_null])
         elif test_id in ['C_IS_A_OR_B']:
             # Show examples where C matches both A and B, where the same column is col1 (where it is and is not null),
@@ -6039,7 +6053,7 @@ class DataConsistencyChecker:
     def __check_negative_values(self, test_id):
         for col_name in self.numeric_cols:
             vals_arr = convert_to_numeric(self.orig_df[col_name], -1)
-            test_series_neg = (vals_arr <= 0)
+            test_series_neg = (vals_arr < 0)
             if test_series_neg.tolist().count(False) > (self.num_rows * 0.75):
                 continue
             test_series = (self.orig_df[col_name].isna()) | (vals_arr <= 0)
@@ -8172,6 +8186,12 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.5):
                 continue
 
+            # Skip where the columns have few unique values
+            if self.orig_df[col_name_1].nunique() < 10:
+                continue
+            if self.orig_df[col_name_2].nunique() < 10:
+                continue
+
             # Skip where the two columns are very similar (suggesting a different relationship than a running sum)
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
@@ -10241,7 +10261,7 @@ class DataConsistencyChecker:
         np.random.seed(0)
         is_missing_dict = self.get_is_missing_dict()
 
-        # Drop features are the columns we do not use as feature columns
+        # drop_features are the columns we do not use as feature columns. We may predict the nulls in these columns.
         drop_features = []
         categorical_features = []
         for col_name in self.orig_df.columns:
@@ -10342,8 +10362,9 @@ class DataConsistencyChecker:
                     test_id,
                     cols + [col_name],
                     test_series,
-                    f'The Null values in column "{col_name}" are consistently predictable from {cols} based using a '
-                    f'decision tree with the following rules: \n{rules}',
+                    f'The Null values in column "{col_name}" (with {num_missing_dict[col_name]} null and '
+                    f'{self.num_rows - num_missing_dict[col_name]} non-null values) are consistently '
+                    f'predictable from {cols} based using a decision tree with the following rules: \n{rules}',
                     display_info={'Pred': pd.Series(y_pred).replace({True: 'Null', False: 'Non-Null'})}
                 )
 
@@ -10713,10 +10734,11 @@ class DataConsistencyChecker:
 
     def __generate_constant_date_gap(self):
         """
-        Patterns without exceptions: 'const_gap all_1' contains daily values starting July 1. ''const_gap all_2'
+        Patterns without exceptions: 'const_gap all_1', 'const_gap all_2', and 'const_gap all_3' are all a constant
+            gap from each other. 'const_gap all_1' contains daily values starting July 1. ''const_gap all_2'
             contains daily values starting 1 week later, so is consistently 7 days after 'const_gap all_1'.
         Patterns with exception: 'const_gap most' is the same as 'const_gap all_2', so also has a consistent 7 day
-            gap from 'const_gap all_1', but with one exception.
+            gap from 'const_gap all_1', 'const_gap all_2' and 'const_gap all_3', but with one exception.
         """
         test_date1 = datetime.datetime.strptime("01-7-2022", "%d-%m-%Y")
         test_date2 = datetime.datetime.strptime("07-7-2022", "%d-%m-%Y")
@@ -10731,10 +10753,10 @@ class DataConsistencyChecker:
             col_name_1 = self.date_cols[col_name_idx_1]
             for col_name_idx_2 in range(col_name_idx_1 + 1, len(self.date_cols)):
                 col_name_2 = self.date_cols[col_name_idx_2]
-                gap_array = pd.Series([0 if (is_missing(x) or is_missing(y))
-                                       else (x-y).days
-                                        for x, y in zip(pd.to_datetime(self.orig_df[col_name_1]), pd.to_datetime(self.orig_df[col_name_2]))])
-                gap_array = gap_array | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+                gap_array = pd.Series([
+                    0 if (is_missing(x) or is_missing(y)) else (x-y).days
+                    for x, y in zip(pd.to_datetime(self.orig_df[col_name_1]), pd.to_datetime(self.orig_df[col_name_2]))
+                ])
                 self.__process_analysis_counts(
                     test_id,
                     [col_name_1, col_name_2],
@@ -12252,8 +12274,12 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name_2, col_name_3, bin_col],
                 test_series,
-                (f"Column {bin_col} consistently has value {value_when_match} when columns {col_name_2} and "
-                 f"{col_name_3} match values, and value {value_when_dont} when they do not match")
+                (f"Column {bin_col} (with value {val0} {self.orig_df[bin_col].tolist().count(val0)} times and value "
+                 f"{val1} {self.orig_df[bin_col].tolist().count(val1)} times) consistently has value "
+                 f"{value_when_match} when columns {col_name_2} and {col_name_3} match values, and value "
+                 f"{value_when_dont} when they do not match"),
+                display_info={"Match": (self.orig_df[col_name_2] == self.orig_df[col_name_3]) |
+                                       (self.orig_df[col_name_2].isna() & self.orig_df[col_name_3].isna())}
             )
 
         cols_equal_dict = {}
@@ -14468,9 +14494,9 @@ class DataConsistencyChecker:
             [' '.join(np.random.choice(list(string.ascii_lowercase), np.random.randint(4, 6)))
              for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('sim_num_words all',
-            [' '.join(np.random.choice(list(string.ascii_lowercase), 5)) for _ in range(self.num_synth_rows)])
+            self.synth_df['sim_num_words rand_b'].str.replace('a', 'A').str.replace('b', 'B'))
         self.__add_synthetic_column('sim_num_words most',
-            [' '.join(np.random.choice(list(string.ascii_lowercase), 5)) for _ in range(self.num_synth_rows)])
+            self.synth_df['sim_num_words rand_b'].str.replace('a', 'A').str.replace('b', 'B'))
         self.synth_df.loc[999, 'sim_num_words most'] = 'abcdef'
 
     def __check_similar_num_words(self, test_id):
@@ -14494,8 +14520,12 @@ class DataConsistencyChecker:
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             word_counts_medians_1 = word_counts_medians[col_name_1]
             word_counts_medians_2 = word_counts_medians[col_name_2]
+
+            # Skip in the columns have very few words in most cells
             if word_counts_medians_1 < 3 or word_counts_medians_2 < 3:
                 continue
+
+            # Skip if the difference in the median words counts is too large
             if word_counts_medians_2 < (word_counts_medians_1 / 2):
                 continue
             if word_counts_medians_2 > (word_counts_medians_1 * 2):
@@ -14507,11 +14537,19 @@ class DataConsistencyChecker:
 
             word_counts_1 = word_counts_dict[col_name_1]
             word_counts_2 = word_counts_dict[col_name_2]
+
+            # Skip if either column has all values with the same word count
             if len(word_counts_1.value_counts()) == 1 and len(word_counts_2.value_counts()) == 1:
                 continue
+
             similarity_series = [abs(x - y) for x, y in zip(word_counts_1, word_counts_2)]
+            compare_1_to_median_of_2_series = [abs(x - word_counts_medians_2) for x in word_counts_1]
+            compare_2_to_median_of_1_series = [abs(x - word_counts_medians_1) for x in word_counts_2]
             for test_threshold in range(2, -1, -1):
-                test_series = [x <= test_threshold for x in similarity_series]
+                test_series = [(x <= test_threshold) and (x <= y) and (x <= z)
+                               for x, y, z in zip(similarity_series,
+                                                  compare_1_to_median_of_2_series,
+                                                  compare_2_to_median_of_1_series)]
                 test_series = (test_series | self.orig_df[col_name_1].isnull()) | self.orig_df[col_name_2].isnull()
                 if test_series.tolist().count(False) < self.contamination_level:
                     self.__process_analysis_binary(
