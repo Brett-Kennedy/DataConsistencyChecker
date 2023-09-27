@@ -325,9 +325,9 @@ class DataConsistencyChecker:
                                          False, True, True, False),
 
             # Tests on pairs of numeric columns
-            'LARGER':                   ('Check if one column is consistently larger than another',
+            'LARGER_DIFF_RANGE':        ('Check if one column is consistently larger than another',
                                          ('Check if one column is consistently larger than another, but within one '
-                                          'order of magnitude.'),
+                                          'order of magnitude, where the two columns have different ranges of values.'),
                                          self.__check_larger, self.__generate_larger,
                                          False, True, False, False),
             'LARGER_SAME_RANGE':        ('Check if one column is consistently larger than another row by row',
@@ -1663,7 +1663,10 @@ class DataConsistencyChecker:
         if include_exceptions:
             ret_list += self.exceptions_summary_df['Test ID'].unique().tolist()
 
+        # Get the set of unique tests, and sort them based on their standard test order
         ret_list = list(set(ret_list))
+        idx_full_list = [self.get_test_list().index(x) for x in ret_list]
+        ret_list = np.array(ret_list)[np.argsort(idx_full_list)].tolist()
         return ret_list
 
     def get_single_feature_tests_matrix(self):
@@ -2629,102 +2632,8 @@ class DataConsistencyChecker:
             plt.show()
 
     ##################################################################################################################
-    # Private helper methods to support outputting the results of the analysis in various ways
+    # Private methods to plot patterns
     ##################################################################################################################
-
-    def __get_condensed_col_list(self, test_id, col_name):
-        if test_id in ['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']:
-            s = "This test executes over all columns"
-        elif test_id in ['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
-                         'LARGE_AVG_RANK_PER_ROW']:
-            s = "This test executes over all numeric columns"
-        else:
-            s = col_name
-        return s
-
-    def __get_rows_flagged(self, test_id, col_name):
-        """
-        Return the subset of the original data where the specified test flagged an issue in the specified column
-        """
-
-        results_col_name = self.get_results_col_name(test_id, col_name)
-        if results_col_name not in self.test_results_df.columns:
-            return None
-        df = self.test_results_df[self.test_results_df[results_col_name] == 1]
-        if len(df) == 0:
-            return None
-        df.index = [x[0] if type(x) == tuple else x for x in df.index]
-        row_idxs = df.index
-        return self.orig_df.loc[row_idxs]
-
-    def _clean_column_names(self, df):
-        clean_df = df.copy()
-        idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
-        for idx in idxs:
-            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all columns'
-
-        idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
-                                            'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
-        for idx in idxs:
-            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all numeric columns'
-        return clean_df
-
-    def __display_rows_with_tests(self, sorted_df, n_rows, check_score=False):
-        """
-        Display a set of dataframes, one per row in the original data, up to n_rows rows, each including the original
-        row and the issues found in it, across all tests on all features.
-
-        sorted_df: dataframe
-            a sorted version of self.test_results_df
-        n_rows: int
-            The maximum number of rows from the original data to display
-        check_score: bool
-            if True, only rows with scores above zero will be displayed
-        """
-
-        flagged_idx_arr = sorted_df.index[:10]
-        for row_idx in flagged_idx_arr[:n_rows]:
-            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
-                print(f"The remaining rows have no flagged issues: cannot display {n_rows} flagged rows.")
-                return
-
-            # Get the row as it appears in the original data
-            orig_row = self.orig_df.loc[row_idx:row_idx]
-
-            # Insert a column to indicate the IDs of the tests that have flagged this row
-            orig_row.insert(0, 'Test ID', '')
-
-            colour_cells = [False] * len(self.orig_df.columns)
-
-            # Loop through all tests, and add a row to the output for any that have flagged this row
-            for test_id in self.get_test_list():
-                test_row = [test_id] + [""] * len(self.orig_df.columns)
-
-                # There may be multiple columns / column sets which have flagged this row.
-                for column_set in self.exceptions_summary_df['Column(s)'].unique():
-                    result_col_name = self.get_results_col_name(test_id, column_set)
-                    if result_col_name not in self.test_results_df.columns:
-                        continue
-                    for column_name in self.col_to_original_cols_dict[result_col_name]:
-                        if self.test_results_df[result_col_name][row_idx]:
-                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
-                            test_row[column_idx+1] = u'\u2714'  # Checkmark symbol
-                            colour_cells[column_idx] = True
-                if test_row.count(u'\u2714'):
-                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
-            orig_row = orig_row.reset_index()
-            orig_row = orig_row.drop(columns=['index'])
-
-            # Display the dataframe representing this row from the original data
-            print()
-            if is_notebook():
-                display(Markdown(f"**Row: {row_idx} " + u'\u2014' + f" Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
-                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
-            else:
-                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
-                print(orig_row.to_string(index=False))
-            print()
-
     def __plot_distribution(self, test_id, col_name, show_exceptions):
         fig, ax = plt.subplots(figsize=(5, 3))
         s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100)
@@ -2813,7 +2722,7 @@ class DataConsistencyChecker:
                 )
 
                 s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
-                if test_id in ['LARGER'] and \
+                if test_id in ['LARGER_DIFF_RANGE'] and \
                         self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
                         xylim is not None:
                     ax.set_xlim(xylim)
@@ -2832,7 +2741,7 @@ class DataConsistencyChecker:
                                     alpha=0.2,
                                     ax=ax)
                 s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
-                if test_id in ['LARGER'] and \
+                if test_id in ['LARGER_DIFF_RANGE'] and \
                         self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
                         xylim is not None:
                     ax.set_xlim(xylim)
@@ -3092,10 +3001,393 @@ class DataConsistencyChecker:
         plt.ylim(0, 100)
         plt.title("Relationships of Column Magnitudes")
         plt.show()
-        print_text(('Edges indicate pairs of columns where one column, row by row, contains strictly larger values ' 
-                   'than the other column. Redundant edges are removed. The x-position of the nodes represents the '
+        print_text(('Edges indicate pairs of columns where one column, row by row, contains strictly larger values '
+                    'than the other column. Redundant edges are removed. The x-position of the nodes represents the '
                     'median value of the column.'))
 
+    def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
+        def draw_scatter(df, x_col, y_col, draw_diagonal):
+            fig, ax = plt.subplots(figsize=(4, 4))
+            min_range = min(df[x_col].min(), df[y_col].min())
+            max_range = max(df[x_col].max(), df[y_col].max())
+            rng = max_range - min_range
+            xlim = (min_range - (rng / 50.0), max_range + (rng / 50.0))
+            ylim = xlim
+            if not show_exceptions:
+                s = sns.scatterplot(
+                    data=df,
+                    x=x_col,
+                    y=y_col,
+                    color='blue',
+                    alpha=0.2,
+                    label='Not Flagged')
+                s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+            else:
+                result_col_name = self.get_results_col_name(test_id, columns_set)
+                df['Flagged'] = self.test_results_df[result_col_name]
+                s = sns.scatterplot(
+                    data=df[df['Flagged'] == 0],
+                    x=x_col,
+                    y=y_col,
+                    color='blue',
+                    alpha=0.2,
+                    ax=ax,
+                    label='Normal'
+                )
+                s = sns.scatterplot(
+                    data=df[df['Flagged'] == 1],
+                    x=x_col,
+                    y=y_col,
+                    color='red',
+                    alpha=1.0,
+                    ax=ax,
+                    label='Flagged'
+                )
+                s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
+            s.set_xlim(xlim)
+            s.set_ylim(ylim)
+
+            if draw_diagonal:
+                plt.plot(xlim, ylim)
+            plt.xticks(rotation=60)
+            if plt.legend():
+                plt.legend().remove()
+            plt.show()
+
+        if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
+                       'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
+                       'EARLY_DATES', 'LATE_DATES']:
+            self.__plot_distribution(test_id, cols[0], show_exceptions)
+
+        if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
+            if len(cols) == 2:
+                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+            else:
+                self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
+        if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
+                       'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
+                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
+            self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+
+        if test_id in ['SAME_VALUES']:
+            if self.orig_df[cols[0]].nunique() > 5:
+                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+            else:
+                self.__plot_heatmap(test_id, cols)
+
+        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS']:
+            df = self.orig_df.copy()
+            if test_id in ['MEAN_OF_COLUMNS']:
+                calculated_col = 'Mean'
+                df[calculated_col] = display_info['Mean']
+            if test_id in ['SUM_OF_COLUMNS']:
+                calculated_col = 'Sum'
+                df[calculated_col] = display_info['Sum']
+            if test_id in ['MIN_OF_COLUMNS']:
+                calculated_col = 'Min'
+                df[calculated_col] = display_info['Min']
+            if test_id in ['MAX_OF_COLUMNS']:
+                calculated_col = 'Max'
+                df[calculated_col] = display_info['Max']
+            draw_scatter(df, cols[-1], calculated_col, draw_diagonal=False)
+
+        if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
+                       'SIMILAR_TO_RATIO']:
+            df = self.orig_df.copy()
+            col_name_1, col_name_2, col_name_3 = cols
+            if test_id in ['LARGER_THAN_SUM']:
+                calculated_col = 'SUM'
+                df[calculated_col] = self.numeric_vals_filled[col_name_1] + self.numeric_vals_filled[col_name_2]
+            elif test_id in ['SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF']:
+                calculated_col = 'Absolute Difference'
+                df[calculated_col] = abs(self.numeric_vals_filled[col_name_1] - self.numeric_vals_filled[col_name_2])
+            elif test_id in ['SIMILAR_TO_PRODUCT']:
+                calculated_col = 'PRODUCT'
+                df[calculated_col] = self.numeric_vals_filled[col_name_1] * self.numeric_vals_filled[col_name_2] #df[col_name_1] * df[col_name_2]
+            elif test_id in ['SIMILAR_TO_RATIO']:
+                calculated_col = 'Division Results'
+                df[calculated_col] = self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2]
+            draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
+
+        if test_id in ['RARE_VALUES']:
+            self.__plot_count_plot(cols[0])
+
+        if test_id in ['RARE_PAIRS', 'BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES']:
+            self.__plot_heatmap(test_id, cols)
+
+        if test_id in ['COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC', 'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC',
+                       'SIMILAR_PREVIOUS']:
+            self.__draw_row_rank_plot(test_id, cols[0], show_exceptions)
+
+        if test_id in ['SMALL_GIVEN_VALUE', 'LARGE_GIVEN_VALUE', 'BINARY_MATCHES_VALUE']:
+            self.__draw_box_plots(test_id, cols, columns_set)
+
+        if test_id in ['BINARY_MATCHES_SUM']:
+            df2 = self.orig_df[cols].copy()
+            df2['SUM'] = self.numeric_vals_filled[cols[0]] + self.numeric_vals_filled[cols[1]]
+
+            fig, ax = plt.subplots(nrows=1, ncols=3, sharey=True, figsize=(15, 4))
+            s = sns.boxplot(data=df2, orient='h', y=cols[2], x='SUM', ax=ax[0])
+            s.set_title(f"{cols[2]} vs \nthe SUM of {cols[0]} \nand \n{cols[1]}")
+
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[0], ax=ax[1])
+            s.set_title(f"{cols[2]} vs \n{cols[0]} \nAlone")
+
+            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1], ax=ax[2])
+            s.set_title(f"{cols[2]} vs \n{cols[1]} \nAlone")
+            plt.show()
+
+        if test_id in ['BINARY_TWO_OTHERS_MATCH']:
+            if (cols[0] in self.numeric_cols) and (cols[1] in self.numeric_cols):
+                s = sns.scatterplot(data=self.orig_df, x=cols[0], y=cols[1], hue=cols[2])
+                plt.show()
+
+        if test_id in ['UNUSUAL_DAY_OF_WEEK']:
+            sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
+            plt.show()
+
+        if test_id in ['UNUSUAL_DAY_OF_MONTH']:
+            sns.countplot(x=self.orig_df[cols[0]].dt.day)
+            plt.show()
+
+        if test_id in ['UNUSUAL_MONTH']:
+            sns.countplot(x=self.orig_df[cols[0]].dt.month)
+            plt.show()
+
+        if test_id in ['UNUSUAL_HOUR_OF_DAY']:
+            sns.countplot(x=self.orig_df[cols[0]].dt.hour)
+            plt.show()
+
+        if test_id in ['UNUSUAL_MINUTES']:
+            sns.countplot(x=self.orig_df[cols[0]].dt.minute)
+            plt.show()
+
+        elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
+            sns.countplot(x=(self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days)
+            plt.show()
+
+        elif test_id in ['RARE_PAIRS_FIRST_CHAR']:
+            df2 = self.orig_df[cols].copy()
+            df2[f'{cols[0]} First Char'] = df2[cols[0]].astype(str).str[:1]
+            df2[f'{cols[1]} First Char'] = df2[cols[1]].astype(str).str[:1]
+            counts_data = pd.crosstab(df2[f'{cols[0]} First Char'], df2[f'{cols[1]} First Char'])
+            s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
+            s.set_title(f"Counts by First Characters of {cols[0]} and {cols[1]}")
+            plt.show()
+
+        elif test_id in ['RARE_PAIRS_FIRST_WORD']:
+            df2 = self.orig_df[cols].copy()
+            col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
+            df2[f'{cols[0]} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+            col_vals = df2[cols[1]].astype(str).apply(replace_special_with_space)
+            df2[f'{cols[1]} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+            counts_data = pd.crosstab(df2[f'{cols[0]} First Word'], df2[f'{cols[1]} First Word'])
+            s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
+            s.set_title(f"Counts by First Words of {cols[0]} and {cols[1]}")
+            plt.show()
+
+        elif test_id in ['CORRELATED_ALPHA_ORDER']:
+            df2 = self.orig_df[cols].copy()
+            df2[cols[0]] = self.orig_df[cols[0]].rank(pct=True)
+            df2[cols[1]] = self.orig_df[cols[1]].rank(pct=True)
+            s = sns.scatterplot(data=df2, x=cols[0], y=cols[1])
+            s.set_title("Values by Alphabetic Order")
+
+            # Find the flagged values and identify them on the plot
+            if show_exceptions:
+                results_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[results_col_name]
+                flagged_idxs = np.where(results_col)
+                sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
+            plt.show()
+
+        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
+            df2 = self.orig_df[cols].copy()
+            col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
+            df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+            if cols[1] in self.date_cols:
+                df2['Epoch'] = (df2[cols[1]] - datetime.datetime(1970, 1, 1)).dt.total_seconds()
+                sns.boxplot(data=df2, orient='h', y=cols[0], x='Epoch')
+                plt.xlabel(cols[1])
+                plt.xticks([])
+            else:
+                sns.boxplot(data=df2.astype(float), orient='h', y=cols[0], x=cols[1])
+            plt.show()
+
+            # Also draw a histogram of the relevant classes.
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_df = self.orig_df.loc[flagged_idxs]
+            col_vals = flagged_df[cols[0]].astype(str).apply(replace_special_with_space)
+            flagged_df[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
+            vals = pd.Series(flagged_df[cols[0]].astype(str).apply(replace_special_with_space))
+            vals = pd.Series([x[0] if len(x) > 0 else "" for x in vals.str.split()]).unique()
+            nvals = len(vals)
+            fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
+            for v_idx, v in enumerate(vals):
+                sub_df = df2[df2[cols[0]] == v]
+                sub_flagged_df = flagged_df[flagged_df[cols[0]] == v]
+                if nvals == 1:
+                    curr_ax = ax
+                else:
+                    curr_ax = ax[v_idx]
+                s = sns.histplot(data=sub_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
+                flagged_vals = sub_flagged_df[cols[1]].values
+                for fv in flagged_vals:
+                    s.axvline(fv, color='red')
+                s.set_title(f"Distribution of {cols[1]} where the first word of {cols[0]} is {v} (Flagged values in red)")
+                if cols[1] in self.date_cols:
+                    plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
+                plt.show()
+
+        elif test_id in ['SMALL_AVG_RANK_PER_ROW', 'LARGE_AVG_RANK_PER_ROW']:
+            t_df = pd.DataFrame({"Avg. Percentiles": display_info['percentiles']})
+            fig, ax = plt.subplots(figsize=(6, 2))
+            s = sns.histplot(data=t_df, x='Avg. Percentiles')
+            for fv in display_info['flagged_vals']:
+                ax.axvline(fv, color='r')
+            s.set_title("Mean Percentile of Numeric Values by Row")
+            plt.show()
+
+        elif test_id in ['CORRELATED_GIVEN_VALUE']:
+            if show_exceptions:
+                results_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
+                flagged_idxs = np.where(results_col)
+
+            vals = self.orig_df[cols[2]].unique()
+            plotted_vals = []
+            for val in vals:
+                if self.orig_df[cols[2]].tolist().count(val) > 100:
+                    plotted_vals.append(val)
+
+            for val in plotted_vals:
+                df2 = self.orig_df[self.orig_df[cols[2]] == val]
+                fig, ax = plt.subplots(figsize=(3, 3))
+                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
+                s.set_title(f'Where Column "{cols[2]}" is "{val}"')
+
+                if show_exceptions:
+                    for flagged_idx in flagged_idxs:
+                        if flagged_idx in list(df2.index):
+                            df3 = df2.loc[flagged_idx]
+                            s = sns.scatterplot(data=df3, x=cols[0], y=cols[1], color='red')
+                plt.show()
+
+        elif test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
+            df2 = pd.DataFrame({cols[0]: self.numeric_vals_filled[cols[0]], cols[1]: self.orig_df[cols[1]]})
+            if show_exceptions:
+                results_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
+                df2['Flagged'] = results_col
+                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], hue='Flagged')
+            else:
+                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
+            plt.show()
+
+        elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
+
+            def highlight_cells():
+                for row_idx in flagged_df.index:
+                    v0 = flagged_df.loc[row_idx, cols[0]]
+                    v1 = flagged_df.loc[row_idx, cols[1]]
+                    patch_x = counts_df.columns.tolist().index(v1)
+                    patch_y = counts_df.index.tolist().index(v0)
+                    ax.add_patch(Rectangle((patch_x, patch_y), 1, 1, fill=False, edgecolor='yellow', lw=3))
+
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_df = self.orig_df.loc[flagged_idxs]
+            vals = flagged_df[[cols[0], cols[1]]].drop_duplicates()
+            nvals = len(vals)
+
+            # Present a heatmap of the counts of each pair
+            counts_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]])
+            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
+            s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
+            s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
+            plt.tight_layout()
+            highlight_cells()
+            plt.show()
+
+            # Present a heatmap of the average value of col[2] for each pair
+            if cols[2] in self.numeric_cols:
+                # Use aggfunc='quantile' for date columns
+                avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
+                fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
+                s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
+                s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
+                plt.tight_layout()
+                highlight_cells()
+                plt.show()
+
+            # Present a histogram of the relevant classes
+            fig, ax = plt.subplots(nrows=1, ncols=nvals, sharey=True, figsize=(nvals*4, 4))
+            for v_idx in range(nvals):
+                v0 = vals.iloc[v_idx][cols[0]]
+                v1 = vals.iloc[v_idx][cols[1]]
+                sub_df = self.orig_df[(self.orig_df[cols[0]] == v0) & (self.orig_df[cols[1]] == v1)]
+                sub_flagged_df = flagged_df[(flagged_df[cols[0]] == v0) & (flagged_df[cols[1]] == v1)]
+                if nvals == 1:
+                    curr_ax = ax
+                else:
+                    curr_ax = ax[v_idx]
+                s = sns.histplot(data=sub_df, x=cols[2], color='blue', bins=100, ax=curr_ax)
+                flagged_vals = sub_flagged_df[cols[2]].values
+                for fv in flagged_vals:
+                    s.axvline(fv, color='red')
+                s.set_title(f'Distribution of \n"{cols[2]}" where \n"{cols[0]}" is "{v0}" and \n"{cols[1]}" is "{v1}"')
+                if nvals == 1:
+                    ax_curr = ax
+                else:
+                    ax_curr = ax[v_idx]
+                num_ticks = len(ax_curr.xaxis.get_ticklabels())
+                for label_idx, label in enumerate(ax_curr.xaxis.get_ticklabels()):
+                    if label_idx != (num_ticks - 1):
+                        label.set_visible(False)
+            plt.show()
+
+        elif test_id in ['BINARY_RARE_COMBINATION']:
+            counts_df = self.orig_df.groupby(cols).size().reset_index()
+            # The 0 column is the counts. The other columns have the values from the columns in the original data.
+            counts = counts_df[0]
+            labels = []
+            for i in counts_df.index:
+                label = ''
+                for c in cols:
+                    label += str(counts_df.loc[i, c]) + " / "
+                labels.append(label)
+            s = sns.barplot(orient='h', y=labels, x=counts)
+            s.set_title("Counts of combinations of values in columns")
+            for p_idx, p in enumerate(s.patches):
+                s.annotate('{:.1f}'.format(counts[p_idx]), (p.get_width()+0.25, (p.get_y() + (p.get_height() / 2))+0.1))
+            plt.show()
+
+        elif test_id in ['DECISION_TREE_REGRESSOR', 'LINEAR_REGRESSION'] or (test_id in ['PREV_VALUES_DT'] and cols[-1] in self.numeric_cols):
+            df2 = pd.DataFrame({
+                cols[-1]: self.orig_df[cols[-1]],
+                'Prediction': display_info['Pred']
+            })
+            if show_exceptions:
+                result_col_name = self.get_results_col_name(test_id, columns_set)
+                results_col = self.test_results_df[result_col_name]
+                df2['Flagged'] = results_col
+                s = sns.scatterplot(data=df2, y='Prediction', x=cols[-1], hue='Flagged')
+            else:
+                s = sns.scatterplot(data=df2, y='Prediction', x=cols[-1])
+            s.set_title(f'Actual vs Predicted values for "{cols[-1]}"')
+            plt.show()
+
+        elif test_id in ['FIRST_WORD_SMALL_SET']:
+            if len(display_info['counts']) > 1:
+                s = sns.barplot(orient='h', y=display_info['counts'].index, x=display_info['counts'].values)
+                plt.show()
+
+    ##################################################################################################################
+    # Private methods to display tables of example rows from the original data
+    ##################################################################################################################
     def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
         """
         Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
@@ -3285,11 +3577,11 @@ class DataConsistencyChecker:
             df['MATCH'] = pd.Series(display_info['Match']).loc[df.index]
         elif test_id in ['MUCH_LARGER']:
             df['RATIO'] = [safe_div(x, y) for x,y in zip(df[col_name_2], df[col_name_1])]
-        elif test_id in ['LARGER', 'LARGER_SAME_RANGE']:
+        elif test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE']:
             if len(cols) == 2:
-                df['DIFF'] = df[col_name_1] - df[col_name_2]
+                df['DIFF'] = df[col_name_1].astype(float) - df[col_name_2].astype(float)
 
-        df = df.sort_index()
+        df = df.sort_index()  # zzzz
         if is_notebook():
             display(df)
         else:
@@ -3544,7 +3836,7 @@ class DataConsistencyChecker:
             df = df[mask]
 
         # Set the column order
-        if test_id in ['LARGER', 'MUCH_LARGER', 'LARGER_SAME_RANGE']:
+        if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             col_medians = [self.column_medians[c] for c in cols]
             sorted_cols = np.array(cols)[np.argsort(col_medians)]
             df2 = df[sorted_cols]
@@ -3594,385 +3886,104 @@ class DataConsistencyChecker:
         )
         self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns)
 
-    def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
-        def draw_scatter(df, x_col, y_col, draw_diagonal):
-            fig, ax = plt.subplots(figsize=(4, 4))
-            min_range = min(df[x_col].min(), df[y_col].min())
-            max_range = max(df[x_col].max(), df[y_col].max())
-            rng = max_range - min_range
-            xlim = (min_range - (rng / 50.0), max_range + (rng / 50.0))
-            ylim = xlim
-            if not show_exceptions:
-                s = sns.scatterplot(
-                    data=df,
-                    x=x_col,
-                    y=y_col,
-                    color='blue',
-                    alpha=0.2,
-                    label='Not Flagged')
-                s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+    ##################################################################################################################
+    # Private helper methods to support outputting the results of the analysis in various ways
+    ##################################################################################################################
+
+    def __get_condensed_col_list(self, test_id, col_name):
+        if test_id in ['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']:
+            s = "This test executes over all columns"
+        elif test_id in ['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
+                         'LARGE_AVG_RANK_PER_ROW']:
+            s = "This test executes over all numeric columns"
+        else:
+            s = col_name
+        return s
+
+    def _clean_column_names(self, df):
+        clean_df = df.copy()
+        idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all columns'
+
+        idxs = np.where(df['Test ID'].isin(['ZERO_VALUES_PER_ROW', 'NEGATIVE_VALUES_PER_ROW', 'SMALL_AVG_RANK_PER_ROW',
+                                            'LARGE_AVG_RANK_PER_ROW']))[0].tolist()
+        for idx in idxs:
+            clean_df.loc[clean_df.index[idx], 'Column(s)'] = 'This test executes over all numeric columns'
+        return clean_df
+
+    def __get_rows_flagged(self, test_id, col_name):
+        """
+        Return the subset of the original data where the specified test flagged an issue in the specified column
+        """
+
+        results_col_name = self.get_results_col_name(test_id, col_name)
+        if results_col_name not in self.test_results_df.columns:
+            return None
+        df = self.test_results_df[self.test_results_df[results_col_name] == 1]
+        if len(df) == 0:
+            return None
+        df.index = [x[0] if type(x) == tuple else x for x in df.index]
+        row_idxs = df.index
+        return self.orig_df.loc[row_idxs]
+
+    def __display_rows_with_tests(self, sorted_df, n_rows, check_score=False):
+        """
+        Called by display_most_flagged_rows() and display_least_flagged_rows()
+
+        Display a set of dataframes, one per row in the original data, up to n_rows rows, each including the original
+        row and the issues found in it, across all tests on all features.
+
+        sorted_df: dataframe
+            a sorted version of self.test_results_df
+        n_rows: int
+            The maximum number of rows from the original data to display
+        check_score: bool
+            if True, only rows with scores above zero will be displayed
+        """
+
+        flagged_idx_arr = sorted_df.index[:10]
+        for row_idx in flagged_idx_arr[:n_rows]:
+            if check_score and sorted_df.loc[row_idx]['FINAL SCORE'] == 0:
+                print(f"The remaining rows have no flagged issues: cannot display {n_rows} flagged rows.")
+                return
+
+            # Get the row as it appears in the original data
+            orig_row = self.orig_df.loc[row_idx:row_idx]
+
+            # Insert a column to indicate the IDs of the tests that have flagged this row
+            orig_row.insert(0, 'Test ID', '')
+
+            colour_cells = [False] * len(self.orig_df.columns)
+
+            # Loop through all tests, and add a row to the output for any that have flagged this row
+            for test_id in self.get_test_list():
+                test_row = [test_id] + [""] * len(self.orig_df.columns)
+
+                # There may be multiple columns / column sets which have flagged this row.
+                for column_set in self.exceptions_summary_df['Column(s)'].unique():
+                    result_col_name = self.get_results_col_name(test_id, column_set)
+                    if result_col_name not in self.test_results_df.columns:
+                        continue
+                    for column_name in self.col_to_original_cols_dict[result_col_name]:
+                        if self.test_results_df[result_col_name][row_idx]:
+                            column_idx = np.where(self.orig_df.columns == column_name)[0][0]
+                            test_row[column_idx+1] = u'\u2714'  # Checkmark symbol
+                            colour_cells[column_idx] = True
+                if test_row.count(u'\u2714'):
+                    orig_row = orig_row.append(pd.DataFrame(test_row, index=orig_row.columns).T)
+            orig_row = orig_row.reset_index()
+            orig_row = orig_row.drop(columns=['index'])
+
+            # Display the dataframe representing this row from the original data
+            print()
+            if is_notebook():
+                display(Markdown(f"**Row: {row_idx} " + u'\u2014' + f" Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}**"))
+                display(orig_row.style.apply(styling_orig_row, row_idx=0, flagged_arr=colour_cells, axis=None))
             else:
-                result_col_name = self.get_results_col_name(test_id, columns_set)
-                df['Flagged'] = self.test_results_df[result_col_name]
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 0],
-                    x=x_col,
-                    y=y_col,
-                    color='blue',
-                    alpha=0.2,
-                    ax=ax,
-                    label='Normal'
-                )
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 1],
-                    x=x_col,
-                    y=y_col,
-                    color='red',
-                    alpha=1.0,
-                    ax=ax,
-                    label='Flagged'
-                )
-                s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
-            s.set_xlim(xlim)
-            s.set_ylim(ylim)
-
-            if draw_diagonal:
-                plt.plot(xlim, ylim)
-            plt.xticks(rotation=60)
-            if plt.legend():
-                plt.legend().remove()
-            plt.show()
-
-        if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
-                       'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
-                       'EARLY_DATES', 'LATE_DATES']:
-            self.__plot_distribution(test_id, cols[0], show_exceptions)
-
-        if test_id in ['LARGER', 'MUCH_LARGER', 'LARGER_SAME_RANGE']:
-            if len(cols) == 2:
-                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
-            else:
-                self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
-        if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
-                       'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
-                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
-            self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
-
-        if test_id in ['SAME_VALUES']:
-            if self.orig_df[cols[0]].nunique() > 5:
-                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
-            else:
-                self.__plot_heatmap(test_id, cols)
-
-        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS']:
-            df = self.orig_df.copy()
-            if test_id in ['MEAN_OF_COLUMNS']:
-                calculated_col = 'Mean'
-                df[calculated_col] = display_info['Mean']
-            if test_id in ['SUM_OF_COLUMNS']:
-                calculated_col = 'Sum'
-                df[calculated_col] = display_info['Sum']
-            if test_id in ['MIN_OF_COLUMNS']:
-                calculated_col = 'Min'
-                df[calculated_col] = display_info['Min']
-            if test_id in ['MAX_OF_COLUMNS']:
-                calculated_col = 'Max'
-                df[calculated_col] = display_info['Max']
-            draw_scatter(df, cols[-1], calculated_col, draw_diagonal=False)
-
-        if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
-                       'SIMILAR_TO_RATIO']:
-            df = self.orig_df.copy()
-            col_name_1, col_name_2, col_name_3 = cols
-            if test_id in ['LARGER_THAN_SUM']:
-                calculated_col = 'SUM'
-                df[calculated_col] = self.numeric_vals_filled[col_name_1] + self.numeric_vals_filled[col_name_2]
-            elif test_id in ['SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF']:
-                calculated_col = 'Absolute Difference'
-                df[calculated_col] = abs(self.numeric_vals_filled[col_name_1] - self.numeric_vals_filled[col_name_2])
-            elif test_id in ['SIMILAR_TO_PRODUCT']:
-                calculated_col = 'PRODUCT'
-                df[calculated_col] = self.numeric_vals_filled[col_name_1] * self.numeric_vals_filled[col_name_2] #df[col_name_1] * df[col_name_2]
-            elif test_id in ['SIMILAR_TO_RATIO']:
-                calculated_col = 'Division Results'
-                df[calculated_col] = self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2]
-            draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
-
-        if test_id in ['RARE_VALUES']:
-            self.__plot_count_plot(cols[0])
-
-        if test_id in ['RARE_PAIRS', 'BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES']:
-            self.__plot_heatmap(test_id, cols)
-
-        if test_id in ['COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC', 'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC',
-                       'SIMILAR_PREVIOUS']:
-            self.__draw_row_rank_plot(test_id, cols[0], show_exceptions)
-
-        if test_id in ['SMALL_GIVEN_VALUE', 'LARGE_GIVEN_VALUE', 'BINARY_MATCHES_VALUE']:
-            self.__draw_box_plots(test_id, cols, columns_set)
-
-        if test_id in ['BINARY_MATCHES_SUM']:
-            df2 = self.orig_df[cols].copy()
-            df2['SUM'] = self.numeric_vals_filled[cols[0]] + self.numeric_vals_filled[cols[1]]
-
-            fig, ax = plt.subplots(nrows=1, ncols=3, sharey=True, figsize=(15, 4))
-            s = sns.boxplot(data=df2, orient='h', y=cols[2], x='SUM', ax=ax[0])
-            s.set_title(f"{cols[2]} vs \nthe SUM of {cols[0]} \nand \n{cols[1]}")
-
-            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[0], ax=ax[1])
-            s.set_title(f"{cols[2]} vs \n{cols[0]} \nAlone")
-
-            s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1], ax=ax[2])
-            s.set_title(f"{cols[2]} vs \n{cols[1]} \nAlone")
-            plt.show()
-
-        if test_id in ['BINARY_TWO_OTHERS_MATCH']:
-            if (cols[0] in self.numeric_cols) and (cols[1] in self.numeric_cols):
-                s = sns.scatterplot(data=self.orig_df, x=cols[0], y=cols[1], hue=cols[2])
-                plt.show()
-
-        if test_id in ['UNUSUAL_DAY_OF_WEEK']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
-            plt.show()
-
-        if test_id in ['UNUSUAL_DAY_OF_MONTH']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.day)
-            plt.show()
-
-        if test_id in ['UNUSUAL_MONTH']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.month)
-            plt.show()
-
-        if test_id in ['UNUSUAL_HOUR_OF_DAY']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.hour)
-            plt.show()
-
-        if test_id in ['UNUSUAL_MINUTES']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.minute)
-            plt.show()
-
-        elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
-            sns.countplot(x=(self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days)
-            plt.show()
-
-        elif test_id in ['RARE_PAIRS_FIRST_CHAR']:
-            df2 = self.orig_df[cols].copy()
-            df2[f'{cols[0]} First Char'] = df2[cols[0]].astype(str).str[:1]
-            df2[f'{cols[1]} First Char'] = df2[cols[1]].astype(str).str[:1]
-            counts_data = pd.crosstab(df2[f'{cols[0]} First Char'], df2[f'{cols[1]} First Char'])
-            s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
-            s.set_title(f"Counts by First Characters of {cols[0]} and {cols[1]}")
-            plt.show()
-
-        elif test_id in ['RARE_PAIRS_FIRST_WORD']:
-            df2 = self.orig_df[cols].copy()
-            col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
-            df2[f'{cols[0]} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            col_vals = df2[cols[1]].astype(str).apply(replace_special_with_space)
-            df2[f'{cols[1]} First Word'] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            counts_data = pd.crosstab(df2[f'{cols[0]} First Word'], df2[f'{cols[1]} First Word'])
-            s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
-            s.set_title(f"Counts by First Words of {cols[0]} and {cols[1]}")
-            plt.show()
-
-        elif test_id in ['CORRELATED_ALPHA_ORDER']:
-            df2 = self.orig_df[cols].copy()
-            df2[cols[0]] = self.orig_df[cols[0]].rank(pct=True)
-            df2[cols[1]] = self.orig_df[cols[1]].rank(pct=True)
-            s = sns.scatterplot(data=df2, x=cols[0], y=cols[1])
-            s.set_title("Values by Alphabetic Order")
-
-            # Find the flagged values and identify them on the plot
-            if show_exceptions:
-                results_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[results_col_name]
-                flagged_idxs = np.where(results_col)
-                sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
-            plt.show()
-
-        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
-            df2 = self.orig_df[cols].copy()
-            col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
-            df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            if cols[1] in self.date_cols:
-                df2['Epoch'] = (df2[cols[1]] - datetime.datetime(1970, 1, 1)).dt.total_seconds()
-                sns.boxplot(data=df2, orient='h', y=cols[0], x='Epoch')
-                plt.xlabel(cols[1])
-                plt.xticks([])
-            else:
-                sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
-            plt.show()
-
-            # Also draw a histogram of the relevant classes.
-            results_col_name = self.get_results_col_name(test_id, columns_set)
-            results_col = self.test_results_df[results_col_name]
-            flagged_idxs = np.where(results_col)
-            flagged_df = self.orig_df.loc[flagged_idxs]
-            col_vals = flagged_df[cols[0]].astype(str).apply(replace_special_with_space)
-            flagged_df[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
-            vals = pd.Series(flagged_df[cols[0]].astype(str).apply(replace_special_with_space))
-            vals = pd.Series([x[0] if len(x) > 0 else "" for x in vals.str.split()]).unique()
-            nvals = len(vals)
-            fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
-            for v_idx, v in enumerate(vals):
-                sub_df = df2[df2[cols[0]] == v]
-                sub_flagged_df = flagged_df[flagged_df[cols[0]] == v]
-                if nvals == 1:
-                    curr_ax = ax
-                else:
-                    curr_ax = ax[v_idx]
-                s = sns.histplot(data=sub_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
-                flagged_vals = sub_flagged_df[cols[1]].values
-                for fv in flagged_vals:
-                    s.axvline(fv, color='red')
-                s.set_title(f"Distribution of {cols[1]} where the first word of {cols[0]} is {v} (Flagged values in red)")
-                if cols[1] in self.date_cols:
-                    plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
-                plt.show()
-
-        elif test_id in ['SMALL_AVG_RANK_PER_ROW', 'LARGE_AVG_RANK_PER_ROW']:
-            t_df = pd.DataFrame({"Avg. Percentiles": display_info['percentiles']})
-            fig, ax = plt.subplots(figsize=(6, 2))
-            s = sns.histplot(data=t_df, x='Avg. Percentiles')
-            for fv in display_info['flagged_vals']:
-                ax.axvline(fv, color='r')
-            s.set_title("Mean Percentile of Numeric Values by Row")
-            plt.show()
-
-        elif test_id in ['CORRELATED_GIVEN_VALUE']:
-            if show_exceptions:
-                results_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
-                flagged_idxs = np.where(results_col)
-
-            vals = self.orig_df[cols[2]].unique()
-            plotted_vals = []
-            for val in vals:
-                if self.orig_df[cols[2]].tolist().count(val) > 100:
-                    plotted_vals.append(val)
-
-            for val in plotted_vals:
-                df2 = self.orig_df[self.orig_df[cols[2]] == val]
-                fig, ax = plt.subplots(figsize=(3, 3))
-                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
-                s.set_title(f'Where Column "{cols[2]}" is "{val}"')
-
-                if show_exceptions:
-                    for flagged_idx in flagged_idxs:
-                        if flagged_idx in list(df2.index):
-                            df3 = df2.loc[flagged_idx]
-                            s = sns.scatterplot(data=df3, x=cols[0], y=cols[1], color='red')
-                plt.show()
-
-        elif test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
-            df2 = pd.DataFrame({cols[0]: self.numeric_vals_filled[cols[0]], cols[1]: self.orig_df[cols[1]]})
-            if show_exceptions:
-                results_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
-                df2['Flagged'] = results_col
-                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], hue='Flagged')
-            else:
-                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
-            plt.show()
-
-        elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
-
-            def highlight_cells():
-                for row_idx in flagged_df.index:
-                    v0 = flagged_df.loc[row_idx, cols[0]]
-                    v1 = flagged_df.loc[row_idx, cols[1]]
-                    patch_x = counts_df.columns.tolist().index(v1)
-                    patch_y = counts_df.index.tolist().index(v0)
-                    ax.add_patch(Rectangle((patch_x, patch_y), 1, 1, fill=False, edgecolor='yellow', lw=3))
-
-            results_col_name = self.get_results_col_name(test_id, columns_set)
-            results_col = self.test_results_df[results_col_name]
-            flagged_idxs = np.where(results_col)
-            flagged_df = self.orig_df.loc[flagged_idxs]
-            vals = flagged_df[[cols[0], cols[1]]].drop_duplicates()
-            nvals = len(vals)
-
-            # Present a heatmap of the counts of each pair
-            counts_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]])
-            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
-            s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
-            s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
-            plt.tight_layout()
-            highlight_cells()
-            plt.show()
-
-            # Present a heatmap of the average value of col[2] for each pair
-            if cols[2] in self.numeric_cols:
-                # Use aggfunc='quantile' for date columns
-                avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
-                fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
-                s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
-                s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
-                plt.tight_layout()
-                highlight_cells()
-                plt.show()
-
-            # Present a histogram of the relevant classes
-            fig, ax = plt.subplots(nrows=1, ncols=nvals, sharey=True, figsize=(nvals*4, 4))
-            for v_idx in range(nvals):
-                v0 = vals.iloc[v_idx][cols[0]]
-                v1 = vals.iloc[v_idx][cols[1]]
-                sub_df = self.orig_df[(self.orig_df[cols[0]] == v0) & (self.orig_df[cols[1]] == v1)]
-                sub_flagged_df = flagged_df[(flagged_df[cols[0]] == v0) & (flagged_df[cols[1]] == v1)]
-                if nvals == 1:
-                    curr_ax = ax
-                else:
-                    curr_ax = ax[v_idx]
-                s = sns.histplot(data=sub_df, x=cols[2], color='blue', bins=100, ax=curr_ax)
-                flagged_vals = sub_flagged_df[cols[2]].values
-                for fv in flagged_vals:
-                    s.axvline(fv, color='red')
-                s.set_title(f'Distribution of \n"{cols[2]}" where \n"{cols[0]}" is "{v0}" and \n"{cols[1]}" is "{v1}"')
-                if nvals == 1:
-                    ax_curr = ax
-                else:
-                    ax_curr = ax[v_idx]
-                num_ticks = len(ax_curr.xaxis.get_ticklabels())
-                for label_idx, label in enumerate(ax_curr.xaxis.get_ticklabels()):
-                    if label_idx != (num_ticks - 1):
-                        label.set_visible(False)
-            plt.show()
-
-        elif test_id in ['BINARY_RARE_COMBINATION']:
-            counts_df = self.orig_df.groupby(cols).size().reset_index()
-            # The 0 column is the counts. The other columns have the values from the columns in the original data.
-            counts = counts_df[0]
-            labels = []
-            for i in counts_df.index:
-                label = ''
-                for c in cols:
-                    label += str(counts_df.loc[i, c]) + " / "
-                labels.append(label)
-            s = sns.barplot(orient='h', y=labels, x=counts)
-            s.set_title("Counts of combinations of values in columns")
-            for p_idx, p in enumerate(s.patches):
-                s.annotate('{:.1f}'.format(counts[p_idx]), (p.get_width()+0.25, (p.get_y() + (p.get_height() / 2))+0.1))
-            plt.show()
-
-        elif test_id in ['DECISION_TREE_REGRESSOR', 'LINEAR_REGRESSION'] or (test_id in ['PREV_VALUES_DT'] and cols[-1] in self.numeric_cols):
-            df2 = pd.DataFrame({
-                cols[-1]: self.orig_df[cols[-1]],
-                'Prediction': display_info['Pred']
-            })
-            if show_exceptions:
-                result_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[result_col_name]
-                df2['Flagged'] = results_col
-                s = sns.scatterplot(data=df2, y='Prediction', x=cols[-1], hue='Flagged')
-            else:
-                s = sns.scatterplot(data=df2, y='Prediction', x=cols[-1])
-            s.set_title(f'Actual vs Predicted values for "{cols[-1]}"')
-            plt.show()
-
-        elif test_id in ['FIRST_WORD_SMALL_SET']:
-            if len(display_info['counts']) > 1:
-                s = sns.barplot(orient='h', y=display_info['counts'].index, x=display_info['counts'].values)
-                plt.show()
+                print(f"Row: {row_idx} Final Score: {sorted_df.loc[row_idx]['FINAL SCORE']}")
+                print(orig_row.to_string(index=False))
+            print()
 
     ##################################################################################################################
     # HTML Export
@@ -7164,16 +7175,21 @@ class DataConsistencyChecker:
             if test_series.tolist().count(False) > self.contamination_level:
                 continue
 
+            col_1_q1 = q1_dict[col_name_1]
+            col_1_q3 = q3_dict[col_name_1]
+            col_2_q1 = q1_dict[col_name_2]
+            col_2_q3 = q3_dict[col_name_2]
             if require_same_scale:
-                col_1_q1 = q1_dict[col_name_1]
-                col_1_q3 = q3_dict[col_name_1]
-                col_2_q1 = q1_dict[col_name_2]
-                col_2_q3 = q3_dict[col_name_2]
                 if (self.column_medians[col_name_1] < col_2_q1) or (self.column_medians[col_name_1] > col_2_q3):
                     continue
                 if (self.column_medians[col_name_2] < col_1_q1) or (self.column_medians[col_name_2] > col_1_q3):
                     continue
             else:
+                if (self.column_medians[col_name_1] > col_2_q1) and (self.column_medians[col_name_1] < col_2_q3):
+                    continue
+                if (self.column_medians[col_name_2] > col_1_q1) and (self.column_medians[col_name_2] < col_1_q3):
+                    continue
+
                 # Test for an order of magnitude difference on the full column. If true, this is redundant with
                 # MUCH_LARGER.
                 vals_arr_1 = self.numeric_vals_filled[col_name_1]
@@ -7241,6 +7257,11 @@ class DataConsistencyChecker:
         """
         Where a pair of numeric columns is flagged, this may indicate a anomaly with either column, or with the
         relationship between the two columns.
+
+        This test checks pairs of columns that are on different scales, while LARGER_SAME_RANGE tests pairs of
+        columns that are on the same scale. Typically, exceptions are more interesting in this test than in
+        LARGER_SAME_SCALE, while patterns without exceptions are more interesting in LARGER_SAME_SCALE than in this
+        test.
         """
         self.__check_two_cols_larger(test_id, require_same_scale=False)
 
@@ -9763,11 +9784,11 @@ class DataConsistencyChecker:
             if num_zero > (self.num_rows * 0.1) and num_non_zero > (self.num_rows * 0.1):
                 cols.append(col_name)
 
-                zero_dict[col_name] = self.orig_df[col_name] == 0
-                non_zero_dict[col_name] = self.orig_df[col_name] != 0
-
                 sample_zero_dict[col_name] = self.sample_df[col_name] == 0
                 sample_non_zero_dict[col_name] = self.sample_df[col_name] != 0
+
+                zero_dict[col_name] = self.orig_df[col_name] == 0
+                non_zero_dict[col_name] = self.orig_df[col_name] != 0
 
         know_failed_subsets = {}
         printed_subset_size_msg = False
@@ -11632,8 +11653,14 @@ class DataConsistencyChecker:
             for col_name_other in self.binary_cols:
                 if col_name_other == col_name:
                     continue
-                num_val0 = self.orig_df[col_name_other].tolist().count(val0)
-                num_val1 = self.orig_df[col_name_other].tolist().count(val1)
+                if val0 == val0:
+                    num_val0 = self.orig_df[col_name_other].dropna().tolist().count(val0)
+                else:
+                    num_val0 = self.orig_df[col_name_other].isna().sum()
+                if val1 == val1:
+                    num_val1 = self.orig_df[col_name_other].dropna().tolist().count(val1)
+                else:
+                    num_val1 = self.orig_df[col_name_other].isna().sum()
                 if num_val0 < count_min:
                     continue
                 if num_val1 < count_min:
@@ -11733,8 +11760,14 @@ class DataConsistencyChecker:
             for col_name_other in self.binary_cols:
                 if col_name_other == col_name:
                     continue
-                num_val0 = self.orig_df[col_name_other].tolist().count(val0)
-                num_val1 = self.orig_df[col_name_other].tolist().count(val1)
+                if val0 == val0:
+                    num_val0 = self.orig_df[col_name_other].dropna().tolist().count(val0)
+                else:
+                    num_val0 = self.orig_df[col_name_other].isna().sum()
+                if val1 == val1:
+                    num_val1 = self.orig_df[col_name_other].dropna().tolist().count(val1)
+                else:
+                    num_val1 = self.orig_df[col_name_other].isna().sum()
                 if num_val0 < count_min:
                     continue
                 if num_val1 < count_min:
@@ -16099,6 +16132,9 @@ class DataConsistencyChecker:
                             found_many = True
                             break
 
+                        if q2 is None or q3 is None or col_q2_limit is None or col_q3_limit is None:
+                            continue
+
                         # Ensure the subset is small relative to the full column.
                         if (q2 > col_q2_limit) or (q3 > col_q3_limit):
                             continue
@@ -17133,7 +17169,10 @@ class DataConsistencyChecker:
         Patterns with exception:  The full set of columns consistently have 2 zero values (if only this test is tested),
             with the exception of 1 row
         """
-        data_vals = [[1, 2, 0, 0], [1, 0, 0, 4], [0, 2, 0, 4], [0, 0, 3, 4]]
+        data_vals = [[1, 2, 0, 0],
+                     [2, 0, 0, 1],
+                     [0, 0, 2, 2],
+                     [0, 0, 3, 3]]
         data = pd.DataFrame([random.choice(data_vals) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('zero_per_row_0', data[0].values)
         self.__add_synthetic_column('zero_per_row_1', data[1].values)
