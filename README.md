@@ -139,6 +139,7 @@ The tool typically runs in under a minute for small files and under 30 minutes e
 - Run on a sample of the rows. Doing this, you will not be able to properly identify exceptions to the patterns, but will be able to identify the patterns themselves. 
 - Columns may be removed from the dataframe before running the tool to remove checks on these columns. 
 - The fast_only parameters in check_data_quality() may be set to True. Setting this, only tests that are consistently fast will be executed.
+- Set include_code_tests to False. Where it is known that none of the columns represent ID or Code values, the tests associated with these types of columns may be skipped. These tests tend to be fast to execute in any case, but removing these can save some time as well as noise from the results. 
 - Set the verbose level to 2 or 3. This allows users to monitor the progress better and determine if it is acceptable to wait, or if any of the other steps listed here should be tried.
 
 ## Date Columns
