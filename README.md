@@ -56,6 +56,20 @@ dc.display_detailed_results()
 
 It is necessary to first instantiate a DataConsistencyChecker object, call init_data() with the data to be cheked as a pandas dataframe, and call check_data_quality(). After this is complete, there are a number of additional APIs available to examine the results and assess the findings, including APIs to summarize the patterns and exceptions by row, column, and test, to describe the most-flagged rows, and get the total score per row. In this example, display_detailed_results() is called, which displays each pattern and each exception found in detail, including examples of values for the relevant columns flagged and not flagged, and plots where possible. 
 
+## Example with More Output
+```python
+import pandas as pd
+from check_data_consistency import DataConsistencyChecker
+
+dc = DataConsistencyChecker()
+dc.init_data(df)
+dc.check_data_quality()
+dc.summarize_patterns_and_exceptions()
+dc.display_detailed_results(test_id_list=['LARGE_GIVEN_DATE'])
+```
+
+Where many patterns, with or without exceptions, are found, it may be impractical to simply call display_detailed_results() to view detailed descriptions of each pattern found. In these cases, it is possible to call an API such as summarize_patterns_and_exceptions() (there are several such APIs to list or summarize the findings) first to get an overview of what was found. In some cases, this overview may be all that is necessary, without looking at the findings in detail. However, where users wish to drill down further, the display_detailed_results() API may be called specifying a set of tests, columns, row ids, pattern ids, or exceptions ids, which allows you to focus on those findings interesting for your data and goals. In this example, we assume LARGE_GIVEN_DATE was one of the tests identified by summarize_patterns_and_exceptions(), and is of interest to the user. 
+
 ## Example Notebooks
 
 **APIs Demo**
