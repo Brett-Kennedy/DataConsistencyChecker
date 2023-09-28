@@ -11384,6 +11384,9 @@ class DataConsistencyChecker:
                     iqr = q3 - q1
                     threshold = q3 + (iqr * self.iqr_limit)
 
+                    if q1 is None or med is None or q3 is None or upper_limit is None or col_q2 is None or col_q3 is None:
+                        continue
+
                     # We are only concerned in this test with subsets that tend to have smaller values in the
                     # numeric column, and flag large values in this case. We do not flag values in subsets that
                     # have any values that are large relative to the subset; these are flagged by other tests.
@@ -11471,6 +11474,9 @@ class DataConsistencyChecker:
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
                     threshold = q1 - (iqr * self.iqr_limit)
+
+                    if q1 is None or med is None or q3 is None or upper_limit is None or col_q2 is None or col_q3 is None:
+                        continue
 
                     # We are only concerned in this test with subsets that tend to have larger values in the
                     # numeric column, and flag small values in this case. We do not flag values in subsets that
