@@ -10,11 +10,8 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'CORRELATED_ALPHA_ORDER'
 random.seed(0)
 
-synth_patterns_cols = ['"correlated_alpha rand_a" AND "correlated_alpha rand_b"']
-synth_exceptions_cols = [
-	'"correlated_alpha rand_a" AND "correlated_alpha most"',
-	'"correlated_alpha rand_b" AND "correlated_alpha most"'
-]
+synth_patterns_cols = ['"correlated_alpha rand" AND "correlated_alpha all"']
+synth_exceptions_cols = ['"correlated_alpha rand" AND "correlated_alpha most"']
 
 
 def test_real():

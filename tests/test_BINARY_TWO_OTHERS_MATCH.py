@@ -7,17 +7,14 @@ from check_data_consistency import DataConsistencyChecker
 
 from utils import synth_test, synth_test_all_cols, real_test, build_default_results
 
-test_id = 'CONSTANT_GAP'
+test_id = 'BINARY_TWO_OTHERS_MATCH'
 random.seed(0)
 
-synth_patterns_cols = ['"const_gap all_1" AND "const_gap all_2"',
-                       '"const_gap all_1" AND "const_gap all_3"',
-                       '"const_gap all_2" AND "const_gap all_3"',
-                       ]
-synth_exceptions_cols = ['"const_gap all_1" AND "const_gap most"',
-						 '"const_gap all_2" AND "const_gap most"',
-                         '"const_gap all_3" AND "const_gap most"']
-
+synth_patterns_cols = ['"bin_match_others rand_a" AND "bin_match_others rand_b" AND "bin_match_others all"']
+synth_exceptions_cols = [
+	'"bin_match_others rand_a" AND "bin_match_others rand_b" AND "bin_match_others most"',
+    '"bin_match_others date_rand_a" AND "bin_match_others date_rand_b" AND "bin_match_others date_most"'
+]
 
 def test_real():
 	res = build_default_results()
@@ -60,8 +57,8 @@ def test_synthetic_80_percent_nulls():
 	synth_test(
 		test_id,
 		'80-percent',
-		synth_patterns_cols,
-		synth_exceptions_cols)
+		0,
+		0)
 
 
 def test_synthetic_all_cols_no_nulls():
@@ -102,3 +99,4 @@ def test_synthetic_all_cols_80_percent_nulls():
 		'80-percent',
 		synth_patterns_cols,
 		synth_exceptions_cols)
+
