@@ -517,27 +517,30 @@ class DataConsistencyChecker:
                                          self.__check_unusual_minutes, self.__generate_unusual_minutes,
                                          True, True, True, False),
             'CONSTANT_DOM':             ('Check if dates are the same day of the month.',
-                                         ('Check if a date column spans multiple months and the values are consistently '
-                                          'the same day of the month'),
+                                         ('Check if a date column spans multiple months and the values are '
+                                          'consistently the same day of the month'),
                                          self.__check_constant_dom, self.__generate_constant_dom,
                                          True, True, True, False),
             'CONSTANT_LAST_DOM':        ('Check if dates are the last day of the month',
-                                         ('Check if a date column spans multiple months and the values are consistently '
-                                          'the last day of the month'),
+                                         ('Check if a date column spans multiple months and the values are '
+                                          'consistently the last day of the month'),
                                          self.__check_last_dom, self.__generate_last_dom,
                                          True, True, True, False),
 
             # Tests on pairs of date columns
-            'CONSTANT_GAP':             ('', ('Check if there is consistently a specific gap in time between two date '
-                                              'columns.'),
+            'CONSTANT_GAP':             ('Check for consistent gaps between dates.',
+                                         ('Check if there is consistently a specific gap in time between two date '
+                                          'columns.'),
                                          self.__check_constant_date_gap, self.__generate_constant_date_gap,
                                          True, True, False, False),
-            'LARGE_GAP':                ('', ('Check if there is an unusually large gap in time between dates in two '
-                                              'date columns.'),
+            'LARGE_GAP':                ('Check for large gaps between dates.',
+                                         ('Check if there is an unusually large gap in time between dates in two '
+                                          'date columns.'),
                                          self.__check_large_date_gap, self.__generate_large_date_gap,
                                          True, True, False, False),
-            'SMALL_GAP':                ('', ('Check if there is an unusually small gap in time between dates in two '
-                                              'date columns.'),
+            'SMALL_GAP':                ('Check for small gaps between dates.',
+                                         ('Check if there is an unusually small gap in time between dates in two '
+                                          'date columns.'),
                                          self.__check_small_date_gap, self.__generate_small_date_gap,
                                          True, True, False, False),
             'LATER':                    ('', 'Check if one date column is consistently later than another date column.',
@@ -2154,9 +2157,10 @@ class DataConsistencyChecker:
                 return
 
         if test_id_list:
-            print()
-            s = f"Displaying results for tests: {str(test_id_list).replace('[','').replace(']','')}"
-            print_text(s)
+            if len(test_id_list) > 1:
+                print()
+                s = f"Displaying results for tests: {str(test_id_list).replace('[','').replace(']','')}"
+                print_text(s)
 
             # Check for any tests that are specified that contradict the setting for show_short_list_only
             if show_short_list_only:
@@ -2247,7 +2251,7 @@ class DataConsistencyChecker:
                             print_text(f"**Description**: {sub_patterns.iloc[0]['Description of Pattern']}")
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
                         if include_examples:
-                            self.__display_examples(
+                            self.__display_examples_not_flagged(
                                 test_id,
                                 cols,
                                 columns_set,
@@ -2324,7 +2328,7 @@ class DataConsistencyChecker:
                         # Display examples not flagged
                         result_col_name = self.get_results_col_name(test_id, columns_set)
                         cols = self.col_to_original_cols_dict[result_col_name]
-                        self.__display_examples(
+                        self.__display_examples_not_flagged(
                             test_id,
                             cols,
                             columns_set,
@@ -2356,7 +2360,7 @@ class DataConsistencyChecker:
                             print()
                             print_text(("Showing the first flagged example with the 5 rows before and 5 rows after (if "
                                         "available):"))
-                            self.__draw_sample_set_rows(
+                            self.__draw_rows_around_flagged_row(
                                 flagged_df[display_cols],
                                 test_id,
                                 cols,
@@ -2383,7 +2387,16 @@ class DataConsistencyChecker:
         though this varies for different projects.
         """
 
-        self.display_detailed_results(test_id_list=[self.found_tests[self.current_display_test]])
+        test_id = self.found_tests[self.current_display_test]
+
+        if is_notebook():
+            print(''.join(['.'] * 100))
+            display(Markdown(f"### {test_id}"))
+        else:
+            print("\n\n\n")
+            print(test_id)
+
+        self.display_detailed_results(test_id_list=[test_id])
         self.current_display_test += 1
 
     def get_outlier_scores(self):
@@ -2667,19 +2680,13 @@ class DataConsistencyChecker:
     ##################################################################################################################
     # Private methods to plot patterns
     ##################################################################################################################
+
     def __plot_distribution(self, test_id, col_name, show_exceptions):
         fig, ax = plt.subplots(figsize=(5, 3))
         s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100)
 
         # Ensure there are not too many tick labels to be readable
-        num_ticks = len(ax.xaxis.get_ticklabels())
-        if num_ticks > 10:
-            max_ticks = 10
-            mod = num_ticks // max_ticks
-            for label_idx, label in enumerate(ax.xaxis.get_ticklabels()):
-                if label_idx % mod != 0:
-                    label.set_visible(False)
-        fig.autofmt_xdate()
+        clean_x_tick_labels(fig, ax)
 
         if show_exceptions:
             s.set_title(f"Distribution of {col_name} (Flagged values in red)")
@@ -2798,7 +2805,7 @@ class DataConsistencyChecker:
                     for label_idx, label in enumerate(ax.get_xticklabels()):
                         if label_idx % step_shown != 0:
                             label.set_visible(False)
-                plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
+                # plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
 
             # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
             if test_id in ['RARE_COMBINATION']:
@@ -2813,12 +2820,14 @@ class DataConsistencyChecker:
         fig, ax = plt.subplots(figsize=(5, 5))
         plot_one(ax=ax)
         plt.tight_layout()
+        clean_x_tick_labels(fig, ax)
         plt.show()
 
     def __plot_count_plot(self, column_name):
-        plt.subplots(figsize=(4, 4))
+        fig, ax = plt.subplots(figsize=(4, 4))
         s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
         s.set_title(f"Counts of unique values in {column_name}")
+        clean_x_tick_labels(fig, ax)
         plt.show()
 
     def __plot_heatmap(self, test_id, cols):
@@ -2861,7 +2870,8 @@ class DataConsistencyChecker:
             flagged_vals = self.orig_df.loc[flagged_idxs][col_name].values
             s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged")
         s.set_xlabel("Row Number")
-        ax.tick_params(axis='x', labelrotation=45)
+        #ax.tick_params(axis='x', labelrotation=45)
+        clean_x_tick_labels(fig, ax)
         plt.legend().remove()
         plt.show()
 
@@ -2876,6 +2886,7 @@ class DataConsistencyChecker:
             df = self.orig_df[cols].copy()
             df['Days Since Min Date'] = (pd.to_datetime(self.orig_df[cols[1]]) - pd.to_datetime(self.orig_df[cols[1]]).min()).dt.days
             s = sns.boxplot(data=df, orient='h', y=cols[0], x='Days Since Min Date')
+        clean_x_tick_labels(fig, ax)
         plt.show()
 
         # Also draw a histogram of the relevant classes.
@@ -2900,14 +2911,10 @@ class DataConsistencyChecker:
                 s.axvline(fv, color='red', alpha=0.5)
             s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
         plt.tight_layout()
+        clean_x_tick_labels(fig, ax)
         plt.show()
 
     def __plot_larger_relationship(self, test_id, cols, columns_set, show_exceptions, display_info):
-        if test_id in ['LARGER_SAME_RANGE']:
-            for col_pairs in display_info['patterns_pairs_arr']:
-                self.__plot_scatter_plot(test_id, col_pairs, columns_set, show_exceptions, display_info)
-        # self.__draw_network_plot(cols, display_info['patterns_pairs_arr'])
-
         col_medians = [self.column_medians[c] for c in cols]
         cols = np.array(cols)[np.argsort(col_medians)]
 
@@ -2922,6 +2929,7 @@ class DataConsistencyChecker:
         s = sns.boxplot(data=df.dropna(), orient='h', x='Value', y='Feature')
         if test_id in ['MUCH_LARGER']:
             plt.xscale('log')
+        clean_x_tick_labels(fig, ax)
         plt.show()
 
     def __draw_network_plot(self, nodes, edges):
@@ -3082,9 +3090,10 @@ class DataConsistencyChecker:
 
             if draw_diagonal:
                 plt.plot(xlim, ylim)
-            plt.xticks(rotation=60)
+            #plt.xticks(rotation=60)
             if plt.legend():
                 plt.legend().remove()
+            clean_x_tick_labels(fig, ax)
             plt.show()
 
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
@@ -3095,8 +3104,8 @@ class DataConsistencyChecker:
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             if len(cols) == 2:
                 self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
-            else:
-                self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
+            self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
+
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
                        'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
@@ -3173,6 +3182,8 @@ class DataConsistencyChecker:
         if test_id in ['BINARY_TWO_OTHERS_MATCH']:
             if (cols[0] in self.numeric_cols) and (cols[1] in self.numeric_cols):
                 s = sns.scatterplot(data=self.orig_df, x=cols[0], y=cols[1], hue=cols[2])
+                s.set_title(f'"{cols[0]}" vs "{cols[1]}"\nColor indicates "{cols[2]}"')
+                plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
                 plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
@@ -3340,7 +3351,14 @@ class DataConsistencyChecker:
 
             # Present a heatmap of the counts of each pair
             counts_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]])
-            fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, len(counts_df) * 0.6))
+            counts_df.columns = [x.strip() for x in counts_df.columns]
+            counts_df.index = [x.strip() for x in counts_df.index]
+            fig_size_x = len(counts_df.columns) * 2
+            if len(counts_df) > 10:
+                fig_size_y = len(counts_df) * 0.4
+            else:
+                fig_size_y = max(3, len(counts_df) * 0.6)
+            fig, ax = plt.subplots(figsize=(fig_size_x, fig_size_y))
             s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
             s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
             plt.tight_layout()
@@ -3351,7 +3369,7 @@ class DataConsistencyChecker:
             if cols[2] in self.numeric_cols:
                 # Use aggfunc='quantile' for date columns
                 avg_df = pd.crosstab(self.orig_df[cols[0]], self.orig_df[cols[1]], values=self.numeric_vals[cols[2]], aggfunc='mean')
-                fig, ax = plt.subplots(figsize=(len(counts_df.columns) * 2, max(3, len(avg_df) * 0.6)))
+                fig, ax = plt.subplots(figsize=(fig_size_x, fig_size_y))
                 s = sns.heatmap(avg_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
                 s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
                 plt.tight_layout()
@@ -3429,6 +3447,8 @@ class DataConsistencyChecker:
         """
         Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
         Many tests have additional columns which can make the pattern between the columns more clear.
+
+        Also, for some test, sets the column order.
 
         df: dataframe
             the dataframe of the rows to display. Typically 10 rows.
@@ -3622,13 +3642,25 @@ class DataConsistencyChecker:
         elif test_id in ['SIMILAR_WRT_DIFF']:
             df['DIFF'] = pd.Series(display_info['Diff']).loc[df.index]
 
+        # Set the column order
+        if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
+            col_medians = [self.column_medians[c] for c in cols]
+            sorted_cols = np.array(cols)[np.argsort(col_medians)]
+            df2 = df[sorted_cols]
+            df = df2
+
         df = df.sort_index()
         if is_notebook():
             display(df)
         else:
             print(df)
 
-    def __draw_sample_set_rows(self, df, test_id, cols, display_info):
+    def __draw_rows_around_flagged_row(self, df, test_id, cols, display_info):
+        """
+        Called by display_detailed_results() to provide context for one flagged row, where the row order is relevant.
+        This displays, where possible, 5 rows before and 5 rows after the flagged row.
+        """
+
         row_id = df.index[0]
         row_start = max(0, row_id-5)
         row_end = min(self.num_rows, row_id+5)
@@ -3643,6 +3675,8 @@ class DataConsistencyChecker:
     def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, show_consecutive=False, sort_col=None,
                                  is_patterns=False, display_info=None):
         """
+        Called by __display_examples_not_flagged()
+
         Return a random set of n_examples values from the specified columns that were not flagged by the
         specified test in the specified columns. This handles specific tests by balancing the the rows displayed
         in order to include examples of different types of rows.
@@ -3876,16 +3910,14 @@ class DataConsistencyChecker:
             mask = sub_df[results_col_name] == 0
             df = df[mask]
 
-        # Set the column order
-        if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
-            col_medians = [self.column_medians[c] for c in cols]
-            sorted_cols = np.array(cols)[np.argsort(col_medians)]
-            df2 = df[sorted_cols]
-            df = df2
-
         return df
 
-    def __display_examples(self, test_id, cols, columns_set, is_patterns, display_info):
+    def __display_examples_not_flagged(self, test_id, cols, columns_set, is_patterns, display_info):
+        """
+        Called by display_detailed_results(). This prints a set of rows that were not flagged. May be called in cases
+        where some rows were flagged, or where none were.
+        """
+
         # Do not show examples for some tests
         if is_patterns and test_id in ['UNIQUE_VALUES']:
             print_text("Examples are not shown for this pattern.")
@@ -3942,6 +3974,10 @@ class DataConsistencyChecker:
         return s
 
     def _clean_column_names(self, df):
+        """
+        Where tests operate over many features, the list of features can become difficult to read.
+        """
+
         clean_df = df.copy()
         idxs = np.where(df['Test ID'].isin(['MISSING_VALUES_PER_ROW', 'UNIQUE_VALUES_PER_ROW']))[0].tolist()
         for idx in idxs:
@@ -4575,11 +4611,15 @@ class DataConsistencyChecker:
         return test_series
 
     ##################################################################################################################
-    # Methods to populate the caches used by some of the tests. These are not set in init(), as these
-    # may not be used in the tests actually executed.
+    # Methods to populate the caches used by some of the tests. These are not set in init(), as these may not be used
+    # in the tests actually executed.
     ##################################################################################################################
 
     def get_columns_iqr_upper_limit(self):
+        """
+        For each numeric & date column, calculate q2, q3, and the IQR upper limit, which is based on q3 and the IQR.
+        """
+
         if self.upper_limits_dict:
             return self.upper_limits_dict
         self.upper_limits_dict = {}
@@ -4603,6 +4643,11 @@ class DataConsistencyChecker:
         return self.upper_limits_dict
 
     def get_columns_iqr_lower_limit(self):
+        """
+        For each numeric column, calculate d1, d9, and the IDR lower limit, which is based on d1 and the IDR.
+        For each date column, calculate q1, q3, and the IQR lower limit, which is based on q1 and the IQR.
+        """
+
         if self.lower_limits_dict:
             return self.lower_limits_dict
         self.lower_limits_dict= {}
@@ -4711,6 +4756,11 @@ class DataConsistencyChecker:
 
     # todo: call this everywhere to reduce work
     def get_is_missing_dict(self):
+        """
+        For all columns, creates an array the length of the original data, indicating which cells are flagged by
+        is_missing(), which is more general that isna().
+        """
+
         if self.is_missing_dict:
             return self.is_missing_dict
         self.is_missing_dict = {}
@@ -4719,6 +4769,10 @@ class DataConsistencyChecker:
         return self.is_missing_dict
 
     def get_sample_is_missing_dict(self):
+        """
+        Equivalent to get_is_missing_dict(), but done on the sample dataframe.
+        """
+
         if self.sample_is_missing_dict:
             return self.sample_is_missing_dict
         self.sample_is_missing_dict = {}
@@ -4727,6 +4781,11 @@ class DataConsistencyChecker:
         return self.sample_is_missing_dict
 
     def get_percentiles_dict(self):
+        """
+        For each numeric column, calculate an array of values, the same length as the original data, representing
+        the percentile value of the original numeric value.
+        """
+
         if self.percentiles_dict:
             return self.percentiles_dict
         self.percentiles_dict = {}
@@ -4736,6 +4795,10 @@ class DataConsistencyChecker:
 
     # todo: call this were we are now calling nunique() on the full columns
     def get_nunique_dict(self):
+        """
+        For each column, calculate an integer value representing the number of unique values in the column.
+        """
+
         if self.nunique_dict:
             return self.nunique_dict
         self.nunique_dict = {}
@@ -4745,6 +4808,10 @@ class DataConsistencyChecker:
 
     # todo: call this were we are now calling value_counts on the full columns
     def get_count_most_freq_value_dict(self):
+        """
+        For each column, calculate a single value: the most frequent unique value in that column.
+        """
+
         if self.count_most_freq_value_dict:
             return self.count_most_freq_value_dict
         self.count_most_freq_value_dict = {}
@@ -4754,6 +4821,11 @@ class DataConsistencyChecker:
 
     # todo: call this were get word lists
     def get_words_list_dict(self):
+        """
+        For each string column, calculate an array of values of the same length as the original data. Each value is an
+        array containing the words within the original value, split by whitespace or non-alphanumeric characters.
+        """
+
         if self.words_list_dict:
             return self.words_list_dict
         self.words_list_dict = {}
@@ -4763,8 +4835,11 @@ class DataConsistencyChecker:
 
     def get_word_counts_dict(self):
         """
-        This counts null values as having 0 words.
+        For each string column, calculate an array of values of the same length as the original data. Each value is an
+        integer count representing the number of words in the cell in the original data, split by whitespace or
+        non-alphanumeric characters. This counts null values as having 0 words.
         """
+
         if self.word_counts_dict:
             return self.get_word_counts_dict
         self.word_counts_dict = {}
@@ -4777,7 +4852,9 @@ class DataConsistencyChecker:
     def get_cols_same_bool_dict(self, force=False):
         """
         For each pair of columns, store a binary value indicating if the two columns are the same (other than up to
-        contamination_level rows). We also calculate cols_same_count_dict, though this is estimated for efficiency.
+        contamination_level rows). This also calculates cols_same_count_dict, though this is estimated for efficiency.
+        The pair of columns are keyed by a sorted tuple.
+        This adds an element for every pair of features of the same type.
         """
 
         def check_match(col_name_a, col_name_b):
@@ -4814,11 +4891,9 @@ class DataConsistencyChecker:
 
         # Check pairs of numeric columns
         num_pairs, pairs_arr = self.__get_numeric_column_pairs_unique(force=force)
-        if pairs_arr is None:
-            return None
-
-        for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
-            check_match(col_name_a, col_name_b)
+        if pairs_arr is not None:
+            for pair_idx, (col_name_a, col_name_b) in enumerate(pairs_arr):
+                check_match(col_name_a, col_name_b)
 
         # Check pairs of string columns
         num_pairs, pairs_arr = self.__get_string_column_pairs_unique(force=force)
@@ -4840,7 +4915,8 @@ class DataConsistencyChecker:
     def get_cols_same_count_dict(self):
         """
         Similar to get_cols_same_bool_dict(), but returns a count of how many values are the same, as opposed to a
-        boolean flag. This count is approximate, extrapolated from a sample.
+        boolean flag. This count is approximate, extrapolated from a sample in cases where they do not appear to be
+        similar.
         """
 
         if self.cols_same_count_dict:
@@ -4875,7 +4951,7 @@ class DataConsistencyChecker:
         return self.sample_cols_pairs_both_null_dict
 
     ##################################################################################################################
-    # Internal methods to get columns or sets of columns
+    # Internal methods to get sets of columns
     ##################################################################################################################
 
     def __get_column_pairs_unique(self, force=False):
@@ -5056,8 +5132,8 @@ class DataConsistencyChecker:
             clear_all_patterns=False,
             clear_all_exceptions=False):
         """
-        This may be used to iteratively clean the results until the DataConstitencyChecker object has an appropriate
-        set of patterns and exceptions. This may be done, for example, to pass the DataConstitencyChecker on for
+        This may be used to iteratively clean the results until the DataConstencyChecker object has an appropriate
+        set of patterns and exceptions. This may be done, for example, to pass the DataConstencyChecker on for
         further processing or to generate a report, or, for example, until all issues are acknowledged or understood,
         or until the set of results is zero.
 
@@ -5199,15 +5275,11 @@ class DataConsistencyChecker:
             # patterns_df
             self.patterns_df = self.patterns_df[~self.patterns_df['Pattern ID'].isin(pattern_id_list)]
 
-            # results_summary_arr
-            # exceptions_summary_df
-            # test_results_df
-            # results_dict
+            # results_summary_arr, exceptions_summary_df, test_results_df, results_dict
             #   patterns_id_list applies only to patterns
 
         if issue_id_list is not None:
-            # patterns_arr
-            # patterns_df
+            # patterns_arr, patterns_df
             #   issue_id_list applies only to exceptions
 
             # results_summary_arr
@@ -5240,16 +5312,11 @@ class DataConsistencyChecker:
             # patterns_df
             self.patterns_df = self.patterns_df[0:0]
 
-            # results_summary_arr
-            # exceptions_summary_df
-            # test_results_df
-            # results_dict
-            # test_results_by_column_np
+            # results_summary_arr, exceptions_summary_df, test_results_df, results_dict, test_results_by_column_np
             #   clear_all_patterns applies only to patterns
 
         if clear_all_exceptions:
-            # patterns_arr
-            # patterns_df
+            # patterns_arr, patterns_df
             #   clear_all_exceptions applies only to exceptions
 
             # results_summary_arr
@@ -7500,9 +7567,9 @@ class DataConsistencyChecker:
                 continue
 
             # Skip where the columns are almost the same
-            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
-            if num_same > (self.num_rows * 0.9):
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
+            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
 
             # Skip where there are many null or zero values, including cases where either is Null
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.75):
@@ -8191,6 +8258,7 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
         cols_same_count_dict = self.get_cols_same_count_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
@@ -8214,9 +8282,9 @@ class DataConsistencyChecker:
                 continue
 
             # Skip columns that are almost entirely the same
-            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
-            if num_same > (self.num_rows * 0.9):
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
+            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
 
             spearman_corr = abs(val_arr_1.corr(val_arr_2, method='spearman'))
             if spearman_corr >= 0.995:
@@ -8349,7 +8417,7 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
-        cols_same_count_dict = self.get_cols_same_count_dict()
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
@@ -8368,8 +8436,7 @@ class DataConsistencyChecker:
                 continue
 
             # Skip where the two columns are very similar (suggesting a different relationship than a running sum)
-            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
-            if num_same > (self.num_rows * 0.9):
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # This is more robust than checking the cumulative sum, which can be thrown off by missing or
@@ -8479,15 +8546,16 @@ class DataConsistencyChecker:
             return
 
         cols_same_count_dict = self.get_cols_same_count_dict()
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
             # Exclude pairs of columns that are mostly identical
-            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
-            if num_same > (self.num_rows * 0.9):
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
+            num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
 
             # todo: exclude pairs where the medians are different. We should maybe get the number of digits in each
             #   column above, create a feature at the class level to store this, then in this loop skip any columns
@@ -9849,8 +9917,9 @@ class DataConsistencyChecker:
 
     def generate_all_zero_or_all_non_zero(self):
         """
-        Patterns without exceptions: None: 'all_zero_or_not all' is consistently zero or non-zero with 'all_zero_or_not rand_a'.
-            However, it is not reported as it is part of a set of 3 feature with near-perfect matching.
+        Patterns without exceptions: None: 'all_zero_or_not all' is consistently zero or non-zero with
+            'all_zero_or_not rand_a'. However, it is not reported as it is part of a set of 3 feature with near-perfect
+            matching.
         Patterns with exception: 'all_zero_or_not most' consistently has the same sign as 'all_zero_or_not rand_a',
             and 'all_zero_or_not all', with the exception of row 999.
         """
@@ -9874,7 +9943,7 @@ class DataConsistencyChecker:
         # todo: when list non-flagged, give both cases
         # todo: in the pattern string, give the number of rows with & without zero for both columns
 
-        # Check all columns examined have at least 10% positive and 10% negative values.
+        # Check all columns examined have at least 10% zero and 10% non-zero values.
         cols = []
         sample_zero_dict = {}
         sample_non_zero_dict = {}
@@ -9970,9 +10039,6 @@ class DataConsistencyChecker:
                 if not subset_matches:
                     continue
                 found_any = True
-
-                # todo: check if there already is a pattern. if so, add these columns to the set.
-                #   look for: found_existing_pattern
 
                 self.__process_analysis_binary(
                     test_id,
@@ -11475,7 +11541,7 @@ class DataConsistencyChecker:
                     iqr = q3 - q1
                     threshold = q1 - (iqr * self.iqr_limit)
 
-                    if q1 is None or med is None or q3 is None or upper_limit is None or col_q2 is None or col_q3 is None:
+                    if q1 is None or med is None or q3 is None or lower_limit is None or col_q1 is None or col_q3 is None:
                         continue
 
                     # We are only concerned in this test with subsets that tend to have larger values in the
@@ -12422,14 +12488,8 @@ class DataConsistencyChecker:
             if bin_col == col_name_2 or bin_col == col_name_3:
                 return
 
-            # Test if the columns appear to be equal at least some of the time
-            if (col_name_2, col_name_3) not in cols_equal_dict:
-                equal_array = (self.sample_df[col_name_2] == self.sample_df[col_name_3]) | \
-                              (self.sample_df[col_name_2].isna() & self.sample_df[col_name_3].isna())
-                num_equal = equal_array.tolist().count(True)
-                cols_equal_dict[(col_name_2, col_name_3)] = num_equal
-            num_equal = cols_equal_dict[(col_name_2, col_name_3)]
-            if num_equal == 0:
+            # Skip where the columns are almost the same
+            if cols_same_bool_dict[tuple(sorted([col_name_2, col_name_3]))]:
                 return
 
             # Test first on a sample of the rows where the bin_col has value 0
@@ -12438,6 +12498,7 @@ class DataConsistencyChecker:
                 test_series_0 = sample_sub_df_0[col_name_2].astype(str) == sample_sub_df_0[col_name_3].astype(str)
             else:
                 test_series_0 = sample_sub_df_0[col_name_2] == sample_sub_df_0[col_name_3]
+            test_series_0 = test_series_0 | (sample_sub_df_0[col_name_2].isna() & sample_sub_df_0[col_name_3].isna())
 
             # Before calculating test_series_1, determine if test_series_0 is mostly True or mostly False. If so,
             # we can return.
@@ -12450,6 +12511,7 @@ class DataConsistencyChecker:
                 test_series_1 = sample_sub_df_1[col_name_2].astype(str) == sample_sub_df_1[col_name_3].astype(str)
             else:
                 test_series_1 = sample_sub_df_1[col_name_2] == sample_sub_df_1[col_name_3]
+            test_series_1 = test_series_1 | (sample_sub_df_1[col_name_2].isna() & sample_sub_df_1[col_name_3].isna())
 
             # Test if the binary column has val_0 iff the other 2 columns are equal
             sample_okay_val_0 = False
@@ -12476,6 +12538,8 @@ class DataConsistencyChecker:
             else:
                 test_series_0 = sub_df_0[col_name_2] == sub_df_0[col_name_3]
                 test_series_1 = sub_df_1[col_name_2] == sub_df_1[col_name_3]
+            test_series_0 = test_series_0 | (sub_df_0[col_name_2].isna() & sub_df_0[col_name_3].isna())
+            test_series_1 = test_series_1 | (sub_df_1[col_name_2].isna() & sub_df_1[col_name_3].isna())
             value_when_match = -1
 
             test_series = None
@@ -12525,7 +12589,7 @@ class DataConsistencyChecker:
                                        (self.orig_df[col_name_2].isna() & self.orig_df[col_name_3].isna())}
             )
 
-        cols_equal_dict = {}
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
         for bin_idx, bin_col in enumerate(self.binary_cols):
             if self.verbose >= 2 and bin_idx > 0 and bin_idx % 10 == 0:
                 print(f"  Examining column {bin_idx} of {len(self.binary_cols)} binary columns")
@@ -14083,6 +14147,11 @@ class DataConsistencyChecker:
 
     def __check_grouped_strings_column(self, test_id, sort_col, col_name, col_values):
         """
+        sort_col: The column used to sort the data, if any.
+        col_name: The name of the column where we check if the values are grouped
+        col_values: The values in col_name, either in the original order of the data, or sorted by sort_col if there
+            is a sort_col
+
         Handling null values: this does not currently support many null values.
         """
 
@@ -14091,13 +14160,24 @@ class DataConsistencyChecker:
         if min_count < self.contamination_level:
             return
 
+        # First test if a pattern holds when removing all null values
         col_df = pd.DataFrame({col_name: col_values})
+        col_df.dropna()
         col_df['Next'] = col_df[col_name].shift(1)
         col_df['Same'] = col_df[col_name] == col_df['Next']
         num_same = col_df['Same'].tolist().count(True)
         # There will always be rows not like the next: where the list moves from one value to the next. So ideally,
         # the number of rows that are the same as the next is the total number of rows - (number values -1). As well,
         # the last row is always unlike the next, as the next is undefined.
+        ideal_same = self.num_valid_rows[col_name] - self.orig_df[col_name].nunique()
+        if (ideal_same - num_same) > self.contamination_level:
+            return
+
+        # Test with the null values. This is necessary to maintain the actual row numbers
+        col_df = pd.DataFrame({col_name: col_values})
+        col_df['Next'] = col_df[col_name].shift(1)
+        col_df['Same'] = col_df[col_name] == col_df['Next']
+        num_same = col_df['Same'].tolist().count(True)
         ideal_same = self.num_valid_rows[col_name] - self.orig_df[col_name].nunique()
         if (ideal_same - num_same) > self.contamination_level:
             return
@@ -15430,12 +15510,12 @@ class DataConsistencyChecker:
 
     def __generate_correlated_alpha(self):
         """
-        Patterns without exceptions: "correlated_alpha rand_a" is consistently similar, with regards to percentile, to
-            "correlated_alpha rand_b"
-        Patterns with exception: "correlated_alpha rand_a" is consistently similar, with regards to percentile, to
-            "correlated_alpha most", with exceptions, and:
-            "correlated_alpha rand_b" is consistently similar, with regards to percentile, to
-            "correlated_alpha most", with exceptions
+        Patterns without exceptions: "correlated_alpha rand" is consistently similar, with regards to percentile, to
+            "correlated_alpha all"
+        Patterns with exception: "correlated_alpha rand" is consistently similar, with regards to percentile, to
+            "correlated_alpha most", with exceptions,
+        Not flagged "correlated_alpha rand_b" is consistently similar, with regards to percentile, to
+            "correlated_alpha most", but is not flagged as the columns are almost identical
         """
         list_a = sorted([''.join(np.random.choice(list(string.ascii_lowercase), 10))
                          for _ in range(self.num_synth_rows)])
@@ -15445,8 +15525,8 @@ class DataConsistencyChecker:
         random.shuffle(c)
         list_a, list_b = zip(*c)
 
-        self.__add_synthetic_column('correlated_alpha rand_a', list_a)
-        self.__add_synthetic_column('correlated_alpha rand_b', list_b)
+        self.__add_synthetic_column('correlated_alpha rand', list_a)
+        self.__add_synthetic_column('correlated_alpha all', list_b)
         list_b = list(list_b)
         list_b[-1] = 'aaaaaaaaaa'
         self.__add_synthetic_column('correlated_alpha most', list_b)
@@ -15466,6 +15546,8 @@ class DataConsistencyChecker:
         for col_name in self.string_cols:
             percentiles_dict[col_name] = self.orig_df[col_name].rank(pct=True)
 
+        cols_same_bool_dict = self.get_cols_same_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(pairs):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 1000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(pairs):,} pairs of string columns")
@@ -15480,6 +15562,10 @@ class DataConsistencyChecker:
             if is_missing_dict[col_name_1].sum() > (self.num_rows * 0.75):
                 continue
             if is_missing_dict[col_name_2].sum() > (self.num_rows * 0.75):
+                continue
+
+            # Skip columns that are almost entirely the same
+            if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Test first on a sample
@@ -16084,6 +16170,8 @@ class DataConsistencyChecker:
         Handling null values: null values are treated as any other value and so if interspersed through the column
         will negate any grouping.
         """
+
+        # Loop through the columns that we sort on.
         for col_idx, col_name_1 in enumerate(self.numeric_cols + self.date_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
                 print((f"  Examining column {col_idx} of {len(self.numeric_cols) + len(self.date_cols)} numeric and "
@@ -16091,6 +16179,8 @@ class DataConsistencyChecker:
 
             if self.orig_df[col_name_1].nunique() < (self.num_valid_rows[col_name_1] - self.contamination_level):
                 continue
+
+            # Loop through the columns that we check if they are grouped, when sorted by col_name_1
             df = None
             for col_name_2 in self.string_cols + self.binary_cols:
                 if self.orig_df[col_name_2].nunique() > math.sqrt(self.num_valid_rows[col_name_2]):
@@ -16557,7 +16647,7 @@ class DataConsistencyChecker:
                     continue
 
                 # We ensure at least one subset was large enough to test and was correlated, and that there aren't
-                # andy subsets thar are large enough, but uncorrelated.
+                # any subsets that are large enough, but uncorrelated.
                 any_subsets_uncorrelated = False
                 some_subset_correlated = False
                 test_series = [True] * self.num_rows
@@ -16687,6 +16777,8 @@ class DataConsistencyChecker:
 
             if len(x_data.columns) == 0:
                 continue
+
+            # One-hot encoded any categorical features
             use_categorical_features = categorical_features.copy()
             if col_name in use_categorical_features:
                 use_categorical_features.remove(col_name)
@@ -16696,14 +16788,20 @@ class DataConsistencyChecker:
                 if c in x_data.columns:
                     x_data[c] = x_data[c].replace([np.inf, -np.inf, np.NaN], self.orig_df[c].median())
 
+            # Ensure the target column is clean
             y = self.orig_df[col_name]
             y = y.replace([np.inf, -np.inf, np.NaN], statistics.mode(y))
             y = y.astype(str)
 
+            # Fit a model, get the predictions, and the accuracy
             clf.fit(x_data, y)
             y_pred = clf.predict(x_data)
+            if pd.Series(y_pred).isna().sum() > (len(y_pred) * 0.75):
+                continue
             f1_dt = metrics.f1_score(y, y_pred, average='macro')
             ft_naive = metrics.f1_score(y, [statistics.mode(y)] * len(y), average='macro')
+
+            # If the model is accurate, format the tree description and save the pattern
             if (f1_dt > 0.8) and (f1_dt > (ft_naive * 1.5)):
                 rules = tree.export_text(clf)
 
@@ -17692,6 +17790,27 @@ def is_uppercase(x):
 
 def call_test(dc, test_id):
     print(test_id)
+
+
+def clean_x_tick_labels(fig, ax):
+
+    # Ensure there are at most 10 tick labels
+    num_ticks = len(ax.xaxis.get_ticklabels())
+    if num_ticks > 10:
+        max_ticks = 10
+        mod = num_ticks // max_ticks
+        for label_idx, label in enumerate(ax.xaxis.get_ticklabels()):
+            if label_idx % mod != 0:
+                label.set_visible(False)
+
+    # Rotate labels if necessary
+    num_chars = 0
+    for label_idx, label in enumerate(ax.xaxis.get_ticklabels()):
+        if label.get_visible():
+            num_chars += len(label._text)
+
+    if num_chars > (fig.get_figwidth() * 10):
+        fig.autofmt_xdate()
 
 
 def set_warnings_levels():
