@@ -10,7 +10,7 @@ from utils import synth_test, synth_test_all_cols, real_test, build_default_resu
 test_id = 'UNMATCHED_MISSING'
 random.seed(0)
 
-synth_patterns_cols = ['"unmatched_missing_vals rand_a" AND "unmatched_missing_vals all"']
+synth_patterns_cols = ['"unmatched_missing_vals rand_a" AND "unmatched_missing_vals all_1" AND "unmatched_missing_vals all_2"']
 synth_exceptions_cols = ['"unmatched_missing_vals rand_a" AND "unmatched_missing_vals most"']
 
 
