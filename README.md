@@ -70,6 +70,20 @@ dc.display_detailed_results(test_id_list=['LARGE_GIVEN_DATE'])
 
 Where many patterns, with or without exceptions, are found, it may be impractical to simply call display_detailed_results() to view detailed descriptions of each pattern found. In these cases, it is possible to call an API such as summarize_patterns_and_exceptions() (there are several such APIs to list or summarize the findings) first to get an overview of what was found. In some cases, this overview may be all that is necessary, without looking at the findings in detail. However, where users wish to drill down further, the display_detailed_results() API may be called specifying a set of tests, columns, row ids, pattern ids, or exceptions ids, which allows you to focus on those findings interesting for your data and goals. In this example, we assume LARGE_GIVEN_DATE was one of the tests identified by summarize_patterns_and_exceptions(), and is of interest to the user. 
 
+## 2nd Example with More Output
+```python
+import pandas as pd
+from check_data_consistency import DataConsistencyChecker
+
+dc = DataConsistencyChecker()
+dc.init_data(df)
+dc.check_data_quality()
+dc.summarize_patterns_and_exceptions()
+dc.display_next()
+```
+The display_next() API will output the results (or a sample of the results if there are many) for a single test. If this is called repeatedly, it will, on each execution, display the results for the next test for which there are results, ordering the tests in the same order in which they are executed. Where it is desirable to save the results in a notebook, a new cell may be used for the next call to display_next(). Where the results may be over-written (and this is preferred where there are many results to avoid memory issues), display_next() may be called repeatedly in the same cell, presenting the results for the next test each time. 
+
+
 ## Example Notebooks
 
 **APIs Demo**
