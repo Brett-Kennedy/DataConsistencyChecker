@@ -1194,6 +1194,8 @@ class DataConsistencyChecker:
         self.cols_same_count_dict = None
         self.cols_pairs_both_null_dict = None
         self.sample_cols_pairs_both_null_dict = None
+        self.col_pairs_either_null_bool_dict = None
+        self.col_triples_all_null_bool_dict = None
         self.common_vals_dict = None
 
     def generate_synth_data(self, all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none"):
@@ -2806,7 +2808,6 @@ class DataConsistencyChecker:
                     for label_idx, label in enumerate(ax.get_xticklabels()):
                         if label_idx % step_shown != 0:
                             label.set_visible(False)
-                # plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
 
             # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
             if test_id in ['RARE_COMBINATION']:
@@ -2853,28 +2854,46 @@ class DataConsistencyChecker:
         plt.show()
 
     def __draw_row_rank_plot(self, test_id, col_name, show_exceptions):
-        fig, ax = plt.subplots(figsize=(4, 4))
-        vals = self.orig_df[col_name]
-        if col_name in self.date_cols:
-            vals = [pd.to_datetime(x) for x in self.orig_df[col_name]]
-        s = sns.scatterplot(x=self.orig_df.index, y=vals, color='blue', alpha=0.2, label='Not Flagged')
-        if show_exceptions:
-            s.set_title(f'Distribution of "{col_name}" (Flagged values in red)')
+        if not show_exceptions:
+            fig, ax = plt.subplots(figsize=(4, 4))
+            vals = self.orig_df[col_name]
+            if col_name in self.date_cols:
+                vals = [pd.to_datetime(x) for x in self.orig_df[col_name]]
+            s = sns.scatterplot(x=self.orig_df.index, y=vals, color='blue', alpha=0.2, label='Not Flagged')
+            if show_exceptions:
+                s.set_title(f'Distribution of "{col_name}" (Flagged values in red)')
+            else:
+                s.set_title(f'Distribution of "{col_name}"')
+            s.set_xlabel("Row Number")
+            clean_x_tick_labels(fig, ax)
+            plt.legend().remove()
+            plt.show()
         else:
-            s.set_title(f'Distribution of "{col_name}"')
+            fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(8, 4))
 
-        # Find the flagged values and identify them on the plot
-        if show_exceptions:
+            # Find the flagged values and identify them on the plot
             results_col_name = self.get_results_col_name(test_id, col_name)
             results_col = self.test_results_df[results_col_name]
+            not_flagged_idxs = np.where(~results_col)
+            not_flagged_vals = self.orig_df.loc[not_flagged_idxs][col_name].values
             flagged_idxs = np.where(results_col)
             flagged_vals = self.orig_df.loc[flagged_idxs][col_name].values
-            s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged")
-        s.set_xlabel("Row Number")
-        #ax.tick_params(axis='x', labelrotation=45)
-        clean_x_tick_labels(fig, ax)
-        plt.legend().remove()
-        plt.show()
+
+            # Draw one plot without the flagged values
+            s = sns.scatterplot(x=not_flagged_idxs[0], y=not_flagged_vals, color='blue', ax=ax[0])
+            s.set_xlabel("Row Number")
+            clean_x_tick_labels(fig, ax[1])
+            s.set_title("Values without exceptions")
+
+            # Draw one plot with the flagged values
+            s = sns.scatterplot(x=not_flagged_idxs[0], y=not_flagged_vals, color='blue', label="Not Flagged", ax=ax[1])
+            s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged", ax=ax[1])
+            s.set_xlabel("Row Number")
+            clean_x_tick_labels(fig, ax[1])
+            s.set_title("Values with exceptions")
+
+            plt.legend().remove()
+            plt.show()
 
     def __draw_box_plots(self, test_id, cols, columns_set):
         # The first column is the string/binary value and the second is the numeric/date value
@@ -3783,7 +3802,7 @@ class DataConsistencyChecker:
             # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0)].head(n_examples // 2)
+            df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0) & (self.orig_df[col_name_1].notna())].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_non_zero])
         elif test_id in ['SAME_OR_CONSTANT']:
             # Show where col1 == col2 and where doesn't (in both cases where col1 is not null)
@@ -3899,8 +3918,8 @@ class DataConsistencyChecker:
             else:
                 df = df.iloc[start_point: start_point + n_examples]
         else:
-            # If we do not return a consecutive set of rows, df is likely of size n_examples. We simply ensure it is
-            # of size n_examples, then sort it randomly.
+            # If we do not return a consecutive set of rows, df is likely of size n_examples. We ensure it is of size
+            # n_examples, then sort it randomly.
             if len(df) < n_examples:
                 df = pd.concat([df, self.orig_df[cols].sample(n_examples - len(df))])
                 df = df[~df.index.duplicated(keep='first')]
@@ -4927,6 +4946,11 @@ class DataConsistencyChecker:
         return self.cols_same_count_dict
 
     def get_col_pair_both_null_dict(self, force=False):
+        """
+        Creates an element for each pair of columns. Each element is an array with the same length as the original data
+        containing a bool value indicating if both cell values are Null.
+        """
+
         if self.cols_pairs_both_null_dict:
             return self.cols_pairs_both_null_dict
         self.cols_pairs_both_null_dict = {}
@@ -4951,6 +4975,54 @@ class DataConsistencyChecker:
             match_arr = (self.sample_df[col_name_a].isna() & self.sample_df[col_name_b].isna())
             self.sample_cols_pairs_both_null_dict[pairs_tuple] = match_arr
         return self.sample_cols_pairs_both_null_dict
+
+    def get_col_pairs_either_null_bool_dict(self, force=False):
+        """
+        Similar to get_col_pair_both_null_dict(), but checks if either are null, not if both are, and contains a single 
+        boolean value for each pair of columns indicating True if there are at least 90% of the rows having either null.
+        """
+        if self.col_pairs_either_null_bool_dict:
+            return self.col_pairs_either_null_bool_dict
+        self.col_pairs_either_null_bool_dict = {}
+        threshold = self.num_rows * 0.9
+        _, pairs = self.__get_column_pairs_unique(force=force)
+        if pairs is None:
+            return None
+        for col_name_a, col_name_b in pairs:
+            pairs_tuple = tuple(sorted([col_name_a, col_name_b]))
+            match_arr = (self.sample_df[col_name_a].isna() | self.sample_df[col_name_b].isna())
+            self.col_pairs_either_null_bool_dict[pairs_tuple] = match_arr.tolist().count(True) > threshold
+        return self.col_pairs_either_null_bool_dict
+
+    def get_col_triples_any_null_bool_dict(self):
+        """
+        Similar to get_col_pairs_either_null_bool_dict(), but checks triples of numeric columns and triples where one
+        is binary and two are numeric. Each element contains a single boolean value for each pair of columns indicating
+        True if there are at least 10% of the rows having no nulls.
+        """
+        if self.col_triples_all_null_bool_dict:
+            return self.col_triples_all_null_bool_dict
+        self.col_triples_all_null_bool_dict = {}
+
+        # Get triples of numeric columns
+        num_triples, triples_arr = self.__get_numeric_column_triples_unique()
+        if triples_arr is None:
+            return None
+
+        # Get triples where one is binary and two are numeric
+        for bin_col in self.binary_cols:
+            num_pairs, pairs = self.__get_numeric_column_pairs_unique()
+            for col_name_1, col_name_2 in pairs:
+                triples_arr.append(tuple(sorted([bin_col, col_name_1, col_name_2])))
+
+        # Examine each triple
+        threshold = self.num_rows * 0.9
+        for triple in triples_arr:
+            triple = list(triple)
+            self.col_triples_all_null_bool_dict[tuple(sorted(triple))] = \
+                self.orig_df[triple].isna().sum(axis=1).tolist().count(True) > threshold
+
+        return self.col_triples_all_null_bool_dict
 
     def get_common_values_dict(self):
         """
@@ -5476,8 +5548,8 @@ class DataConsistencyChecker:
                 if v not in rare_vals:
                     rare_vals.append(v)
 
-            all_common_vals = [str(x) for x in counts_series.index if x not in rare_vals]
-            non_null_common_vals = [str(x) for x in all_common_vals if not is_missing(x)]
+            all_common_vals = [str(x).strip() for x in counts_series.index if x not in rare_vals]
+            non_null_common_vals = [str(x).strip() for x in all_common_vals if not is_missing(x)]
             common_vals = sorted(non_null_common_vals)
             for v in all_common_vals:
                 if v not in common_vals:
@@ -6643,9 +6715,9 @@ class DataConsistencyChecker:
 
     def __check_similar_previous(self, test_id):
         """
-        This test checks each value within a numeric or date column is similar to the previous value in the column.
+        This test checks if each value within a numeric or date column is similar to the previous value in the column.
         The test cannot be performed on the first row of each column. It often identifies where values are steadily
-        increasing, and then set back to a lower value restart increasing from there, a common pattern in data.
+        increasing, and then set back to a lower value, and restart increasing from there, a common pattern in data.
         It can also detect where values follow a random walk, where each value is similar to the previous value
         with some random movement up or down.
         """
@@ -6970,19 +7042,24 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name],
                 test_series,
-                (f"The test marked any values less than {lower_limit} as very small given the 10th decile is {d1} and "
-                 f"the 90th is {d9}. The coefficient is set at {self.idr_limit}"),
+                (f"The test marked any values less than {lower_limit:,.2f} as very small given the 10th decile is "
+                 f"{d1:,.2f} and the 90th is {d9:,.2f}. The coefficient is set at {self.idr_limit}"),
                 allow_patterns=False
             )
 
     def __generate_very_large(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: None
+        Patterns with exception: 'very large most' contains one value much larger than the others in this column.
         """
-        self.__add_synthetic_column('very large 1', [random.randint(1, 100_000_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('very large 2', [random.randint(1000, 2000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('very large 3', [random.randint(1000, 2000) for _ in range(self.num_synth_rows-1)] + [30_000])
+        self.__add_synthetic_column('very large rand1',
+                                    [random.randint(1, 100_000_000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('very large rand2',
+                                    [random.randint(100_000_000, sys.maxsize) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('very large all',
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('very large most',
+                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-1)] + [30_000])
 
     def __check_very_large(self, test_id):
         for col_name in self.numeric_cols:
@@ -6995,8 +7072,8 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name],
                 test_series,
-                (f"The test marked any values larger than {upper_limit:.2f} as very large given the 25th quartile "
-                 f"is {q1} and 75th is {q3}"),
+                (f"The test marked any values larger than {upper_limit:,.2f} as very large given the 25th quartile "
+                 f"is {q1:,.2f} and 75th is {q3:,.2f}"),
                 allow_patterns=False
             )
 
@@ -7036,8 +7113,8 @@ class DataConsistencyChecker:
                 test_id,
                 [col_name],
                 test_series,
-                (f"Some values were unusually close to zero. Any values with absolute value less than {lower_limit} "
-                 f"were flagged, given the 10th percentile of absolute values is {d1} and the 90th is {d9}. " 
+                (f"Some values were unusually close to zero. Any values with absolute value less than {lower_limit:,.2f} "
+                 f"were flagged, given the 10th percentile of absolute values is {d1:,.2f} and the 90th is {d9:,.2f}. " 
                  f" The coefficient is set at {self.idr_limit}"),
                 "",
                 allow_patterns=False
@@ -7221,6 +7298,10 @@ class DataConsistencyChecker:
             if (self.orig_df[col_name] == 0).tolist().count(False) <= (self.num_rows / 10.0):
                 continue
 
+            if self.orig_df[col_name].nunique() < 3:
+                continue
+
+            # We do not use self.numeric_vals_filled, as we wish to fill with 0.5 and not the median.
             vals_arr = convert_to_numeric(self.orig_df[col_name], 0.5)
             test_series = np.array([(abs(x) <= 1.0) or is_missing(x) for x in vals_arr])
             self.__process_analysis_binary(
@@ -7295,13 +7376,14 @@ class DataConsistencyChecker:
 
         num_pairs, col_pairs = self.__get_numeric_column_pairs()
         if num_pairs > self.max_combinations:
-            if self.verbose >= 1:
+            if self.verbose >= 1: 
                 print((f"  Skipping test. There are {num_pairs:,} pairs of numeric columns. "
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         larger_dict = self.get_larger_pairs_dict(allow_equal=False, print_status=True)
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
         larger_pairs_arr = []
 
         q1_dict = {}
@@ -7328,6 +7410,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].notna().sum() < self.contamination_level:
                 continue
             if self.orig_df[col_name_2].notna().sum() < self.contamination_level:
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             if test_series.tolist().count(False) > self.contamination_level:
@@ -7479,6 +7565,7 @@ class DataConsistencyChecker:
             return
 
         larger_pairs_with_bool_dict = self.get_larger_pairs_with_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
         much_larger_pairs_arr = []
 
         for cols_idx, (col_name_1, col_name_2) in enumerate(col_pairs):
@@ -7490,6 +7577,10 @@ class DataConsistencyChecker:
 
             # Check the column is at least larger if not an order of magnitude larger
             if not larger_pairs_with_bool_dict[(col_name_1, col_name_2)]:
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Test on a sample
@@ -7585,6 +7676,7 @@ class DataConsistencyChecker:
         nunique_dict = self.get_nunique_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         cols_same_count_dict = self.get_cols_same_count_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and len(numeric_pairs_list) > 5000 and pair_idx > 0 and pair_idx % 5000 == 0:
@@ -7611,6 +7703,10 @@ class DataConsistencyChecker:
             if self.orig_df[[col_name_1, col_name_2]].isna().sum(axis=1).replace(2, 1).sum() > (self.num_rows * 0.50):
                 continue
 
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
+
             vals_arr_1 = self.numeric_vals_filled[col_name_1]
             vals_arr_2 = self.numeric_vals_filled[col_name_2]
             test_series_a = np.where(
@@ -7625,7 +7721,7 @@ class DataConsistencyChecker:
                 [col_name_1, col_name_2],
                 test_series,
                 (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their ratio (with '
-                 f'{num_same} rows having identical values)'),
+                 f'{int(num_same)} rows having identical values)'),
                 display_info={'Ratio': test_series_a}
             )
 
@@ -7650,6 +7746,7 @@ class DataConsistencyChecker:
         nunique_dict = self.get_nunique_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         cols_same_count_dict = self.get_cols_same_count_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
@@ -7670,6 +7767,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.75):
                 continue
             if self.orig_df[[col_name_1, col_name_2]].isna().sum(axis=1).replace(2, 1).sum() > (self.num_rows * 0.50):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             diff_medians = abs(self.column_medians[col_name_1] - self.column_medians[col_name_2])
@@ -7713,6 +7814,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         zeros_limit = self.num_rows // 10
         count_zeros_dict = {}
         for col_name in self.numeric_cols:
@@ -7720,6 +7823,10 @@ class DataConsistencyChecker:
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if (count_zeros_dict[col_name_1] > zeros_limit) or (count_zeros_dict[col_name_2] > zeros_limit):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Test on a sample
@@ -7760,7 +7867,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
+
             vals_arr_1 = convert_to_numeric(self.sample_df[col_name_1], self.column_medians[col_name_1])
             vals_arr_2 = convert_to_numeric(self.sample_df[col_name_2], self.column_medians[col_name_2])
             sample_series = [math.isclose(x, -y) if y != 0 else True
@@ -7797,6 +7910,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         min_unique_vals = math.sqrt(self.num_rows)
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
@@ -7809,6 +7924,10 @@ class DataConsistencyChecker:
                 continue
 
             if not self.check_columns_same_scale_2(col_name_1, col_name_2, order=10):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Test on a sample
@@ -7861,6 +7980,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         min_unique_vals = math.sqrt(self.num_rows)
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
@@ -7873,6 +7994,10 @@ class DataConsistencyChecker:
                 continue
 
             if not self.check_columns_same_scale_2(col_name_1, col_name_2, order=100):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Test on a sample
@@ -7928,6 +8053,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         min_unique_vals = math.sqrt(self.num_rows)
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and (pair_idx > 0) and (pair_idx % 5000) == 0:
@@ -7937,6 +8064,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].nunique() < min_unique_vals:
                 continue
             if self.orig_df[col_name_2].nunique() < min_unique_vals:
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # For this test, we do not check the 2 columns are on the same scale, as they can be on quite different
@@ -7989,6 +8120,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         # Determine the number of zeros in each numeric column
         count_zeros_dict = {}
         for col_name in self.numeric_cols:
@@ -8008,6 +8141,10 @@ class DataConsistencyChecker:
             # Check if both columns have too many zeros.
             if (count_zeros_dict[col_name_1] > self.contamination_level) and \
                     (count_zeros_dict[col_name_2] > self.contamination_level):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # If just col_name_2 has many zeros, swap the columns
@@ -8080,10 +8217,16 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         min_valid = self.num_rows / 2
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair number {pair_idx:,} of {num_pairs:,} pairs of numeric columns")
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
 
             num_valid = len(np.where(
                 (self.orig_df[col_name_1] != 0) &
@@ -8173,6 +8316,8 @@ class DataConsistencyChecker:
 
         cell_limit = math.ceil(self.contamination_level / 9)
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         num_pairs, numeric_pairs_list = self.__get_numeric_column_pairs_unique()
         if num_pairs > self.max_combinations:
             if self.verbose >= 1:
@@ -8183,6 +8328,10 @@ class DataConsistencyChecker:
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 5_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {num_pairs:,} pairs of numeric columns.")
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
 
             bins_1 = column_bins[col_name_1]
             bins_2 = column_bins[col_name_2]
@@ -8288,6 +8437,7 @@ class DataConsistencyChecker:
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         cols_same_count_dict = self.get_cols_same_count_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
@@ -8296,6 +8446,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].nunique(dropna=True) < self.contamination_level:
                 continue
             if self.orig_df[col_name_2].nunique(dropna=True) < self.contamination_level:
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             val_arr_1 = self.numeric_vals_filled[col_name_1]
@@ -8366,7 +8520,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
+
             zero_indicator_1 = self.orig_df[col_name_1] == 0
             num_zeros_1 = zero_indicator_1.tolist().count(True)
             zero_indicator_2 = self.orig_df[col_name_2] == 0
@@ -8432,7 +8592,13 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
+
             zero_indicator_1 = self.orig_df[col_name_1] == 0
             num_zeros_1 = zero_indicator_1.tolist().count(True)
             zero_indicator_2 = self.orig_df[col_name_2] == 0
@@ -8472,6 +8638,7 @@ class DataConsistencyChecker:
             return
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
@@ -8481,6 +8648,10 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].isna().sum() > (self.num_rows * 0.5):
                 continue
             if self.orig_df[col_name_2].isna().sum() > (self.num_rows * 0.5):
+                continue
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
             # Skip where the columns have few unique values
@@ -8601,15 +8772,20 @@ class DataConsistencyChecker:
 
         cols_same_count_dict = self.get_cols_same_count_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
-            # Exclude pairs of columns that are mostly identical
+            # Skip pairs of columns that are mostly identical
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
             num_same = cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]
+
+            # Skip pairs where only rare rows have no nulls
+            if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
 
             # todo: exclude pairs where the medians are different. We should maybe get the number of digits in each
             #   column above, create a feature at the class level to store this, then in this loop skip any columns
@@ -8824,6 +9000,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
+
         flagged_tuples = {}
         for col_idx, col_name_3 in enumerate(self.numeric_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
@@ -8831,6 +9009,9 @@ class DataConsistencyChecker:
             _, column_pairs = self.__get_numeric_column_pairs_unique()
             for cols_idx, (col_name_1, col_name_2) in enumerate(column_pairs):
                 if col_name_1 == col_name_3 or col_name_2 == col_name_3:
+                    continue
+
+                if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                     continue
 
                 med_1 = abs(self.column_medians[col_name_1])
@@ -8881,7 +9062,8 @@ class DataConsistencyChecker:
                         test_id,
                         [col_name_1, col_name_2, col_name_3],
                         test_series,
-                        f"{col_name_3} is consistently similar to the difference of {col_name_1} and {col_name_2}")
+                        (f'"{col_name_3}" is consistently similar (within 10%) to the difference of "{col_name_1}" and '
+                         f'"{col_name_2}". '))
                     flagged_tuples[current_tuple] = True
 
     def __generate_diff_exact(self):
@@ -8910,6 +9092,8 @@ class DataConsistencyChecker:
         # This saves some execution time, but primarily reduces double reporting.
         reported_dict = {}
 
+        col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
+
         num_triples, column_triples = self.__get_numeric_column_triples()
         if num_triples > self.max_combinations:
             if self.verbose >= 1:
@@ -8923,6 +9107,9 @@ class DataConsistencyChecker:
                 print(f"  Examining column set {cols_idx:,} of {len(column_triples):,} pairs.")
             columns_tuple = tuple(sorted([col_name_1, col_name_2, col_name_3]))
             if columns_tuple in reported_dict:
+                continue
+
+            if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                 continue
 
             med_1 = abs(self.column_medians[col_name_1])
@@ -8968,7 +9155,8 @@ class DataConsistencyChecker:
                     test_id,
                     [col_name_1, col_name_2, col_name_3],
                     test_series,
-                    f'"{col_name_3}" is consistently similar to the product of "{col_name_1}" and "{col_name_2}"')
+                    (f'"{col_name_3}" is consistently similar (within 10%) to the product of "{col_name_1}" and '
+                     f'"{col_name_2}"'))
                 reported_dict[columns_tuple] = True
 
     def __generate_product_exact(self):
@@ -9007,6 +9195,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
+
         # If A == B * C, then C will be the ratio A / B and B will be the ratio A / C. To avoid flagging both, we
         # keep track of the triples flagged.
         flagged_sets = []
@@ -9016,6 +9206,9 @@ class DataConsistencyChecker:
                 print(f"  Examining column set {cols_idx:,} of {len(column_triples):,} combinations of columns.")
 
             if set(sorted([col_name_1, col_name_2, col_name_3])) in flagged_sets:
+                continue
+
+            if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                 continue
 
             # Test that the columns may be related just checking the medians of the 3 columns
@@ -9049,7 +9242,8 @@ class DataConsistencyChecker:
                     test_id,
                     [col_name_1, col_name_2, col_name_3],  # Put in order such that col_3 == col_1 / col_2
                     test_series,
-                    f'"{col_name_3}" is consistently similar to the ratio of "{col_name_1}" and "{col_name_2}"')
+                    (f'"{col_name_3}" is consistently similar (within 10%) to the ratio of "{col_name_1}" and '
+                     f'"{col_name_2}"'))
                 flagged_sets.append(set(sorted([col_name_1, col_name_2, col_name_3])))
                 continue
 
@@ -9125,6 +9319,8 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
+
         for cols_idx, (col_name_1, col_name_2, col_name_3) in enumerate(column_triples):
             if self.verbose >= 2 and cols_idx > 0 and cols_idx % 10_000 == 0:
                 print(f"  Examining column set {cols_idx:,} of {num_triples:,} combinations of columns.")
@@ -9138,6 +9334,9 @@ class DataConsistencyChecker:
             if not column_pos_dict[col_name_2]:
                 continue
             if not column_pos_dict[col_name_3]:
+                continue
+
+            if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                 continue
 
             med_1 = self.column_medians[col_name_1]
@@ -9244,6 +9443,7 @@ class DataConsistencyChecker:
                        f"max_combinations is currently set to {self.max_combinations:,}."))
             return
 
+        col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
         percentiles_dict = self.get_percentiles_dict()
 
         for cols_idx, (col_name_1, col_name_2, col_name_3) in enumerate(column_triples):
@@ -9251,6 +9451,9 @@ class DataConsistencyChecker:
                 print(f"  Examining column set {cols_idx:,} of {len(column_triples):,} combinations of columns.")
 
             if not self.check_columns_same_scale_3(col_name_1, col_name_2, col_name_3, order=5):
+                continue
+
+            if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                 continue
 
             med_1 = abs(self.column_medians[col_name_1])
@@ -17053,7 +17256,7 @@ class DataConsistencyChecker:
             num_matching = test_series.tolist().count(True)
             if num_matching >= (self.num_rows - self.contamination_level):
                 matching_arr = [
-                    "BOTH" if ((a == b) or (a_na and b_na))
+                    "BOTH" if ((a == b == c) or (a_na and b_na and c_na))
                     else col_name_a if ((c == a) or (c_na and a_na))
                     else col_name_b if ((c == b) or (c_na and b_na))
                     else "NONE"
@@ -17071,7 +17274,7 @@ class DataConsistencyChecker:
                 # Calculating where they match on Null values is simply to include this information in the pattern
                 # description
                 matching_on_none_arr = [
-                    "BOTH" if (a_na and b_na)
+                    "BOTH" if (a_na and b_na and c_na)
                     else col_name_a if (c_na and a_na)
                     else col_name_b if (c_na and b_na)
                     else "NONE"
@@ -17883,7 +18086,7 @@ def is_missing(x):
     if x != x:
         return True
     if type(x) in [str, np.str_]:
-        return (x == "") or (x == 'nan') or (x == 'None') or (len(x) == 0)
+        return (x.strip() == "") or (x == 'nan') or (x == 'None') or (len(x) == 0)
     if type(x) == list:
         return len(x) == 0
     return False
