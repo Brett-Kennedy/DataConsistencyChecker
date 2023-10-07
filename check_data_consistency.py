@@ -1025,6 +1025,8 @@ class DataConsistencyChecker:
 
                 # Try some known formats before letting pandas attempt to determine the format
                 is_date = False
+
+                # Check if the column is of the form yyyymm or mmyyyy
                 if avg_num_chars == 6:
                     try:
                         self.orig_df[col_name] = pd.to_datetime(self.orig_df[col_name], format="%Y%M")
@@ -1037,6 +1039,21 @@ class DataConsistencyChecker:
                         is_date = True
                     except:
                         pass
+
+                # Check if the column is of the form yyyymm or mmyyyy, but converted to float, so containing '.0'
+                if avg_num_chars == 6:
+                    try:
+                        self.orig_df[col_name] = pd.to_datetime(self.orig_df[col_name].astype(np.int64), format="%Y%M")
+                        is_date = True
+                    except:
+                        pass
+                if avg_num_chars == 6 and not is_date:
+                    try:
+                        self.orig_df[col_name] = pd.to_datetime(self.orig_df[col_name].astype(np.int64), format="%M%Y")
+                        is_date = True
+                    except:
+                        pass
+
                 if col_name in self.string_cols and not is_date:
                     try:
                         self.orig_df[col_name] = pd.to_datetime(self.orig_df[col_name])
@@ -2354,6 +2371,7 @@ class DataConsistencyChecker:
                             cols,
                             display_info=sub_summary.iloc[0]['Display Information'],
                             is_patterns=False)
+                        print()
 
                         # For some tests, we display the rows before and after the flagged rows as well, to provide
                         # context
@@ -2689,7 +2707,7 @@ class DataConsistencyChecker:
         s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100, ax=ax)
 
         # Ensure there are not too many tick labels to be readable
-        clean_x_tick_labels(fig, ax)
+        clean_x_tick_labels(fig, 1, ax)
 
         if show_exceptions:
             s.set_title(f"Distribution of {col_name} (Flagged values in red)")
@@ -2706,109 +2724,23 @@ class DataConsistencyChecker:
                 s.axvline(v, color='red')
         plt.show()
 
-    def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
-        def plot_one(ax):
-            if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
-                df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
-                                   col_name_2: self.numeric_vals_filled[col_name_2]})
-            else:
-                df = self.orig_df[[col_name_1, col_name_2]].copy()
+    def __draw_scatter_plot(self, df, test_id, x_col, y_col, y_is_calculated, columns_set, show_expections, display_info):
 
-            if show_exceptions:
-                results_col_name = self.get_results_col_name(test_id, columns_set)
-                results_col = self.test_results_df[results_col_name]
-                df['Flagged'] = results_col
+        def draw_diagonal(ax):
+            if show_diagonal:
+                ax.plot(xlim, ylim)
 
-            xylim = None
-            xlim = None
-            ylim = None
-            if (col_name_1 in self.numeric_cols):
-                xlim = (df[col_name_1].min(), df[col_name_1].max())
-                rng = xlim[1] - xlim[0]
-                xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
-
-            if (col_name_2 in self.numeric_cols):
-                ylim = (df[col_name_2].min(), df[col_name_2].max())
-                rng = ylim[1] - ylim[0]
-                ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
-
-            if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
-                xylim = (min(df[col_name_1].astype(float).min(), df[col_name_2].astype(float).min()),
-                         max(df[col_name_1].astype(float).max(), df[col_name_2].astype(float).max()))
-
+        def draw_kde(ax):
             if test_id in ['RARE_COMBINATION']:
                 # Use a kde plot as the background
-                s = sns.kdeplot(data=df,
-                                x=col_name_1,
-                                y=col_name_2,
-                                fill=True,
-                                ax=ax)
+                sns.kdeplot(
+                    data=df,
+                    x=x_col,
+                    y=y_col,
+                    fill=True,
+                    ax=ax)
 
-            if show_exceptions:
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 0],
-                    x=col_name_1,
-                    y=col_name_2,
-                    color='blue',
-                    alpha=0.2,
-                    ax=ax,
-                    label='Normal'
-                )
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 1],
-                    x=col_name_1,
-                    y=col_name_2,
-                    color='red',
-                    alpha=1.0,
-                    ax=ax,
-                    label='Flagged'
-                )
-
-                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
-                if test_id in ['LARGER_DIFF_RANGE'] and \
-                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                        xylim is not None:
-                    ax.set_xlim(xylim)
-                    ax.set_ylim(xylim)
-                else:
-                    if xlim is not None:
-                        ax.set_xlim(xlim)
-                    if ylim is not None:
-                        ax.set_ylim(ylim)
-                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            else:
-                s = sns.scatterplot(data=df,
-                                    x=col_name_1,
-                                    y=col_name_2,
-                                    color='blue',
-                                    alpha=0.2,
-                                    ax=ax)
-                s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
-                if test_id in ['LARGER_DIFF_RANGE'] and \
-                        self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                        xylim is not None:
-                    ax.set_xlim(xylim)
-                    ax.set_ylim(xylim)
-
-            # Hide some y tick labels as necessary
-            num_labels = len(ax.get_yticklabels())
-            max_ticks = 10
-            if num_labels > max_ticks:
-                step_shown = num_labels // max_ticks
-                for label_idx, label in enumerate(ax.get_yticklabels()):
-                    if label_idx % step_shown != 0:
-                        label.set_visible(False)
-
-            if col_name_1 in self.date_cols:
-                fig.autofmt_xdate()
-            else:
-                num_labels = len(ax.get_xticklabels())
-                if num_labels > max_ticks:
-                    step_shown = num_labels // max_ticks
-                    for label_idx, label in enumerate(ax.get_xticklabels()):
-                        if label_idx % step_shown != 0:
-                            label.set_visible(False)
-
+        def apply_gridlines(ax):
             # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
             if test_id in ['RARE_COMBINATION']:
                 for v in display_info['bins_1']:
@@ -2818,18 +2750,240 @@ class DataConsistencyChecker:
                     if v not in [-np.inf, np.inf]:
                         ax.axhline(v, color='green', linewidth=1, alpha=0.3)
 
+        def get_xy_lim(df, y_is_calculated):
+            xlim = None
+            ylim = None
+
+            if x_col in self.numeric_cols:
+                xlim = (df[x_col].min(), df[x_col].max())
+                rng = xlim[1] - xlim[0]
+                xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
+
+            if (y_col in self.numeric_cols) or y_is_calculated:
+                ylim = (df[y_col].min(), df[y_col].max())
+                rng = ylim[1] - ylim[0]
+                ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
+
+            # todo: set xlim & ylim equal if can!
+            # todo: put back -- does force x & y to use the same scale, which makes comparing easier.
+            # if (x_col in self.numeric_cols) and (y_col in self.numeric_cols):
+            #     xylim = (min(df[x_col].astype(float).min(), df[y_col].astype(float).min()),
+            #              max(df[x_col].astype(float).max(), df[y_col].astype(float).max()))
+
+            return xlim, ylim
+
+        show_diagonal = test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS',
+                                    'LARGER_SAME_RANGE', 'SIMILAR_TO_PRODUCT', 'SIMILAR_TO_RATIO']
+
+        if not y_is_calculated:
+            df = self.orig_df[[x_col, y_col]].copy()
+            if x_col in self.numeric_vals_filled:
+                df[x_col] = self.numeric_vals_filled[x_col]
+            if y_col in self.numeric_vals_filled:
+                df[y_col] = self.numeric_vals_filled[y_col]
+
+        if not show_expections:
+            xlim, ylim = get_xy_lim(df, y_is_calculated)
+            fig, ax = plt.subplots(figsize=(5, 4))
+            draw_kde(ax)
+            s = sns.scatterplot(
+                data=df,
+                x=x_col,
+                y=y_col,
+                color='blue',
+                alpha=0.2,
+                label='Not Flagged',
+                ax=ax
+            )
+            s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+            s.set_xlim(xlim)
+            s.set_ylim(ylim)
+            apply_gridlines(ax)
+            draw_diagonal(ax)
+            clean_x_tick_labels(fig, 1, ax)
+        else:
+            fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 4))
+            result_col_name = self.get_results_col_name(test_id, columns_set)
+            df['Flagged'] = self.test_results_df[result_col_name]
+            df_not_flagged = df[df['Flagged'] == 0]
+
+            # Draw without the exceptions
+            xlim, ylim = get_xy_lim(df_not_flagged, y_is_calculated)
+            draw_kde(ax[0])
+            s = sns.scatterplot(
+                data=df_not_flagged,
+                x=x_col,
+                y=y_col,
+                color='blue',
+                alpha=0.2,
+                label='Normal',
+                ax=ax[0]
+            )
+            s.set_title(f'Distribution of \n"{x_col}" \nand \n"{y_col}" \n(excluding flagged values)')
+            s.set_xlim(xlim)
+            s.set_ylim(ylim)
+            apply_gridlines(ax[0])
+            draw_diagonal(ax[0])
+            clean_x_tick_labels(fig, 2, ax[0])
+
+            # Draw with and without the exceptions
+            xlim, ylim = get_xy_lim(df, y_is_calculated)
+            draw_kde(ax[1])
+            s = sns.scatterplot(
+                data=df[df['Flagged'] == 0],
+                x=x_col,
+                y=y_col,
+                color='blue',
+                alpha=0.2,
+                label='Normal',
+                ax=ax[1]
+            )
+            s = sns.scatterplot(
+                data=df[df['Flagged'] == 1],
+                x=x_col,
+                y=y_col,
+                color='red',
+                alpha=1.0,
+                label='Flagged',
+                ax=ax[1]
+            )
+            s.set_title(f'Distribution of \n"{x_col}" \nand \n"{y_col}" \n(Flagged values in red)')
+            apply_gridlines(ax[1])
+            s.set_xlim(xlim)
+            s.set_ylim(ylim)
+            clean_x_tick_labels(fig, 2, ax[1])
+
+        if plt.legend():
+            plt.legend().remove()
+        plt.tight_layout()
+        plt.show()
+
+    '''
+    def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
         col_name_1, col_name_2 = cols
         fig, ax = plt.subplots(figsize=(5, 5))
-        plot_one(ax=ax)
+
+        if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
+            df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
+                               col_name_2: self.numeric_vals_filled[col_name_2]})
+        else:
+            df = self.orig_df[[col_name_1, col_name_2]].copy()
+
+        if show_exceptions:
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            df['Flagged'] = results_col
+
+        xlim, ylim, xylim = self.__get_xy_lim(df, col_name_1, col_name_2)
+        xylim = None
+        xlim = None
+        ylim = None
+        if col_name_1 in self.numeric_cols:
+            xlim = (df[col_name_1].min(), df[col_name_1].max())
+            rng = xlim[1] - xlim[0]
+            xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
+
+        if col_name_2 in self.numeric_cols:
+            ylim = (df[col_name_2].min(), df[col_name_2].max())
+            rng = ylim[1] - ylim[0]
+            ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
+
+        if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
+            xylim = (min(df[col_name_1].astype(float).min(), df[col_name_2].astype(float).min()),
+                     max(df[col_name_1].astype(float).max(), df[col_name_2].astype(float).max()))
+
+        if test_id in ['RARE_COMBINATION']:
+            # Use a kde plot as the background
+            s = sns.kdeplot(data=df,
+                            x=col_name_1,
+                            y=col_name_2,
+                            fill=True,
+                            ax=ax)
+
+        if show_exceptions:
+            s = sns.scatterplot(
+                data=df[df['Flagged'] == 0],
+                x=col_name_1,
+                y=col_name_2,
+                color='blue',
+                alpha=0.2,
+                ax=ax,
+                label='Normal'
+            )
+            s = sns.scatterplot(
+                data=df[df['Flagged'] == 1],
+                x=col_name_1,
+                y=col_name_2,
+                color='red',
+                alpha=1.0,
+                ax=ax,
+                label='Flagged'
+            )
+
+            s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
+            if test_id in ['LARGER_SAME_RANGE'] and \
+                    self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
+                    xylim is not None:
+                ax.set_xlim(xylim)
+                ax.set_ylim(xylim)
+            else:
+                if xlim is not None:
+                    ax.set_xlim(xlim)
+                if ylim is not None:
+                    ax.set_ylim(ylim)
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        else:
+            s = sns.scatterplot(data=df,
+                                x=col_name_1,
+                                y=col_name_2,
+                                color='blue',
+                                alpha=0.2,
+                                ax=ax)
+            s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
+            if test_id in ['LARGER_DIFF_RANGE'] and \
+                    self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
+                    xylim is not None:
+                ax.set_xlim(xylim)
+                ax.set_ylim(xylim)
+
+        # Hide some y tick labels as necessary
+        num_labels = len(ax.get_yticklabels())
+        max_ticks = 10
+        if num_labels > max_ticks:
+            step_shown = num_labels // max_ticks
+            for label_idx, label in enumerate(ax.get_yticklabels()):
+                if label_idx % step_shown != 0:
+                    label.set_visible(False)
+
+        if col_name_1 in self.date_cols:
+            fig.autofmt_xdate()
+        else:
+            num_labels = len(ax.get_xticklabels())
+            if num_labels > max_ticks:
+                step_shown = num_labels // max_ticks
+                for label_idx, label in enumerate(ax.get_xticklabels()):
+                    if label_idx % step_shown != 0:
+                        label.set_visible(False)
+
+        # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
+        if test_id in ['RARE_COMBINATION']:
+            for v in display_info['bins_1']:
+                if v not in [-np.inf, np.inf]:
+                    ax.axvline(v, color='green', linewidth=1, alpha=0.3)
+            for v in display_info['bins_2']:
+                if v not in [-np.inf, np.inf]:
+                    ax.axhline(v, color='green', linewidth=1, alpha=0.3)
+
         plt.tight_layout()
         clean_x_tick_labels(fig, ax)
         plt.show()
+    '''
 
     def __plot_count_plot(self, column_name):
         fig, ax = plt.subplots(figsize=(4, 4))
-        s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
+        s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE").str.strip())
         s.set_title(f"Counts of unique values in {column_name}")
-        clean_x_tick_labels(fig, ax)
+        clean_x_tick_labels(fig, 1, ax)
         plt.show()
 
     def __plot_heatmap(self, test_id, cols):
@@ -2865,7 +3019,7 @@ class DataConsistencyChecker:
             else:
                 s.set_title(f'Distribution of "{col_name}"')
             s.set_xlabel("Row Number")
-            clean_x_tick_labels(fig, ax)
+            clean_x_tick_labels(fig, 1, ax)
             plt.legend().remove()
             plt.show()
         else:
@@ -2882,17 +3036,18 @@ class DataConsistencyChecker:
             # Draw one plot without the flagged values
             s = sns.scatterplot(x=not_flagged_idxs[0], y=not_flagged_vals, color='blue', ax=ax[0])
             s.set_xlabel("Row Number")
-            clean_x_tick_labels(fig, ax[1])
+            clean_x_tick_labels(fig, 2, ax[0])
             s.set_title("Values without exceptions")
 
             # Draw one plot with the flagged values
             s = sns.scatterplot(x=not_flagged_idxs[0], y=not_flagged_vals, color='blue', label="Not Flagged", ax=ax[1])
             s = sns.scatterplot(x=flagged_idxs[0], y=flagged_vals, color='red', label="Flagged", ax=ax[1])
             s.set_xlabel("Row Number")
-            clean_x_tick_labels(fig, ax[1])
+            clean_x_tick_labels(fig, 2, ax[1])
             s.set_title("Values with exceptions")
 
             plt.legend().remove()
+            plt.tight_layout()
             plt.show()
 
     def __draw_box_plots(self, test_id, cols, columns_set):
@@ -2906,7 +3061,7 @@ class DataConsistencyChecker:
             df = self.orig_df[cols].copy()
             df['Days Since Min Date'] = (pd.to_datetime(self.orig_df[cols[1]]) - pd.to_datetime(self.orig_df[cols[1]]).min()).dt.days
             s = sns.boxplot(data=df, orient='h', y=cols[0], x='Days Since Min Date')
-        clean_x_tick_labels(fig, ax)
+        clean_x_tick_labels(fig, 1, ax)
         plt.show()
 
         # Also draw a histogram of the relevant classes.
@@ -2930,7 +3085,7 @@ class DataConsistencyChecker:
                 # Add alpha, as in some cases the red lines are very close to the blue
                 s.axvline(fv, color='red', alpha=0.5)
             s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
-            clean_x_tick_labels(fig, curr_ax)
+            clean_x_tick_labels(fig, nvals, curr_ax)
         plt.tight_layout()
         plt.show()
 
@@ -2949,7 +3104,7 @@ class DataConsistencyChecker:
         s = sns.boxplot(data=df.dropna(), orient='h', x='Value', y='Feature')
         if test_id in ['MUCH_LARGER']:
             plt.xscale('log')
-        clean_x_tick_labels(fig, ax)
+        clean_x_tick_labels(fig, 1, ax)
         plt.show()
 
     def __draw_network_plot(self, nodes, edges):
@@ -3067,54 +3222,62 @@ class DataConsistencyChecker:
                     'median value of the column.'))
 
     def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
-        def draw_scatter(df, x_col, y_col, draw_diagonal):
-            fig, ax = plt.subplots(figsize=(4, 4))
-            min_range = min(df[x_col].min(), df[y_col].min())
-            max_range = max(df[x_col].max(), df[y_col].max())
-            rng = max_range - min_range
-            xlim = (min_range - (rng / 50.0), max_range + (rng / 50.0))
-            ylim = xlim
-            if not show_exceptions:
-                s = sns.scatterplot(
-                    data=df,
-                    x=x_col,
-                    y=y_col,
-                    color='blue',
-                    alpha=0.2,
-                    label='Not Flagged')
-                s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
-            else:
-                result_col_name = self.get_results_col_name(test_id, columns_set)
-                df['Flagged'] = self.test_results_df[result_col_name]
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 0],
-                    x=x_col,
-                    y=y_col,
-                    color='blue',
-                    alpha=0.2,
-                    ax=ax,
-                    label='Normal'
-                )
-                s = sns.scatterplot(
-                    data=df[df['Flagged'] == 1],
-                    x=x_col,
-                    y=y_col,
-                    color='red',
-                    alpha=1.0,
-                    ax=ax,
-                    label='Flagged'
-                )
-                s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
-            s.set_xlim(xlim)
-            s.set_ylim(ylim)
 
-            if draw_diagonal:
-                plt.plot(xlim, ylim)
-            #plt.xticks(rotation=60)
-            if plt.legend():
-                plt.legend().remove()
-            clean_x_tick_labels(fig, ax)
+        '''
+        def draw_scatter(df, x_col, y_col, draw_diagonal):
+            def draw_one(df, include_exceptions, ax):
+                min_range = min(df[x_col].min(), df[y_col].min())
+                max_range = max(df[x_col].max(), df[y_col].max())
+                rng = max_range - min_range
+                xlim = (min_range - (rng / 50.0), max_range + (rng / 50.0))
+                ylim = xlim
+                if not show_exceptions:
+                    s = sns.scatterplot(
+                        data=df,
+                        x=x_col,
+                        y=y_col,
+                        color='blue',
+                        alpha=0.2,
+                        label='Not Flagged',
+                        ax=ax
+                    )
+                    s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+                else:
+                    result_col_name = self.get_results_col_name(test_id, columns_set)
+                    df['Flagged'] = self.test_results_df[result_col_name]
+                    s = sns.scatterplot(
+                        data=df[df['Flagged'] == 0],
+                        x=x_col,
+                        y=y_col,
+                        color='blue',
+                        alpha=0.2,
+                        label='Normal',
+                        ax=ax
+                    )
+                    s = sns.scatterplot(
+                        data=df[df['Flagged'] == 1],
+                        x=x_col,
+                        y=y_col,
+                        color='red',
+                        alpha=1.0,
+                        label='Flagged',
+                        ax=ax
+                    )
+                    s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
+                s.set_xlim(xlim)
+                s.set_ylim(ylim)
+
+                if draw_diagonal:
+                    plt.plot(xlim, ylim)
+                if plt.legend():
+                    plt.legend().remove()
+                clean_x_tick_labels(fig, ax)
+
+            fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(8, 4))
+            draw_one(df=df[df['Flagged'] == 0], include_exceptions=False, ax=ax[0])
+            draw_one(df=df, include_exceptions=True, ax=ax[1])
             plt.show()
+        '''
 
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
                        'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
@@ -3123,21 +3286,48 @@ class DataConsistencyChecker:
 
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             if len(cols) == 2:
-                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+                #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+                self.__draw_scatter_plot(
+                    df=self.orig_df,
+                    test_id=test_id,
+                    x_col=cols[0],
+                    y_col=cols[1],
+                    y_is_calculated=False,
+                    columns_set=columns_set,
+                    show_expections=show_exceptions,
+                    display_info=display_info)
             self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
 
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
-                       'SIMILAR_TO_NEGATIVE', 'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO',
-                       'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
-            self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+                       'SIMILAR_TO_NEGATIVE', 'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
+            #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+            self.__draw_scatter_plot(
+                df=self.orig_df,
+                test_id=test_id,
+                x_col=cols[0],
+                y_col=cols[1],
+                y_is_calculated=False,
+                columns_set=columns_set,
+                show_expections=show_exceptions,
+                display_info=display_info)
 
         if test_id in ['SAME_VALUES']:
             if self.orig_df[cols[0]].nunique() > 5:
-                self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+                #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
+                self.__draw_scatter_plot(
+                    df=self.orig_df,
+                    test_id=test_id,
+                    x_col=cols[0],
+                    y_col=cols[1],
+                    y_is_calculated=False,
+                    columns_set=columns_set,
+                    show_expections=show_exceptions,
+                    display_info=display_info)
             else:
                 self.__plot_heatmap(test_id, cols)
 
-        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS']:
+        if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS',
+                       'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO']:
             df = self.orig_df.copy()
             if test_id in ['MEAN_OF_COLUMNS']:
                 calculated_col = 'Mean'
@@ -3151,7 +3341,37 @@ class DataConsistencyChecker:
             if test_id in ['MAX_OF_COLUMNS']:
                 calculated_col = 'Max'
                 df[calculated_col] = display_info['Max']
-            draw_scatter(df, cols[-1], calculated_col, draw_diagonal=False)
+            if test_id in ['CONSTANT_SUM']:
+                calculated_col = 'SUM'
+                df[calculated_col] = display_info['Sum']
+            if test_id in ['CONSTANT_DIFF']:
+                calculated_col = 'DIFF'
+                df[calculated_col] = display_info['Diff']
+            if test_id in ['CONSTANT_PRODUCT']:
+                calculated_col = 'PRODUCT'
+                df[calculated_col] = display_info['Product']
+            if test_id in ['CONSTANT_RATIO']:
+                calculated_col = 'RATIO'
+                df[calculated_col] = display_info['Ratio']
+            self.__draw_scatter_plot(df=df,
+                                     test_id=test_id,
+                                     x_col=cols[-1],
+                                     y_col=calculated_col,
+                                     y_is_calculated=True,
+                                     columns_set=columns_set,
+                                     show_expections=show_exceptions,
+                                     display_info=display_info)
+
+            # Also show the original features in some cases
+            if test_id in ['CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO']:
+                self.__draw_scatter_plot(df=df,
+                                         test_id=test_id,
+                                         x_col=cols[0],
+                                         y_col=cols[1],
+                                         y_is_calculated=False,
+                                         columns_set=columns_set,
+                                         show_expections=show_exceptions,
+                                         display_info=display_info)
 
         if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
                        'SIMILAR_TO_RATIO']:
@@ -3169,7 +3389,15 @@ class DataConsistencyChecker:
             elif test_id in ['SIMILAR_TO_RATIO']:
                 calculated_col = 'Division Results'
                 df[calculated_col] = self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2]
-            draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
+            #draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
+            self.__draw_scatter_plot(df=df,
+                                     test_id=test_id,
+                                     x_col=col_name_3,
+                                     y_col=calculated_col,
+                                     y_is_calculated=True,
+                                     columns_set=columns_set,
+                                     show_expections=show_exceptions,
+                                     display_info=display_info)
 
         if test_id in ['RARE_VALUES']:
             self.__plot_count_plot(cols[0])
@@ -4851,7 +5079,8 @@ class DataConsistencyChecker:
             return self.words_list_dict
         self.words_list_dict = {}
         for col_name in self.string_cols:
-            self.words_list_dict[col_name] = self.orig_df[col_name].astype(str).apply(replace_special_with_space).str.split().values
+            self.words_list_dict[col_name] = \
+                self.orig_df[col_name].astype(str).apply(replace_special_with_space).str.split().values
         return self.words_list_dict
 
     def get_word_counts_dict(self):
@@ -4990,7 +5219,7 @@ class DataConsistencyChecker:
             return None
         for col_name_a, col_name_b in pairs:
             pairs_tuple = tuple(sorted([col_name_a, col_name_b]))
-            match_arr = (self.sample_df[col_name_a].isna() | self.sample_df[col_name_b].isna())
+            match_arr = (self.orig_df[col_name_a].isna() | self.orig_df[col_name_b].isna())
             self.col_pairs_either_null_bool_dict[pairs_tuple] = match_arr.tolist().count(True) > threshold
         return self.col_pairs_either_null_bool_dict
 
@@ -7957,7 +8186,8 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The sum of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{np.nanmedian(sums_series)}')
+                     f'{np.nanmedian(sums_series)}'),
+                    display_info={'Sum': sums_series}
                 )
 
     def __generate_constant_diff(self):
@@ -8031,7 +8261,8 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The difference of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{statistics.median(diffs_series)}')
+                     f'{statistics.median(diffs_series)}'),
+                    display_info={'Diff': diffs_series}
                 )
 
     def __generate_constant_product(self):
@@ -8099,7 +8330,8 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The product of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{np.nanmedian(test_series_a)}')
+                     f'{np.nanmedian(test_series_a)}'),
+                    display_info={'Product': test_series_a}
                 )
 
     def __generate_constant_ratio(self):
@@ -8187,7 +8419,8 @@ class DataConsistencyChecker:
                     [col_name_1, col_name_2],
                     test_series,
                     (f'The ratio of "{col_name_1}" and "{col_name_2}" is consistently close to '
-                     f'{np.nanmedian(test_series_a)}')
+                     f'{np.nanmedian(test_series_a)}'),
+                    display_info={'Ratio': test_series_a}
                 )
 
     def __generate_even_multiple(self):
@@ -11668,6 +11901,7 @@ class DataConsistencyChecker:
 
         # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
         upper_limits_dict = self.get_columns_iqr_upper_limit()
+        nunique_dict = self.get_nunique_dict()
 
         for date_idx, date_col in enumerate(self.date_cols):
             if self.verbose >= 2 and date_idx > 0 and date_idx % 10 == 0:
@@ -11692,6 +11926,10 @@ class DataConsistencyChecker:
                 sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
+
+                if nunique_dict[num_col] < math.sqrt(self.num_rows):
+                    continue
+
                 test_series = [True] * self.num_rows
                 for bin_id in bin_labels:
                     # Get the upper limit (based on IQR), given the full column
@@ -11705,7 +11943,9 @@ class DataConsistencyChecker:
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
-                    threshold = q3 + (iqr * self.iqr_limit)
+                    # As we look at multiple subsets, we use a higher coefficient than normally when looking for large
+                    # values, though smaller than in LARGE_GIVEN_PAIRS, which looks at still more subsets.
+                    threshold = q3 + (iqr * 1.5 * self.iqr_limit)
 
                     if q1 is None or med is None or q3 is None or upper_limit is None or col_q2 is None or col_q3 is None:
                         continue
@@ -11759,6 +11999,7 @@ class DataConsistencyChecker:
             return
 
         lower_limits_dict = self.get_columns_iqr_lower_limit()
+        nunique_dict = self.get_nunique_dict()
 
         for date_idx, date_col in enumerate(self.date_cols):
             if self.verbose >= 2 and date_idx > 0 and date_idx % 10 == 0:
@@ -11783,6 +12024,10 @@ class DataConsistencyChecker:
                 sub_dfs_arr_dict[bin_id] = self.orig_df.loc[bin_row_idxs[bin_id]]
 
             for num_col in self.numeric_cols:
+
+                if nunique_dict[num_col] < math.sqrt(self.num_rows):
+                    continue
+
                 test_series = [True] * self.num_rows
                 for bin_id in bin_labels:
                     # Get the lower limit (based on IQR), given the full column
@@ -11796,7 +12041,9 @@ class DataConsistencyChecker:
                     med = num_vals.quantile(0.50)
                     q3 = num_vals.quantile(0.75)
                     iqr = q3 - q1
-                    threshold = q1 - (iqr * self.iqr_limit)
+                    # As we look at multiple subsets, we use a higher coefficient than normally when looking for large
+                    # values, though smaller than in LARGE_GIVEN_PAIRS, which looks at still more subsets.
+                    threshold = q1 - (iqr * 1.5 * self.iqr_limit)
 
                     if q1 is None or med is None or q3 is None or lower_limit is None or col_q1 is None or col_q3 is None:
                         continue
@@ -14463,6 +14710,12 @@ class DataConsistencyChecker:
         if min_count < self.contamination_level:
             return
 
+        if self.orig_df[col_name].isna().sum() > (self.num_rows * 0.9):
+            return
+
+        if self.orig_df[col_name].nunique() < 3:
+            return
+
         # First test if a pattern holds when removing all null values
         col_df = pd.DataFrame({col_name: col_values})
         col_df.dropna()
@@ -16220,6 +16473,7 @@ class DataConsistencyChecker:
         # todo: dont flag Null values
         # Calculate and cache the upper limit based on q1 and q3 of each full numeric & date column
         upper_limits_dict = self.get_columns_iqr_upper_limit()
+        nunique_dict = self.get_nunique_dict()
 
         for col_idx, col_name_1 in enumerate(self.string_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
@@ -16249,6 +16503,8 @@ class DataConsistencyChecker:
                     common_values.append(v)
 
             for col_name_2 in self.numeric_cols + self.date_cols:
+                if nunique_dict[col_name_2] < math.sqrt(self.num_rows):
+                    continue
                 test_series = [True] * self.num_rows
                 flagged_prefixes = []
                 for v in common_values:
@@ -16354,6 +16610,7 @@ class DataConsistencyChecker:
 
         # Calculate and cache the lower limit based on q1 and q3 of each full numeric & date column
         lower_limits_dict = self.get_columns_iqr_lower_limit()
+        nunique_dict = self.get_nunique_dict()
 
         for col_idx, col_name_1 in enumerate(self.string_cols):
             if self.verbose >= 2 and col_idx > 0 and col_idx % 10 == 0:
@@ -16378,6 +16635,8 @@ class DataConsistencyChecker:
                     common_values.append(v)
 
             for col_name_2 in self.numeric_cols + self.date_cols:
+                if nunique_dict[col_name_2] < math.sqrt(self.num_rows):
+                    continue
                 test_series = [True] * self.num_rows
                 flagged_prefixes = []
                 for v in common_values:
@@ -18136,7 +18395,7 @@ def call_test(dc, test_id):
     print(test_id)
 
 
-def clean_x_tick_labels(fig, ax):
+def clean_x_tick_labels(fig, n_axis, ax):
 
     # Ensure the x tick labels are populated
     plt.draw()
@@ -18157,7 +18416,7 @@ def clean_x_tick_labels(fig, ax):
             num_chars += len(label._text)
 
     # In some cases, we can not get the text of the labels. To be safe, rotate the labels in these cases as well.
-    if num_chars > (fig.get_figwidth() * 10):
+    if (num_chars > (fig.get_figwidth() * 10 / n_axis)) or (num_chars == 0):
         fig.autofmt_xdate()
 
 
