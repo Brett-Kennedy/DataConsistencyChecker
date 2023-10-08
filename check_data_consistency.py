@@ -1236,6 +1236,7 @@ class DataConsistencyChecker:
             most synthetic columns. If specified, the synthetic data creation will be repeatable.
 
         add_nones: string
+            Must be one of 'none', 'one-row', 'in-sync', 'random', '80-percent'.
             If add_nones is set to 'random', then each column will have a set of None values added randomly, covering
             50% of the values. If set to 'in-sync', this is similar, but all columns will have None set in the ame rows.
             If set to 'one-row', only one row will be given None values. If set to '80-percent', 80% of all values
@@ -1591,7 +1592,7 @@ class DataConsistencyChecker:
         # to ID and code values.
         return [x for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_CODE]]
 
-    def demo_test(self, test_id):
+    def demo_test(self, test_id, include_nulls=False):
         """
         This provides a demo of a single test.
 
@@ -1604,23 +1605,34 @@ class DataConsistencyChecker:
         'rand_XXX' do not have a pattern, but may be involved in patterns spanning multiple columns. Those named
         'all' are part of a pattern with no exceptions (and sometimes other patterns as well). Those named 'most' are
         part of patterns with exceptions, indicating the pattern holds for most, but not all, rows.
+
+        include_nulls (bool):
+            If True, several versions of the data will be created with either few or many Null values.
         """
 
         if test_id not in self.test_dict.keys():
             print(f"Error {test_id} is not a valid test")
 
-        synth_df = self.generate_synth_data(all_cols=False, execute_list=[test_id], add_nones='none')
-        print_text(f"## {test_id}")
-        print_text(f"### Synthetic Data:")
-        if is_notebook():
-            display(synth_df)
-        else:
-            print(synth_df)
+        none_cases = ['none']
+        none_strs = ['']
+        if include_nulls:
+            none_cases = ['none', 'one-row', 'in-sync', 'random', '80-percent']
+            none_strs = ['', '-- One row of Null values', '-- 50% Null values (same rows)',
+                         '-- 50% Null values (random locations)', '-- 80-percent Null Values']
 
-        self.verbose = 2
-        self.init_data(synth_df)
-        self.check_data_quality(execute_list=[test_id])
-        self.display_detailed_results(show_short_list_only=False)
+        for none_idx, none_type in enumerate(none_cases):
+            synth_df = self.generate_synth_data(all_cols=False, execute_list=[test_id], add_nones=none_type)
+            print_text(f"## {test_id}")
+            print_text(f"### Synthetic Data {none_strs[none_idx]}:")
+            if is_notebook():
+                display(synth_df)
+            else:
+                print(synth_df)
+
+            self.verbose = 2
+            self.init_data(synth_df)
+            self.check_data_quality(execute_list=[test_id])
+            self.display_detailed_results(show_short_list_only=False)
 
     ##################################################################################################################
     # Public methods to output statistics about the dataset, unrelated to any tests executed.
@@ -5839,7 +5851,7 @@ class DataConsistencyChecker:
             if test_series.count(False) > 1:
                 continue
 
-            counts_arr = self.orig_df[col_name].value_counts()
+            counts_arr = self.orig_df[col_name].value_counts(dropna=False)
             repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
             test_series = [True if counts_arr[x] == 1 else False for x in self.orig_df[col_name]]
             single_test_results[col_name] = test_series.count(False)
