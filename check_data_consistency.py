@@ -352,28 +352,34 @@ class DataConsistencyChecker:
                                           'difference, to each other.'),
                                          self.__check_similar_wrt_difference, self.__generate_similar_wrt_difference,
                                          True, True, False, False),
-            'SIMILAR_TO_INVERSE':       ('', ('Check if one column is consistently similar to the inverse of another '
-                                              'column.'),
+            'SIMILAR_TO_INVERSE':       ('Check if one column is the inverse of another. ',
+                                         ('Check if one column is consistently similar to the inverse of another '
+                                          'column.'),
                                          self.__check_similar_to_inverse, self.__generate_similar_to_inverse,
                                          True, True, False, False),
-            'SIMILAR_TO_NEGATIVE':      ('', ('Check if one column is consistently similar to the negative of another '
-                                              'column.'),
+            'SIMILAR_TO_NEGATIVE':      ('Check if one column is the negative of another.',
+                                         ('Check if one column is consistently similar to the negative of another '
+                                          'column.'),
                                          self.__check_similar_to_negative, self.__generate_similar_to_negative,
                                          True, True, False, False),
-            'CONSTANT_SUM':             ('', ('Check if the sum of two columns is consistently similar to a constant '
-                                              'value.'),
+            'CONSTANT_SUM':             ('Check if two columns have a consistent sum.',
+                                         ('Check if the sum of two columns is consistently similar to a constant '
+                                          'value.'),
                                          self.__check_constant_sum, self.__generate_constant_sum,
                                          True, True, False, False),
-            'CONSTANT_DIFF':            ('', ('Check if the difference between two columns is consistently similar to '
-                                              'a constant value.'),
+            'CONSTANT_DIFF':            ('Check if two columns have a consistent difference.',
+                                         ('Check if the difference between two columns is consistently similar to '
+                                          'a constant value.'),
                                          self.__check_constant_diff, self.__generate_constant_diff,
                                          True, True, False, False),
-            'CONSTANT_PRODUCT':         ('', ('Check if the product of two columns is consistently similar to a '
-                                              'constant value.'),
+            'CONSTANT_PRODUCT':         ('Check if two columns have a consistent product.',
+                                         ('Check if the product of two columns is consistently similar to a '
+                                          'constant value.'),
                                          self.__check_constant_product, self.__generate_constant_product,
                                          True, True, False, False),
-            'CONSTANT_RATIO':           ('', ('Check if the ratio of two columns is consistently similar to a constant '
-                                              'value.'),
+            'CONSTANT_RATIO':           ('Check if two columns have a consistent ratio.',
+                                         ('Check if the ratio of two columns is consistently similar to a constant '
+                                          'value.'),
                                          self.__check_constant_ratio, self.__generate_constant_ratio,
                                          True, True, False, False),
             'EVEN_MULTIPLE':            ('', 'Check if one column is consistently an even integer multiple of another.',
@@ -442,16 +448,19 @@ class DataConsistencyChecker:
                                          False, False, False, False),  # Tends to over-report, not intuitive.
 
             # Tests on single numeric columns in relation to all other numeric columns
-            'SUM_OF_COLUMNS':           ('', ('Check if one column is consistently similar to the sum of two or more '
-                                              'other columns.'),
+            'SUM_OF_COLUMNS':           ('Check if one column is the sum of two others.',
+                                         ('Check if one column is consistently similar to the sum of two or more '
+                                          'other columns.'),
                                          self.__check_sum_of_columns, self.__generate_sum_of_columns,
                                          True, True, False, False),
-            'MEAN_OF_COLUMNS':          ('', ('Check if one column is consistently similar to the mean of two or more '
-                                              'other columns.'),
+            'MEAN_OF_COLUMNS':          ('Check if one column is the mean of a set of other columns.',
+                                         ('Check if one column is consistently similar to the mean of two or more '
+                                          'other columns.'),
                                          self.__check_mean_of_columns, self.__generate_mean_of_columns,
                                          True, True, False, False),
-            'MIN_OF_COLUMNS':           ('', ('Check if one column is consistently similar to the minimum of two or '
-                                              'more other columns.'),
+            'MIN_OF_COLUMNS':           ('Check if one column is the minimum of a set of other columns.',
+                                         ('Check if one column is consistently similar to the minimum of two or '
+                                          'more other columns.'),
                                          self.__check_min_of_columns, self.__generate_min_of_columns,
                                          True, True, False, False),
             'MAX_OF_COLUMNS':           ('', ('Check if one column is consistently similar to the maximum of two or '
@@ -2237,8 +2246,8 @@ class DataConsistencyChecker:
         hyphens = '----------------------------------------------------------------------------'
         count_shown = 0
 
-        max_shown_msg = (f"Showing the first {int(max_shown)} findings. To see additional patterns or exceptions, "
-                         "specify more specific tests, columns, issue numbers, or row numbers, or increase max_shown")
+        max_shown_msg = (f"**Showing the first {int(max_shown)} findings. To see additional patterns or exceptions, "
+                         "specify more specific tests, columns, issue numbers, or row numbers, or increase max_shown**")
 
         for test_id in test_id_list:
             if self.execute_list and test_id not in self.execute_list:
@@ -2808,13 +2817,14 @@ class DataConsistencyChecker:
                 ax=ax
             )
             s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
+            s.legend().remove()
             s.set_xlim(xlim)
             s.set_ylim(ylim)
             apply_gridlines(ax)
             draw_diagonal(ax)
             clean_x_tick_labels(fig, 1, ax)
         else:
-            fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 4))
+            fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 4))
             result_col_name = self.get_results_col_name(test_id, columns_set)
             df['Flagged'] = self.test_results_df[result_col_name]
             df_not_flagged = df[df['Flagged'] == 0]
@@ -2832,6 +2842,7 @@ class DataConsistencyChecker:
                 ax=ax[0]
             )
             s.set_title(f'Distribution of \n"{x_col}" \nand \n"{y_col}" \n(excluding flagged values)')
+            s.legend().remove()
             s.set_xlim(xlim)
             s.set_ylim(ylim)
             apply_gridlines(ax[0])
@@ -2860,136 +2871,14 @@ class DataConsistencyChecker:
                 ax=ax[1]
             )
             s.set_title(f'Distribution of \n"{x_col}" \nand \n"{y_col}" \n(Flagged values in red)')
+            s.legend().remove()
             apply_gridlines(ax[1])
             s.set_xlim(xlim)
             s.set_ylim(ylim)
             clean_x_tick_labels(fig, 2, ax[1])
 
-        if plt.legend():
-            plt.legend().remove()
         plt.tight_layout()
         plt.show()
-
-    '''
-    def __plot_scatter_plot(self, test_id, cols, columns_set, show_exceptions, display_info):
-        col_name_1, col_name_2 = cols
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        if (col_name_1 in self.numeric_vals_filled) and (col_name_2 in self.numeric_vals_filled):
-            df = pd.DataFrame({col_name_1: self.numeric_vals_filled[col_name_1],
-                               col_name_2: self.numeric_vals_filled[col_name_2]})
-        else:
-            df = self.orig_df[[col_name_1, col_name_2]].copy()
-
-        if show_exceptions:
-            results_col_name = self.get_results_col_name(test_id, columns_set)
-            results_col = self.test_results_df[results_col_name]
-            df['Flagged'] = results_col
-
-        xlim, ylim, xylim = self.__get_xy_lim(df, col_name_1, col_name_2)
-        xylim = None
-        xlim = None
-        ylim = None
-        if col_name_1 in self.numeric_cols:
-            xlim = (df[col_name_1].min(), df[col_name_1].max())
-            rng = xlim[1] - xlim[0]
-            xlim = (xlim[0] - (rng / 50.0), xlim[1] + (rng / 50.0))
-
-        if col_name_2 in self.numeric_cols:
-            ylim = (df[col_name_2].min(), df[col_name_2].max())
-            rng = ylim[1] - ylim[0]
-            ylim = (ylim[0] - (rng / 50.0), ylim[1] + (rng / 50.0))
-
-        if (col_name_1 in self.numeric_cols) and (col_name_2 in self.numeric_cols):
-            xylim = (min(df[col_name_1].astype(float).min(), df[col_name_2].astype(float).min()),
-                     max(df[col_name_1].astype(float).max(), df[col_name_2].astype(float).max()))
-
-        if test_id in ['RARE_COMBINATION']:
-            # Use a kde plot as the background
-            s = sns.kdeplot(data=df,
-                            x=col_name_1,
-                            y=col_name_2,
-                            fill=True,
-                            ax=ax)
-
-        if show_exceptions:
-            s = sns.scatterplot(
-                data=df[df['Flagged'] == 0],
-                x=col_name_1,
-                y=col_name_2,
-                color='blue',
-                alpha=0.2,
-                ax=ax,
-                label='Normal'
-            )
-            s = sns.scatterplot(
-                data=df[df['Flagged'] == 1],
-                x=col_name_1,
-                y=col_name_2,
-                color='red',
-                alpha=1.0,
-                ax=ax,
-                label='Flagged'
-            )
-
-            s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}" \n(Flagged values in red)')
-            if test_id in ['LARGER_SAME_RANGE'] and \
-                    self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                    xylim is not None:
-                ax.set_xlim(xylim)
-                ax.set_ylim(xylim)
-            else:
-                if xlim is not None:
-                    ax.set_xlim(xlim)
-                if ylim is not None:
-                    ax.set_ylim(ylim)
-            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        else:
-            s = sns.scatterplot(data=df,
-                                x=col_name_1,
-                                y=col_name_2,
-                                color='blue',
-                                alpha=0.2,
-                                ax=ax)
-            s.set_title(f'Distribution of \n"{col_name_1}" and \n"{col_name_2}"')
-            if test_id in ['LARGER_DIFF_RANGE'] and \
-                    self.check_columns_same_scale_2(col_name_1, col_name_2, order=10) and \
-                    xylim is not None:
-                ax.set_xlim(xylim)
-                ax.set_ylim(xylim)
-
-        # Hide some y tick labels as necessary
-        num_labels = len(ax.get_yticklabels())
-        max_ticks = 10
-        if num_labels > max_ticks:
-            step_shown = num_labels // max_ticks
-            for label_idx, label in enumerate(ax.get_yticklabels()):
-                if label_idx % step_shown != 0:
-                    label.set_visible(False)
-
-        if col_name_1 in self.date_cols:
-            fig.autofmt_xdate()
-        else:
-            num_labels = len(ax.get_xticklabels())
-            if num_labels > max_ticks:
-                step_shown = num_labels // max_ticks
-                for label_idx, label in enumerate(ax.get_xticklabels()):
-                    if label_idx % step_shown != 0:
-                        label.set_visible(False)
-
-        # For RARE_COMBINATION, draw the grid lines to make it more clear why certain values were flagged
-        if test_id in ['RARE_COMBINATION']:
-            for v in display_info['bins_1']:
-                if v not in [-np.inf, np.inf]:
-                    ax.axvline(v, color='green', linewidth=1, alpha=0.3)
-            for v in display_info['bins_2']:
-                if v not in [-np.inf, np.inf]:
-                    ax.axhline(v, color='green', linewidth=1, alpha=0.3)
-
-        plt.tight_layout()
-        clean_x_tick_labels(fig, ax)
-        plt.show()
-    '''
 
     def __plot_count_plot(self, column_name):
         fig, ax = plt.subplots(figsize=(4, 4))
@@ -3235,62 +3124,6 @@ class DataConsistencyChecker:
 
     def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
 
-        '''
-        def draw_scatter(df, x_col, y_col, draw_diagonal):
-            def draw_one(df, include_exceptions, ax):
-                min_range = min(df[x_col].min(), df[y_col].min())
-                max_range = max(df[x_col].max(), df[y_col].max())
-                rng = max_range - min_range
-                xlim = (min_range - (rng / 50.0), max_range + (rng / 50.0))
-                ylim = xlim
-                if not show_exceptions:
-                    s = sns.scatterplot(
-                        data=df,
-                        x=x_col,
-                        y=y_col,
-                        color='blue',
-                        alpha=0.2,
-                        label='Not Flagged',
-                        ax=ax
-                    )
-                    s.set_title(f'Distribution of "{x_col}" and "{y_col}"')
-                else:
-                    result_col_name = self.get_results_col_name(test_id, columns_set)
-                    df['Flagged'] = self.test_results_df[result_col_name]
-                    s = sns.scatterplot(
-                        data=df[df['Flagged'] == 0],
-                        x=x_col,
-                        y=y_col,
-                        color='blue',
-                        alpha=0.2,
-                        label='Normal',
-                        ax=ax
-                    )
-                    s = sns.scatterplot(
-                        data=df[df['Flagged'] == 1],
-                        x=x_col,
-                        y=y_col,
-                        color='red',
-                        alpha=1.0,
-                        label='Flagged',
-                        ax=ax
-                    )
-                    s.set_title(f'Distribution of "{x_col}" and "{y_col}" (Flagged values in red)')
-                s.set_xlim(xlim)
-                s.set_ylim(ylim)
-
-                if draw_diagonal:
-                    plt.plot(xlim, ylim)
-                if plt.legend():
-                    plt.legend().remove()
-                clean_x_tick_labels(fig, ax)
-
-            fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(8, 4))
-            draw_one(df=df[df['Flagged'] == 0], include_exceptions=False, ax=ax[0])
-            draw_one(df=df, include_exceptions=True, ax=ax[1])
-            plt.show()
-        '''
-
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
                        'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
                        'EARLY_DATES', 'LATE_DATES']:
@@ -3298,7 +3131,6 @@ class DataConsistencyChecker:
 
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             if len(cols) == 2:
-                #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
                 self.__draw_scatter_plot(
                     df=self.orig_df,
                     test_id=test_id,
@@ -3312,7 +3144,6 @@ class DataConsistencyChecker:
 
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
-            #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
             self.__draw_scatter_plot(
                 df=self.orig_df,
                 test_id=test_id,
@@ -3325,7 +3156,6 @@ class DataConsistencyChecker:
 
         if test_id in ['SAME_VALUES']:
             if self.orig_df[cols[0]].nunique() > 5:
-                #self.__plot_scatter_plot(test_id, cols, columns_set, show_exceptions, display_info)
                 self.__draw_scatter_plot(
                     df=self.orig_df,
                     test_id=test_id,
@@ -3401,7 +3231,6 @@ class DataConsistencyChecker:
             elif test_id in ['SIMILAR_TO_RATIO']:
                 calculated_col = 'Division Results'
                 df[calculated_col] = self.numeric_vals_filled[col_name_1] / self.numeric_vals_filled[col_name_2]
-            #draw_scatter(df, col_name_3, calculated_col, draw_diagonal=True)
             self.__draw_scatter_plot(df=df,
                                      test_id=test_id,
                                      x_col=col_name_3,
@@ -4529,8 +4358,34 @@ class DataConsistencyChecker:
 
     def get_limit_subset_sizes(self, full_cols_arr, similar_cols_dict, calc_size):
         """
-        Used by __check_sum_of_columns, as well as min, max, and mean
+        Used by __check_sum_of_columns, as well as min, max, and mean. Used to determine how large of subsets we're
+        able to support. If there are hundreds of numeric columns, we cannot support subsets of hundreds of columns
+        but may be able to process subsets of size 2, 3, or more.
+
+        Parameters:
+
+        full_cols_arr: list
+            The set of columns to use for the current test
+
+        similar_cols_dict: dictionary
+            Indicates which columns have similar values and so are comparable
+
+        calc_size: int
+            The initial calculation of the number of combinations, using all subset sizes. If this is within
+            max_combinations, we can support subsets of any size.
+
+        Returns:
+
+            limit_subset_sizes: bool
+                Set true if we can execute the test but only with a reduced subset size.
+
+            max_subset_size: int
+                Set to -1 if there is no need to limit the sizes of subsets.
+
+            can_process: bool
+                Set true if either using the full set of subsets is workable, or a smaller size was found that is valid
         """
+
         limit_subset_sizes = False
         max_subset_size = -1
         can_process = True
@@ -4547,7 +4402,9 @@ class DataConsistencyChecker:
                     limit_subset_sizes = True
                     break
 
-            if self.verbose >= 2:
+            can_process = limit_subset_sizes
+
+            if self.verbose >= 1:
                 if limit_subset_sizes:
                     print((f"  Due to the potential number of combinations, limiting test to subsets of size "
                            f"{max_subset_size}."))
@@ -4555,7 +4412,7 @@ class DataConsistencyChecker:
                     print((f"  Skipping test. Given the number of similar columns for each positive numeric "
                            f"column, there are {calc_size_limited:,} combinations, even limiting testing to subsets "
                            f"2 columns. max_combinations is currently set to {self.max_combinations:,}."))
-                    can_process = False
+
         return limit_subset_sizes, max_subset_size, can_process
 
     def get_decision_tree_rules_as_categories(self, rules, categorical_features):
@@ -7009,18 +6866,18 @@ class DataConsistencyChecker:
 
     def __generate_unusual_order_magnitude(self):
         """
-        Patterns without exceptions: 'unusual_number rand' has values spanning many orders of magnitude and no pattern.
-            'unusual_number all' has a strong pattern, as all values are within 1 order of magnitude.
-        Patterns with exception: 'unusual_number most' has a strong pattern, with most values having a value within an
-            order of magnitude of each other, with one value many orders of magnitude larger. 'unusual_number rand'
-            may occasionally randomly generate unusual values as well, which may be flagged as exceptions.
+        Patterns without exceptions: 'unusual_number all' has a strong pattern, as all values are within 1 order of
+            magnitude.
+        Patterns with exception: 'unusual_number most_1' has a strong pattern, with most values having a value within an
+            order of magnitude of each other, with one value many orders of magnitude larger. Similar for
+            'unusual_number most_2'
         """
         self.__add_synthetic_column('unusual_number all',
                                     [random.randint(4, 8) * 100 for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('unusual_number most_1',
                                     [random.randint(1, 5) * 100 for _ in range(self.num_synth_rows-1)] + [999_999_999])
         self.__add_synthetic_column('unusual_number most_2',
-                                    [random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)])
+                                    sorted([random.randint(1000, 1_000_000) for _ in range(self.num_synth_rows)], reverse=True))
 
     def __check_unusual_order_magnitude(self, test_id):
         for col_name in self.numeric_cols:
@@ -7342,7 +7199,7 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols:
             num_pos = (self.numeric_vals[col_name] > 0).tolist().count(True)
             num_neg = (self.numeric_vals[col_name] < 0).tolist().count(True)
-            if num_pos < (self.num_rows * 0.10) or num_neg < (self.num_rows * 0.10):
+            if num_pos < (self.num_valid_rows[col_name] * 0.10) or num_neg < (self.num_valid_rows[col_name] * 0.10):
                 continue
             abs_vals = self.numeric_vals[col_name].abs()
             d1 = abs_vals.quantile(0.1)
@@ -9781,7 +9638,8 @@ class DataConsistencyChecker:
             column_pos_arr, include_self=False, lower_divisor=20.0, upper_multiplier=1.0)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
+        limit_subset_sizes, max_subset_size, can_process = \
+            self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
         if not can_process:
             return
 
@@ -9953,7 +9811,8 @@ class DataConsistencyChecker:
             self.numeric_cols, include_self=False, lower_divisor=1.0, upper_multiplier=10.0, check_larger_false=True)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
+        limit_subset_sizes, max_subset_size, can_process = \
+            self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
         if not can_process:
             return
 
@@ -10068,7 +9927,8 @@ class DataConsistencyChecker:
             self.numeric_cols, include_self=False, lower_divisor=10.0, upper_multiplier=1.0, check_larger_true=True)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
+        limit_subset_sizes, max_subset_size, can_process = \
+            self.get_limit_subset_sizes(self.numeric_cols, similar_cols_dict, calc_size)
         if not can_process:
             return
 
@@ -10198,7 +10058,8 @@ class DataConsistencyChecker:
             column_pos_arr, include_self=True, lower_divisor=5.0, upper_multiplier=5.0)
 
         # Check if there are too many combinations to execute this test
-        limit_subset_sizes, max_subset_size, can_process = self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
+        limit_subset_sizes, max_subset_size, can_process = \
+            self.get_limit_subset_sizes(column_pos_arr, similar_cols_dict, calc_size)
         if not can_process:
             return
 
