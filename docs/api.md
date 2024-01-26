@@ -1,20 +1,12 @@
 # Full API
 1. [DataConsistencyChecker](#DataConsistencyChecker)
 2. [init_data](#init_data)
-3. [Third Example](#third-example)
-4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
+3. [check_data_quality](#check_data_quality)
+   ## Methods to generate or modify test data
+5. [generate_synth_data](#generate_synth_data)
+6. [modify_real_data](#modify_real_data)
 
 ## DataConsistencyChecker
-**DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
-
-        Initialize a DataConsistencyChecker object.
-
-        iqr_limit: float
-            Inter-quartile range is used in several tests to find unusually small or large values. For example,
-            to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
-            inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
-            is used here.
-
 **DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
 
         Initialize a DataConsistencyChecker object.
@@ -52,6 +44,7 @@
         known_date_cols: list of strings
             If specified, these, and only these, columns will be treated as date columns.
 
+## check_data_quality
 **check_data_quality**(append_results=False, execute_list=None, exclude_list=None, test_start_id=0, fast_only=False,
                     include_code_tests=True, freq_contamination_level=0.005, rare_contamination_level=0.1,run_parallel=False)
 
@@ -98,6 +91,7 @@
 
 ### Methods to generate or modify test data
 
+### generate_synth_data
 **generate_synth_data**(all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none")
 
         Generate a random synthetic dataset which may be used to demonstrate each of the tests.
@@ -125,6 +119,7 @@
             If set to 'one-row', only one row will be given None values. If set to '80-percent', 80% of all values
             will be set to None.
 
+## modify_real_data
 **modify_real_data**(df, num_modifications=5)
 
         Given a real dataset, modify it slightly, in order to add what are likely inconsistencies to the data
@@ -143,15 +138,17 @@
 
 ### Methods to output information about the tool, unrelated to any specific dataset or test execution
 
+## get_test_list
 **get_test_list**():
         
         Returns a python list, listing each test available by ID.
-        
+
+## get_test_descriptions
 **get_test_descriptions**()
         
         Returns a python dictionary, with each test ID as key, matched with a short text explanation of the test.
         
-        
+## print_test_descriptions
 **print_test_descriptions**(long_desc=False)
         
         Prints to screen a prettified list of tests and their descriptions.
