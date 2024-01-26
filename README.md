@@ -266,7 +266,7 @@ The [Test_Demo API Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker
             The number of modifications to make. This should be small, so as not to change the overall distribution
             of the data
 
-        Return:
+        Returns:
             the modified dataframe,
             a list of row numbers and column names, indicating the cells that were modified
 
@@ -607,7 +607,7 @@ The [Test_Demo API Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker
 
 ### Methods to find relationships between the data and the numbers of issues found
 
-plot_columns_vs_final_scores()
+**plot_columns_vs_final_scores**()
         
         Used to determine if there are any relationships between column values and the final scores of the rows. This
         displays tables and plots presenting any relationships found.
