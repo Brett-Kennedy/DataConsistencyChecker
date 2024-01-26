@@ -1,19 +1,19 @@
 # Full API
 
    #### &nbsp;&nbsp;&nbsp; The main APIs
-[DataConsistencyChecker](#DataConsistencyChecker)
-[init_data](#init_data)
-[check_data_quality](#check_data_quality)
+- [DataConsistencyChecker](#DataConsistencyChecker)
+- [init_data](#init_data)
+- [check_data_quality](#check_data_quality)
    #### Methods to generate or modify test data
-[generate_synth_data](#generate_synth_data)
-[modify_real_data](#modify_real_data)
+- [generate_synth_data](#generate_synth_data)
+- [modify_real_data](#modify_real_data)
    #### Methods to output information about the tool, unrelated to any specific dataset or test execution
-[get_test_list](#get_test_list)
-[get_test_descriptions](#get_test_descriptions)
-[print_test_descriptions](#print_test_descriptions)
-[get_patterns_shortlist](#get_patterns_shortlist)
-[get_tests_for_codes](#get_tests_for_codes)
-[demo_test](#demo_test)
+- [get_test_list](#get_test_list)
+- [get_test_descriptions](#get_test_descriptions)
+- [print_test_descriptions](#print_test_descriptions)
+- [get_patterns_shortlist](#get_patterns_shortlist)
+- [get_tests_for_codes](#get_tests_for_codes)
+- [demo_test](#demo_test)
     #### Methods to output statistics about the dataset, unrelated to any tests executed
 [display_columns_types_list](#display_columns_types_list)
 [display_columns_types_table](#display_columns_types_table)
