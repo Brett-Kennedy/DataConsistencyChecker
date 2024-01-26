@@ -1,5 +1,37 @@
 # Full API
 
+
+# Table of Contents
+1. [Example](#example)
+2. [Example2](#example2)
+3. [Third Example](#third-example)
+4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
+
+
+## Example
+## Example2
+## Third Example
+## [Fourth Example](http://www.fourthexample.com)
+
+
+
+### Table of Contents
+1. [DataConsistencyChecker](#DataConsistencyChecker)
+2. [Example2](#example2)
+3. [Third Example](#third-example)
+4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
+
+## DataConsistencyChecker
+**DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
+
+        Initialize a DataConsistencyChecker object.
+
+        iqr_limit: float
+            Inter-quartile range is used in several tests to find unusually small or large values. For example,
+            to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
+            inter-quartile range is often used. Ex: Q3 + 1.5*IQR. To avoid noisy results, a higher coefficient
+            is used here.
+
 **DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
 
         Initialize a DataConsistencyChecker object.
