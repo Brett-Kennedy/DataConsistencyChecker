@@ -15,10 +15,10 @@
 - [get_tests_for_codes](#get_tests_for_codes)
 - [demo_test](#demo_test)
     #### Methods to output statistics about the dataset, unrelated to any tests executed
-[display_columns_types_list](#display_columns_types_list)
-[display_columns_types_table](#display_columns_types_table)
+- [display_columns_types_list](#display_columns_types_list)
+- [display_columns_types_table](#display_columns_types_table)
     #### Methods to output the results of the analysis in various ways
-[get_test_ids_with_results](#get_test_ids_with_results)
+- [get_test_ids_with_results](#get_test_ids_with_results)
 - [get_single_feature_tests_matrix](#get_single_feature_tests_matrix)
 - [get_patterns_list](#get_patterns_list)
 - [get_exceptions_list](#get_exceptions_list)
