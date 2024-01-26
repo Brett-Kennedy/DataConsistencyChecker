@@ -2,9 +2,15 @@
 1. [DataConsistencyChecker](#DataConsistencyChecker)
 2. [init_data](#init_data)
 3. [check_data_quality](#check_data_quality)
-   ## Methods to generate or modify test data
+   #### Methods to generate or modify test data
 5. [generate_synth_data](#generate_synth_data)
 6. [modify_real_data](#modify_real_data)
+   #### Methods to output information about the tool, unrelated to any specific dataset or test execution
+7. [get_test_list](#get_test_list)
+8. [get_test_descriptions](#get_test_descriptions)
+9. [print_test_descriptions](#print_test_descriptions)
+10. [get_test_list](#get_test_list)
+11. [get_test_list](#get_test_list)
 
 ## DataConsistencyChecker
 **DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
