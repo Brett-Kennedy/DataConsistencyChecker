@@ -9,8 +9,36 @@
 7. [get_test_list](#get_test_list)
 8. [get_test_descriptions](#get_test_descriptions)
 9. [print_test_descriptions](#print_test_descriptions)
-10. [get_test_list](#get_test_list)
-11. [get_test_list](#get_test_list)
+10. [get_patterns_shortlist](#get_patterns_shortlist)
+11. [get_tests_for_codes](#get_tests_for_codes)
+12. [demo_test](#demo_test)
+    #### Methods to output statistics about the dataset, unrelated to any tests executed
+12. [display_columns_types_list](#display_columns_types_list)
+13. [display_columns_types_table](#display_columns_types_table)
+    #### Methods to output the results of the analysis in various ways
+12. [get_test_ids_with_results](#get_test_ids_with_results)
+12. [get_single_feature_tests_matrix](#get_single_feature_tests_matrix)
+12. [get_patterns_list](#get_patterns_list)
+12. [get_exceptions_list](#get_exceptions_list)
+12. [get_exceptions_by_column](#get_exceptions_by_column)
+12. [summarize_patterns_by_test_and_feature](#summarize_patterns_by_test_and_feature)
+12. [summarize_exceptions_by_test_and_feature](#summarize_exceptions_by_test_and_feature)
+12. [summarize_patterns_by_test](#summarize_patterns_by_test)
+12. [summarize_exceptions_by_test](#summarize_exceptions_by_test)
+12. [summarize_patterns_and_exceptions](#summarize_patterns_and_exceptions)
+12. [display_detailed_results](#display_detailed_results)
+12. [display_next](#display_next)
+12. [get_outlier_scores](#get_outlier_scores)
+12. [get_results_by_row_id](#get_results_by_row_id)
+12. [plot_final_scores_distribution_by_row](#plot_final_scores_distribution_by_row)
+12. [plot_final_scores_distribution_by_feature](#plot_final_scores_distribution_by_feature)
+12. [plot_final_scores_distribution_by_test](#plot_final_scores_distribution_by_test)
+12. [display_least_flagged_rows](#display_least_flagged_rows)
+12. [display_most_flagged_rows](#display_most_flagged_rows)
+12. [quick_report](#quick_report)
+    #### Methods to find relationships between the data and the numbers of issues found
+12. [plot_columns_vs_final_scores](#plot_columns_vs_final_scores)
+    
 
 ## DataConsistencyChecker
 **DataConsistencyChecker**(iqr_limit=3.5, idr_limit=1.0, max_combinations=100_000, verbose=1)
@@ -163,20 +191,20 @@
             If True, longer descriptions will be displayed for tests where available. If False, the short descriptions
             only will be displayed.
         
-
+## get_patterns_shortlist
   **get_patterns_shortlist**()
         
         Returns an array with the IDs of the tests in the short list. These are the tests that will be presented by
         default when calling get_patterns() to list the patterns discovered.
         
-
+## get_tests_for_codes
 **get_tests_for_codes**()
         
         Returns an array with the IDs of the tests that related to ID and code values. Where it is known that no columns
         are of this type, these tests may be skipped.
         
 
-
+## demo_test
 **demo_test**(test_id, include_nulls=False)
         
         This provides a demo of a single test.
@@ -195,15 +223,16 @@
             If True, several versions of the data will be created with either few or many Null values.
         
 
-### Methods to output statistics about the dataset, unrelated to any tests executed.
+### Methods to output statistics about the dataset, unrelated to any tests executed
 
+## display_columns_types_list
 **display_columns_types_list**()
         
         Displays, for each of the four column types identified by the tool, which columns in the data are of those
         types. This may be called to check the column types were identified correctly. This will skip columns removed
         from analysis due to having only one unique value.
         
-
+## display_columns_types_table
 **display_columns_types_table**()
         
         Displays the first rows of the data, along with the identified column type in the first row. Similar to
@@ -212,6 +241,7 @@
         
 ### Methods to output the results of the analysis in various ways
 
+## get_test_ids_with_results
 **get_test_ids_with_results**(include_patterns=True, include_exceptions=True)
         
         Gets a list of test ids, which may be used, for example, to loop through tests calling other APIs such as
@@ -229,7 +259,7 @@
             Returns an array of test ids, where each test found at least one pattern, with or without exceptions, as
             specified
         
-        
+## get_single_feature_tests_matrix      
 **get_single_feature_tests_matrix**():
         
         Returns a matrix with a column for every column in the original data and a row for each test executed. The cell
@@ -239,7 +269,7 @@
         values, many zero values, few or many unique values, etc. This in necessary to make the execution on many tests
         tractable where there are many columns and/or many rows.
         
-
+## get_patterns_list
 **get_patterns_list**(test_exclude_list=None, column_exclude_list=None, show_short_list_only=True)
         
         This returns a dataframe containing a list of all, or some, of the identified patterns that had no exceptions.
@@ -256,7 +286,8 @@
         show_short_list_only: bool
             If True, only the tests that are most relevant (least noisy) will be returned. If False, all identified
             patterns matching the other parameters will be returned.
-        
+
+## get_exceptions_list
 **get_exceptions_list**()
         
         Returns a dataframe containing a row for each pattern that was discovered with exceptions. This has a similar
@@ -264,7 +295,7 @@
         of exceptions found. The dataframe has columns for: test id, the set of columns involved in the pattern,
         a description of the pattern and exceptions, and the number of exceptions.
         
-
+## get_exceptions
 **get_exceptions**()
         
         Returns a dataframe with the same set of rows as the original dataframe, but a column for each pattern that was
@@ -274,7 +305,7 @@
         Returns:
             pandas.DataFrame: DataFrame containing exceptions and final scores
         
-
+## get_exceptions_by_column
 **get_exceptions_by_column**()
         
         Returns a dataframe with the same shape as the original dataframe, but with each cell containing, instead
@@ -283,7 +314,7 @@
         For example with a pattern covering 4 columns, any cells that are flagged will receive a score of 0.25 for
         this pattern. Each cell will have the sum of all patterns with exceptions where they are flagged.
         
-        
+## summarize_patterns_by_test_and_feature      
 **summarize_patterns_by_test_and_feature**(all_tests=False, heatmap=False)
         
         Create and return a dataframe with a row for each test and a column for each feature in the original data. Each
@@ -297,7 +328,7 @@
         heatmap: bool
             If True, a heatmap will be displayed
         
-
+## summarize_exceptions_by_test_and_feature
 **summarize_exceptions_by_test_and_feature**(all_tests=False, heatmap=False)
         
         Create a dataframe with a row for each test and a column for each feature in the original data. Each cell has an
@@ -312,7 +343,7 @@
         heatmap: bool:
             If set True, a heatmap of the dataframe will be displayed.
         
-
+## summarize_patterns_by_test
 **summarize_patterns_by_test**(heatmap=False)
         
         Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
@@ -320,7 +351,8 @@
 
         heatmap: bool
             If True, a heatmap of the results are displayed
-        
+
+## summarize_exceptions_by_test
 **summarize_exceptions_by_test**(heatmap=False)
         
         Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
@@ -328,7 +360,8 @@
 
         heatmap: bool
             If True, a heatmap of the results are displayed
-                
+
+## summarize_patterns_and_exceptions               
 **summarize_patterns_and_exceptions**(all_tests=False, heatmap=False)
         
         Returns a dataframe with a row per test, indicating the number of patterns with and without exceptions that
@@ -343,6 +376,7 @@
         heatmap: bool
             If True, a heatmap of form of the table will be displayed.
 
+## display_detailed_results
 **display_detailed_results**(
             test_id_list=None,
             col_name_list=None,
@@ -409,7 +443,7 @@
             max_shown will be set. If set to -1, a default will be used, which considers if plots and examples are
             to be displayed. The default is 200 without plots or examples, 100 with either, and 50 with both.
         
-
+## display_next
 **display_next**()
         
         This may be used where there are many results, and we wish to view detailed descriptions of all or most of
@@ -419,34 +453,35 @@
         where many tests flag patterns, in most cases only a subset of these would be useful to examine in detail,
         though this varies for different projects.
         
-
+## get_outlier_scores
 **get_outlier_scores**()
         
         Returns an outlier score for each row, similar to most outlier detectors.
         Returns a python array with an element for each row in the original data. All values are non-negative integer
         values, with most rows containing zero for most datasets.
-        
+
+## get_results_by_row_id
 **get_results_by_row_id**(row_num)
         
         Returns a list of tuples, with each tuple containing a test ID, and column name, for all issues flagged in the
         specified row.
         
-
+## plot_final_scores_distribution_by_row
 **plot_final_scores_distribution_by_row**()
         
         Display a probability plot and histogram representing the distribution of final scores by row.
         
-
+## plot_final_scores_distribution_by_feature
 **plot_final_scores_distribution_by_feature**()
         
         Display a bar plot representing the distribution of final scores by feature.
         
-
+## plot_final_scores_distribution_by_test
  **plot_final_scores_distribution_by_test**()
         
         Display a bar plot representing the distribution of final scores by test.
                
-
+## display_least_flagged_rows
 **display_least_flagged_rows**(with_results=True, n_rows=10)
         
         This displays the n_rows rows from the original data with the lowest scores. These are the rows with the least
@@ -461,7 +496,7 @@
         n_rows: int
             The maximum number of original rows to present.
         
-
+## display_most_flagged_rows
 **display_most_flagged_rows**(with_results=True, n_rows=10)
         
         This is similar to display_least_flagged_rows, but displays the rows with the most identified issues.
@@ -472,7 +507,8 @@
             columns will be highlighted, but there will not be an indication of which tests flagged them.
         n_rows: int
             The maximum number of original rows to present.
-        
+
+## quick_report
 **quick_report**()
         
         A convenience method, which calls several other APIs, to give an overview of the results in a single API.
