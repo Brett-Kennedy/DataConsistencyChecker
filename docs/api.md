@@ -241,7 +241,7 @@
         calling display_columns_types_list(), this may be used to determine if the inferred column types are correct.
         
         
-### Methods to output the results of the analysis in various ways
+## Methods to output the results of the analysis in various ways
 
 ## get_test_ids_with_results
 **get_test_ids_with_results**(include_patterns=True, include_exceptions=True)
