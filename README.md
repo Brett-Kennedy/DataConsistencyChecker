@@ -146,14 +146,15 @@ An example where one column was found to be the sum of two other columns with tw
 The [Test_Demo API Demo](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/Demo%20Notebooks/Demo_Test_Method.ipynb) notebook demonstrates the test_demo() API, which provides examples of a specified test ID using the provided synthetic data. 
 
 ## Full API
-[Full API Documentation](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/api.md)
+For a description of the APIs, see: [Full API Documentation](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/api.md)
 
 ## Performance
+For note on reducing the execution times of the analysis, refer to:
 [Performance Notes](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/performance.md)
 
 
 ## Unit Tests
-[Notes on unit tests](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/unit_tests.md)
+For contributors: [Notes on unit tests](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/unit_tests.md)
 
 ## Additional Documenation
 Notes on additional topics, inlcuding date columns, clearing issues, contamination levels, the sort order of the data, and the use of synthetic may be found at: [Additional Documentation](https://github.com/Brett-Kennedy/DataConsistencyChecker/blob/main/docs/additional_documentation.md)
