@@ -1,23 +1,6 @@
 # Full API
-
-
-# Table of Contents
-1. [Example](#example)
-2. [Example2](#example2)
-3. [Third Example](#third-example)
-4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
-
-
-## Example
-## Example2
-## Third Example
-## [Fourth Example](http://www.fourthexample.com)
-
-
-
-### Table of Contents
 1. [DataConsistencyChecker](#DataConsistencyChecker)
-2. [Example2](#example2)
+2. [init_data](#init_data)
 3. [Third Example](#third-example)
 4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
 
@@ -61,6 +44,7 @@
             2: a description of each test, and progress related to each of the more expensive tests will be displayed
                as well.
 
+##init_data
 **init_data**(df, known_date_cols=None)
 
         df: dataframe to be assessed
