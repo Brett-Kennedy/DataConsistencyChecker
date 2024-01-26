@@ -69,12 +69,6 @@ class DataConsistencyChecker:
         """
         Initialize a DataConsistencyChecker object.
 
-        execute_list: a list of test ids.
-            If specified, only these tests will be executed.
-
-        exclude_list: a list of test ids.
-            If specified, these tests will not be executed; all others will be.
-
         iqr_limit: float
             Inter-quartile range is used in several tests to find unusually small or large values. For example,
             to identify large values, Q3 (the 3rd quartile, or 75th percentile plus some multiplier times the
@@ -117,7 +111,8 @@ class DataConsistencyChecker:
         self.exclude_list = None
         self.execution_test_list = []
 
-        self.contamination_level = -1
+        self.freq_contamination_level = -1
+        self.rare_contamination_level = -1        
 
         # Synthetic data, if specified to create
         self.synth_df = None
@@ -231,10 +226,10 @@ class DataConsistencyChecker:
             'MATCHED_MISSING':          ('', 'Check if two columns have missing values consistently in the same rows.',
                                          self.__check_matched_missing, self.__generate_matched_missing,
                                          True, True, False, False),
-            'UNMATCHED_MISSING':        ('Check if two columns have null values consistently in different rows',
+            'OPPOSITE_MISSING':        ('Check if two columns have null values consistently in different rows',
                                          ('Check if two columns both frequently have null values, but consistently '
                                           'not in the same rows.'),
-                                         self.__check_unmatched_missing, self.__generate_unmatched_missing,
+                                         self.__check_opposite_missing, self.__generate_opposite_missing,
                                          True, True, False, False),
             'SAME_VALUES':              ('', 'Check if two columns consistently have the same values.',
                                          self.__check_same, self.__generate_same,
@@ -467,13 +462,13 @@ class DataConsistencyChecker:
                                               'more other columns.'),
                                          self.__check_max_of_columns, self.__generate_max_of_columns,
                                          True, True, False, False),
-            'ALL_POS_OR_ALL_NEG':       ('', ('Identify sets of columns where the values are consistently either all '
+            'MATCHED_SET_POS_NEG':      ('', ('Identify sets of columns where the values are consistently either all '
                                               'positive, or all negative.'),
-                                         self.check_all_pos_or_all_neg, self.generate_all_pos_or_all_neg,
+                                         self.check_mathed_set_pos_neg, self.generate_mathed_set_pos_neg,
                                          True, True, False, False),
-            'ALL_ZERO_OR_ALL_NON_ZERO': ('', ('Identify sets of columns where the values are consistently either all '
-                                              'zero, or non-zero.'),
-                                         self.check_all_zero_or_all_non_zero, self.generate_all_zero_or_all_non_zero,
+            'MATCHED_SET_ZERO_NON_ZERO':('', ('Identify sets of columns where the values are consistently either all '
+                                               'zero or non-zero.'),
+                                         self.check_matched_set_zero_non_zero, self.generate_matched_set_zero_non_zero,
                                          True, True, False, False),
             'DECISION_TREE_REGRESSOR':  ('', ('Check if a numeric column can be derived from the other columns using a '
                                               'small decision tree.'),
@@ -941,6 +936,8 @@ class DataConsistencyChecker:
         """
         Must be called before calling check_data_quality(). Prepares the data for checking for anomalies.
 
+        df: dataframe to be assessed
+
         known_date_cols: list of strings
             If specified, these, and only these, columns will be treated as date columns.
         """
@@ -990,7 +987,7 @@ class DataConsistencyChecker:
         self.date_cols = []
         self.string_cols = []
 
-        # As this is called before check_data_quality, self.contamination_level is not yet set. We use here the
+        # As this is called before check_data_quality, self.freq_contamination_level is not yet set. We use here the
         # default value in order to determine numeric columns with some non-numeric values.
         default_contamination_level = self.num_rows * 0.005
 
@@ -1344,12 +1341,12 @@ class DataConsistencyChecker:
             test_start_id=0,
             fast_only=False,
             include_code_tests=True,
-            contamination_level=0.005,
+            freq_contamination_level=0.005,
+            rare_contamination_level=0.1,
             run_parallel=False):
         """
-        Run the specified tests on the dataset specified here. This method identifies the patterns and exceptions to
-        these found in the data. Some information is returned, but additional API calls may be made as well to access
-        this information
+        Run the specified tests on the dataset specified in init_data(). This method identifies the patterns and
+        exceptions to these found in the data. Additional API calls may be made to access the results.
 
         append_results: bool
             If set True, any previous test results, from previous executions of check_data_quality() will be saved and
@@ -1377,9 +1374,13 @@ class DataConsistencyChecker:
             an 'X', or that the subsequent characters are 4 numeric characters. If set True, these tests will be
             executed.
 
-        contamination_level: int or float
+        freq_contamination_level: int or float
             The maximum fraction of rows in violation of the pattern where we consider the pattern to still be in place.
-            If set as an integer, this defines the maximum number of rows, as opposed to the fraction.
+            If set as an integer, this defines the maximum number of rows, as opposed to the fraction. This is used for 
+            tests that frequently find results and is set low to reduce over-reporting
+
+        rare_contamination_level: int or float
+            This is used for tests that rarely find results and is set high to reduce under-reporting
 
         run_parallel: bool
             If set True, the tests will be run in parallel, which can reduce overall execution time.
@@ -1410,21 +1411,21 @@ class DataConsistencyChecker:
 
         # Store the contamination_level in terms of number of rows. It may have been passed either in this form or as a
         # fraction.
-        if contamination_level > 1 and type(contamination_level) == int:
-            if contamination_level > len(self.orig_df):
-                print((f"Error. contamination rate set to {contamination_level}, more than the number of rows in the "
-                       f"dataframe passed. The contamination_level rate should be substantially smaller."))
+        if freq_contamination_level > 1 and type(freq_contamination_level) == int:
+            if freq_contamination_level > len(self.orig_df):
+                print((f"Error. contamination rate set to {freq_contamination_level}, more than the number of rows in "
+                       f"the dataframe passed. The contamination_level rate should be substantially smaller."))
                 return None
-            self.contamination_level = contamination_level
-        elif contamination_level < 1.0:
-            self.contamination_level = contamination_level * len(self.orig_df)
-            if self.contamination_level < 1.0:
-                if contamination_level != 0.005:
-                    print((f"Error. contamination rate set to {contamination_level}, not allowing even 1 row to be in "
-                           "violation of the patterns. Must be set to a larger value given the number of rows "
+            self.freq_contamination_level = freq_contamination_level
+        elif freq_contamination_level < 1.0:
+            self.freq_contamination_level = freq_contamination_level * len(self.orig_df)
+            if self.freq_contamination_level < 1.0:
+                if freq_contamination_level != 0.005:
+                    print((f"Error. contamination rate set to {freq_contamination_level}, not allowing even 1 row to "
+                           f"be in violation of the patterns. Must be set to a larger value given the number of rows "
                            "available."))
                     return None
-                self.contamination_level = 1
+                self.freq_contamination_level = 1
 
         # Adjust the test_start_id to 0 if necessary. 0 is the lowest valid value.
         if test_start_id < 0:
@@ -2437,6 +2438,8 @@ class DataConsistencyChecker:
         else:
             print("\n\n\n")
             print(test_id)
+        print_text(f"**Description**: {self.test_dict[test_id][TEST_DEFN_DESC]}")
+        print()
 
         self.display_detailed_results(test_id_list=[test_id], max_shown=25)
         self.current_display_test += 1
@@ -2444,7 +2447,7 @@ class DataConsistencyChecker:
     def get_outlier_scores(self):
         """
         Returns an outlier score for each row, similar to most outlier detectors.
-        Returns an python array with an element for each row in the original data. All values are non-negative integer
+        Returns a python array with an element for each row in the original data. All values are non-negative integer
         values, with most rows containing zero for most datasets.
         """
 
@@ -2910,7 +2913,7 @@ class DataConsistencyChecker:
 
     def __draw_row_rank_plot(self, test_id, col_name, show_exceptions):
         if not show_exceptions:
-            fig, ax = plt.subplots(figsize=(4, 4))
+            fig, ax = plt.subplots(figsize=(8, 4))
             vals = self.orig_df[col_name]
             if col_name in self.date_cols:
                 vals = [pd.to_datetime(x) for x in self.orig_df[col_name]]
@@ -2924,7 +2927,7 @@ class DataConsistencyChecker:
             plt.legend().remove()
             plt.show()
         else:
-            fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(8, 4))
+            fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(10, 4))
 
             # Find the flagged values and identify them on the plot
             results_col_name = self.get_results_col_name(test_id, col_name)
@@ -3287,7 +3290,7 @@ class DataConsistencyChecker:
             sns.countplot(x=self.orig_df[cols[0]].dt.month)
             plt.show()
 
-        if test_id in ['UNUSUAL_HOUR_OF_DAY']:
+        if test_id in ['UNUSUAL_HOUR']:
             sns.countplot(x=self.orig_df[cols[0]].dt.hour)
             plt.show()
 
@@ -3629,7 +3632,7 @@ class DataConsistencyChecker:
             df['Day of Month'] = pd.to_datetime(df[col_name]).dt.day
         elif test_id in ['UNUSUAL_MONTH']:
             df['Month'] = pd.to_datetime(df[col_name]).dt.month
-        elif test_id in ['UNUSUAL_HOUR_OF_DAY']:
+        elif test_id in ['UNUSUAL_HOUR']:
             df['Hour'] = pd.to_datetime(df[col_name]).dt.hour
         elif test_id in ['UNUSUAL_MINUTES']:
             df['Minutes'] = pd.to_datetime(df[col_name]).dt.minute
@@ -3731,6 +3734,9 @@ class DataConsistencyChecker:
             df['RATIO'] = pd.Series(display_info['Ratio']).loc[df.index]
         elif test_id in ['SIMILAR_WRT_DIFF']:
             df['DIFF'] = pd.Series(display_info['Diff']).loc[df.index]
+        elif test_id in ['CORRELATED_ALPHA_ORDER']:
+            df['Percentile Column 1'] = pd.Series(display_info['col_1_percentiles']).loc[df.index]
+            df['Percentile Column 2'] = pd.Series(display_info['col_2_percentiles']).loc[df.index]
 
         # Set the column order
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
@@ -3867,7 +3873,7 @@ class DataConsistencyChecker:
                 df_v0 = self.orig_df[self.orig_df[cols[2]] == v0].head(n_examples // 2)
                 df_v1 = self.orig_df[self.orig_df[cols[2]] == v1].head(n_examples // 2)
                 df = pd.concat([df_v0, df_v1])[cols]
-        elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'ALL_ZERO_OR_ALL_NON_ZERO']:
+        elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'MATCHED_SET_ZERO_NON_ZERO']:
             # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
@@ -3895,13 +3901,13 @@ class DataConsistencyChecker:
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
             df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_neg])
-        elif test_id in ['ALL_POS_OR_ALL_NEG']:
+        elif test_id in ['MATCHED_SET_POS_NEG']:
             # Show where col1 is positive and negative
             col_name_1 = cols[0]
             df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples // 2)
             df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples - len(df_v_pos))
             df = pd.concat([df_v_pos, df_v_neg])
-        elif test_id in ['EVEN_MULTIPLE', 'MATCHED_MISSING', 'UNMATCHED_MISSING']:
+        elif test_id in ['EVEN_MULTIPLE', 'MATCHED_MISSING', 'OPPOSITE_MISSING']:
             # Show where col 1 is null and non-null
             col_name_1, col_name_2 = cols[0], cols[1]
             df_v_null = self.orig_df[cols][(self.orig_df[col_name_1].apply(is_missing))].head(n_examples // 2)
@@ -4539,7 +4545,7 @@ class DataConsistencyChecker:
             self.patterns_arr.append([test_id, col_name, pattern_string, display_info])
             self.col_to_original_cols_dict[col_name] = original_cols
 
-        if (self.num_rows - self.contamination_level) <= num_true < self.num_rows:
+        if (self.num_rows - self.freq_contamination_level) <= num_true < self.num_rows:
             if allow_patterns:
                 if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
                                'PREDICT_NULL_DT']:
@@ -4619,7 +4625,7 @@ class DataConsistencyChecker:
                 self.col_to_original_cols_dict[col_name] = original_cols
         elif test_series.nunique() <= 5:
             counts_series = test_series.value_counts(normalize=False)
-            low_vals = [x for x, y in zip(counts_series.index, counts_series.values) if y < self.contamination_level]
+            low_vals = [x for x, y in zip(counts_series.index, counts_series.values) if y < self.freq_contamination_level]
             if len(low_vals) > 0:
                 results_col = test_series.isin(low_vals)
 
@@ -4845,7 +4851,7 @@ class DataConsistencyChecker:
         """
         Populates self.larger_pairs_with_bool_dict, which has a key for each pair of columns, (A, B) where A is
         potentially larger than B, based on their medians. The value for each key is a boolean value indicating
-        if A is actually, row by row, larger than B consistently, with no more than self.contamination_level exceptions.
+        if A is actually, row by row, larger than B consistently, with no more than self.freq_contamination_level exceptions.
         """
         if self.larger_pairs_with_bool_dict:
             return self.larger_pairs_with_bool_dict
@@ -4854,7 +4860,7 @@ class DataConsistencyChecker:
         for key in larger_dict.keys():
             if larger_dict[key] is not None:
                 self.larger_pairs_with_bool_dict[key] = \
-                    larger_dict[key].tolist().count(True) > self.contamination_level
+                    larger_dict[key].tolist().count(True) > self.freq_contamination_level
             else:
                 self.larger_pairs_with_bool_dict[key] = False
         return self.larger_pairs_with_bool_dict
@@ -4867,7 +4873,7 @@ class DataConsistencyChecker:
         for key in larger_or_equal_dict.keys():
             if larger_or_equal_dict[key] is not None:
                 self.larger_or_equal_pairs_with_bool_dict[key] = \
-                    larger_or_equal_dict[key].tolist().count(True) > self.contamination_level
+                    larger_or_equal_dict[key].tolist().count(True) > self.freq_contamination_level
             else:
                 self.larger_or_equal_pairs_with_bool_dict[key] = False
         return self.larger_or_equal_pairs_with_bool_dict
@@ -4997,7 +5003,7 @@ class DataConsistencyChecker:
                                                     self.orig_df[col_name_b],
                                                     self.orig_df[col_name_a].isna(),
                                                     self.orig_df[col_name_b].isna())]
-            if are_same_arr.count(True) > (self.num_rows - self.contamination_level):
+            if are_same_arr.count(True) > (self.num_rows - self.freq_contamination_level):
                 self.cols_same_bool_dict[pairs_tuple] = True
             else:
                 self.cols_same_bool_dict[pairs_tuple] = False
@@ -5591,14 +5597,14 @@ class DataConsistencyChecker:
             null_arr = self.orig_df[col_name].apply(is_missing)
             non_null_arr = ~null_arr
             num_null = null_arr.sum()
-            if (self.num_rows - self.contamination_level) < num_null < self.num_rows:
+            if (self.num_rows - self.freq_contamination_level) < num_null < self.num_rows:
                 self.__process_analysis_binary(
                     test_id,
                     [col_name],
                     null_arr,
                     f"The column contains values that are consistently NULL"
                 )
-            if 0 <= num_null < self.contamination_level:
+            if 0 <= num_null < self.freq_contamination_level:
                 self.__process_analysis_binary(
                     test_id,
                     [col_name],
@@ -5638,7 +5644,7 @@ class DataConsistencyChecker:
 
             counts_series = self.orig_df[col_name].astype(str).value_counts(normalize=False, dropna=False)
             all_rare_vals = [str(x) for x, y in zip(counts_series.index, counts_series.values)
-                             if y < self.contamination_level]
+                             if y < self.freq_contamination_level]
             non_null_rare_vals = [str(x) for x in all_rare_vals if not is_missing(x)]
             # It is not possible to sort None or NaN values
             rare_vals = sorted(non_null_rare_vals)
@@ -5699,7 +5705,7 @@ class DataConsistencyChecker:
                 numeric_vals = self.numeric_vals_filled[col_name]
                 numeric_vals = numeric_vals.fillna(0)
                 if (numeric_vals.astype(int) == numeric_vals).tolist().count(False) > \
-                        self.contamination_level:
+                        self.freq_contamination_level:
                     continue
 
             # Test on a sample first
@@ -5811,7 +5817,7 @@ class DataConsistencyChecker:
                 # Do not flag rare values, as there is another test for that.
                 rare_values = []
                 for v in self.orig_df[col_name].unique():
-                    if (v != v) or (self.orig_df[col_name].tolist().count(v) < self.contamination_level):
+                    if (v != v) or (self.orig_df[col_name].tolist().count(v) < self.freq_contamination_level):
                         rare_values.append(v)
 
                 # Create a binary (one-hot) column for each value for each lag. Sklearn decision trees can not work
@@ -6056,25 +6062,25 @@ class DataConsistencyChecker:
             num_missing_1 = col_1_missing_arr.count(True)
             if self.verbose >= 2 and col_idx_1 > 0 and col_idx_1 % 100 == 0:
                 print(f"  Examining column {col_idx_1} of {len(self.orig_df.columns)} columns")
-            if num_missing_1 < self.contamination_level:
+            if num_missing_1 < self.freq_contamination_level:
                 continue
-            if num_missing_1 > (self.num_rows - self.contamination_level):
+            if num_missing_1 > (self.num_rows - self.freq_contamination_level):
                 continue
 
             for col_idx_2 in range(col_idx_1 + 1, len(self.orig_df.columns)):
                 col_name_2 = self.orig_df.columns[col_idx_2]
                 col_2_missing_arr = is_missing_dict[col_name_2].tolist()
                 num_missing_2 = col_2_missing_arr.count(True)
-                if num_missing_2 < self.contamination_level:
+                if num_missing_2 < self.freq_contamination_level:
                     continue
-                if num_missing_2 > (self.num_rows - self.contamination_level):
+                if num_missing_2 > (self.num_rows - self.freq_contamination_level):
                     continue
 
                 # If the difference between the number of missing values is too large, there is not a pattern.
                 # For example, if col 1 has 400 missing and col 2 has 300, the difference is 100. So, there are at
                 # least 100 rows where col 1 has Null and col 2 does not. Assuming this is greater than the
                 # contamination level (probably set to between 1 and 50), there can not be a match.
-                if abs(num_missing_1 - num_missing_2) > self.contamination_level:
+                if abs(num_missing_1 - num_missing_2) > self.freq_contamination_level:
                     continue
 
                 test_series = [x == y for x, y in zip(col_1_missing_arr, col_2_missing_arr)]
@@ -6112,26 +6118,26 @@ class DataConsistencyChecker:
                      f'{num_missing_2} Null values) consistently have missing values in the same rows.')
                 )
 
-    def __generate_unmatched_missing(self):
+    def __generate_opposite_missing(self):
         """
-        Patterns without exceptions: 'unmatched_missing_vals rand_a', 'unmatched_missing_vals all_1' have Null values
-            strictly different rows. 'unmatched_missing_vals all_2' matches as well, creating a pattern with 3
+        Patterns without exceptions: 'opposite_missing_vals rand_a', 'opposite_missing_vals all_1' have Null values
+            strictly different rows. 'opposite_missing_vals all_2' matches as well, creating a pattern with 3
             columns.
-        Patterns with exception: 'unmatched_missing_vals rand_a' and 'unmatched_missing_vals most' have Null values in
+        Patterns with exception: 'opposite_missing_vals rand_a' and 'opposite_missing_vals most' have Null values in
             consistently different rows, with 1 exception.
         """
-        self.__add_synthetic_column('unmatched_missing_vals rand_a', ['a'] * 500 + [None] * (self.num_synth_rows - 500))
-        self.__add_synthetic_column('unmatched_missing_vals rand_b',
+        self.__add_synthetic_column('opposite_missing_vals rand_a', ['a'] * 500 + [None] * (self.num_synth_rows - 500))
+        self.__add_synthetic_column('opposite_missing_vals rand_b',
                                     [random.choice(['a', 'b', 'c', None]) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('unmatched_missing_vals all_1', [None] * (self.num_synth_rows - 500) + ['a'] * 500)
-        self.__add_synthetic_column('unmatched_missing_vals all_2', [None] * (self.num_synth_rows - 500) + ['b'] * 500)
-        self.__add_synthetic_column('unmatched_missing_vals most', self.synth_df['unmatched_missing_vals all_1'])
-        if self.synth_df.loc[999, 'unmatched_missing_vals most'] is None:
-            self.synth_df.loc[999, 'unmatched_missing_vals most'] = 'a'
+        self.__add_synthetic_column('opposite_missing_vals all_1', [None] * (self.num_synth_rows - 500) + ['a'] * 500)
+        self.__add_synthetic_column('opposite_missing_vals all_2', [None] * (self.num_synth_rows - 500) + ['b'] * 500)
+        self.__add_synthetic_column('opposite_missing_vals most', self.synth_df['opposite_missing_vals all_1'])
+        if self.synth_df.loc[999, 'opposite_missing_vals most'] is None:
+            self.synth_df.loc[999, 'opposite_missing_vals most'] = 'a'
         else:
-            self.synth_df.loc[999, 'unmatched_missing_vals most'] = None
+            self.synth_df.loc[999, 'opposite_missing_vals most'] = None
 
-    def __check_unmatched_missing(self, test_id):
+    def __check_opposite_missing(self, test_id):
         """
         Handling null values: This test specifically checks for null and non-null values. It requires a minimal number
         of both null and non-null values in each pair of columns examined.
@@ -6161,7 +6167,7 @@ class DataConsistencyChecker:
                 # If the sum of the number of missing values is too large, there is not a pattern. For example, if
                 # the dataset has 1000 rows and column 1 has 600 missing and column 2 has 700 missing, then there must
                 # be many rows where they both have Null values.
-                if abs(num_missing_1 + num_missing_2) > (self.num_rows + self.contamination_level):
+                if abs(num_missing_1 + num_missing_2) > (self.num_rows + self.freq_contamination_level):
                     continue
 
                 test_series = [x != y for x, y in zip(col_1_missing_arr, col_2_missing_arr)]
@@ -6370,7 +6376,7 @@ class DataConsistencyChecker:
             vc_1 = other_values_1.value_counts()
             vc_2 = other_values_2.value_counts()
             if (len(vc_1) <= 5) and (arr1.nunique() >= 10):
-                common_alternatives = [x for x, y in zip(vc_1.index, vc_1.values) if y > self.contamination_level]
+                common_alternatives = [x for x, y in zip(vc_1.index, vc_1.values) if y > self.freq_contamination_level]
                 col_values = np.array([True if ((x == 1) or (y in common_alternatives)) else False
                                        for x, y in zip(same_indicator, arr1)])
                 if is_sample:
@@ -6383,7 +6389,7 @@ class DataConsistencyChecker:
                         (f'The values in "{col_name_1}" are consistently either the same as those in "{col_name_2}", '
                          f'or one of {common_alternatives}'))
             elif (len(vc_2) <= 5) and (arr2.nunique() >= 10):
-                common_alternatives = [x for x, y in zip(vc_2.index, vc_2.values) if y > self.contamination_level]
+                common_alternatives = [x for x, y in zip(vc_2.index, vc_2.values) if y > self.freq_contamination_level]
                 col_values = np.array([True if ((x == 1) or (y in common_alternatives)) else False
                                        for x, y in zip(same_indicator, arr2)])
                 if is_sample:
@@ -6521,7 +6527,7 @@ class DataConsistencyChecker:
 
             # An alternative formulation for rare numbers of digits
             # [x for x, y in zip(counts_series.sort_values(ascending=True).index,
-            #   counts_series.sort_values(ascending=True).values) if y <= self.contamination_level]
+            #   counts_series.sort_values(ascending=True).values) if y <= self.freq_contamination_level]
 
             common_num_digits = [x for x in counts_series.index if x <= most_common_num_digits]
             test_series = [x not in rare_num_digits for x in num_digits_series]
@@ -6615,7 +6621,7 @@ class DataConsistencyChecker:
                 decr_series = (self.orig_df[col_name].astype(float).diff() < 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
                 num_decr = decr_series.tolist().count(True)
-                if num_decr > self.contamination_level:
+                if num_decr > self.freq_contamination_level:
                     continue
 
                 # Check the number of increases is significantly more than the number of decreases
@@ -6668,7 +6674,7 @@ class DataConsistencyChecker:
                 incr_series = (self.orig_df[col_name].astype(float).diff() > 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
                 num_incr = incr_series.tolist().count(True)
-                if num_incr > self.contamination_level:
+                if num_incr > self.freq_contamination_level:
                     continue
 
                 # Check the number of decreases is significantly more than the number of increases
@@ -7058,7 +7064,7 @@ class DataConsistencyChecker:
                              bin_counts.loc[bin_id+3]
                 if (bin_counts.sort_index().loc[bin_id+1:].sum() > (self.num_rows / 10.0)) and \
                     (bin_counts.sort_index().loc[:bin_id].sum() > (self.num_rows / 10.0)) and \
-                    (rows_count < self.contamination_level):
+                    (rows_count < self.freq_contamination_level):
                     rare_bins.append(bin_id)
             if len(rare_bins) == 0:
                 continue
@@ -7069,7 +7075,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
+                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
                  f"their and the neighboring bins (width {bin_width:.4f})"))
 
         for col_name in self.date_cols:
@@ -7099,7 +7105,7 @@ class DataConsistencyChecker:
                              bin_counts.loc[bin_id+3]
                 if (bin_counts.sort_index().loc[bin_id+1:].sum() > (self.num_rows / 10.0)) and \
                         (bin_counts.sort_index().loc[:bin_id].sum() > (self.num_rows / 10.0)) and \
-                        (rows_count < self.contamination_level) and (rows_count > 0):
+                        (rows_count < self.freq_contamination_level) and (rows_count > 0):
                     rare_bins.append(bin_id)
             if len(rare_bins) == 0:
                 continue
@@ -7110,7 +7116,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f"-- any values with fewer than an average of {math.floor(self.contamination_level)} neighbors within "
+                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
                  f"their and the neighboring bins (width {bin_width.days} days)"))
 
     def __generate_very_small(self):
@@ -7248,7 +7254,7 @@ class DataConsistencyChecker:
                 f"The column contains values that are consistently multiples of {v}",
                 display_info={"value": v}
             )
-            if n_multiples > (self.num_rows - self.contamination_level):
+            if n_multiples > (self.num_rows - self.freq_contamination_level):
                 return True
             return False
 
@@ -7312,7 +7318,7 @@ class DataConsistencyChecker:
             numeric_vals = convert_to_numeric(self.orig_df[col_name], 0)
             numeric_vals = numeric_vals.fillna(0)
             if (numeric_vals.astype(int) == numeric_vals).tolist().count(False) > \
-                    self.contamination_level:
+                    self.freq_contamination_level:
                 continue
 
             # Create an array called vals, with the string representation of the values in col_name, where we
@@ -7326,7 +7332,7 @@ class DataConsistencyChecker:
                             vals.str.replace('.0', '', regex=False).str.strip('0').str.len()
             counts_series = num_zeros_arr.value_counts()
             cum_sum_series = np.where(counts_series.sort_values(ascending=False).cumsum() >
-                                      (self.num_rows - self.contamination_level))
+                                      (self.num_rows - self.freq_contamination_level))
             if (len(cum_sum_series) == 0) or (len(cum_sum_series[0]) == 0):
                 continue
             last_normal_index = cum_sum_series[0][0]
@@ -7369,7 +7375,7 @@ class DataConsistencyChecker:
             # unique values.
             num_below = (self.numeric_vals_filled[col_name] < 0).tolist().count(True)
             num_above = (self.numeric_vals_filled[col_name] > 0).tolist().count(True)
-            if (num_below > self.contamination_level) and (num_above > self.contamination_level):
+            if (num_below > self.freq_contamination_level) and (num_above > self.freq_contamination_level):
                 continue
 
             test_series = np.array([x != 0 for x in self.orig_df[col_name]])
@@ -7501,24 +7507,24 @@ class DataConsistencyChecker:
                 continue
 
             # Skip columns that are almost entirely 0 or Null
-            if (self.orig_df[col_name_1] == 0).tolist().count(False) < self.contamination_level:
+            if (self.orig_df[col_name_1] == 0).tolist().count(False) < self.freq_contamination_level:
                 continue
-            if (self.orig_df[col_name_2] == 0).tolist().count(False) < self.contamination_level:
+            if (self.orig_df[col_name_2] == 0).tolist().count(False) < self.freq_contamination_level:
                 continue
-            if self.orig_df[col_name_1].notna().sum() < self.contamination_level:
+            if self.orig_df[col_name_1].notna().sum() < self.freq_contamination_level:
                 continue
-            if self.orig_df[col_name_2].notna().sum() < self.contamination_level:
+            if self.orig_df[col_name_2].notna().sum() < self.freq_contamination_level:
                 continue
 
             # Skip pairs where only rare rows have no nulls
             if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
-            if test_series.tolist().count(False) > self.contamination_level:
+            if test_series.tolist().count(False) > self.freq_contamination_level:
                 continue
 
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
-            if test_series.tolist().count(False) > self.contamination_level:
+            if test_series.tolist().count(False) > self.freq_contamination_level:
                 continue
 
             col_1_q1 = q1_dict[col_name_1]
@@ -7548,7 +7554,7 @@ class DataConsistencyChecker:
                 order_mag_larger_series = order_mag_larger_series | \
                                           self.orig_df[col_name_1].isna() | \
                                           self.orig_df[col_name_2].isna()
-                if order_mag_larger_series.tolist().count(False) < self.contamination_level:
+                if order_mag_larger_series.tolist().count(False) < self.freq_contamination_level:
                     continue
 
             if test_series.tolist().count(False) > 0:
@@ -8240,8 +8246,8 @@ class DataConsistencyChecker:
                 continue
 
             # Check if both columns have too many zeros.
-            if (count_zeros_dict[col_name_1] > self.contamination_level) and \
-                    (count_zeros_dict[col_name_2] > self.contamination_level):
+            if (count_zeros_dict[col_name_1] > self.freq_contamination_level) and \
+                    (count_zeros_dict[col_name_2] > self.freq_contamination_level):
                 continue
 
             # Skip pairs where only rare rows have no nulls
@@ -8249,7 +8255,7 @@ class DataConsistencyChecker:
                 continue
 
             # If just col_name_2 has many zeros, swap the columns
-            if count_zeros_dict[col_name_2] > self.contamination_level:
+            if count_zeros_dict[col_name_2] > self.freq_contamination_level:
                 temp = col_name_1
                 col_name_1 = col_name_2
                 col_name_2 = temp
@@ -8355,7 +8361,7 @@ class DataConsistencyChecker:
 
             # Remove cases where there is trivially an even multiple
             if (test_series.count(1) + test_series.count(0) + test_series.count(-1) + \
-                test_series.count(np.inf)) > self.contamination_level:
+                test_series.count(np.inf)) > self.freq_contamination_level:
                 continue
 
             test_series = [float(x).is_integer() for x in test_series]
@@ -8416,7 +8422,7 @@ class DataConsistencyChecker:
             column_bins[col_name] = bins
             column_bin_boundaries[col_name] = bin_boundaries
 
-        cell_limit = math.ceil(self.contamination_level / 9)
+        cell_limit = math.ceil(self.freq_contamination_level / 9)
 
         get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
 
@@ -8458,7 +8464,7 @@ class DataConsistencyChecker:
             flat_list = [item for sublist in cell_counts for item in sublist]
 
             # Check there are at least 9 cells with counts less than the contamination rate
-            num_less_contamination = len([1 for x in flat_list if x < self.contamination_level])
+            num_less_contamination = len([1 for x in flat_list if x < self.freq_contamination_level])
             if num_less_contamination < 9:
                 continue
 
@@ -8467,7 +8473,7 @@ class DataConsistencyChecker:
             for i in range(1, num_bins-1):
                 for j in range(1, num_bins-1):
                     if cell_counts[i][j] <= cell_limit:
-                        if counts_col_1[i] > self.contamination_level and counts_col_2[j] > self.contamination_level:
+                        if counts_col_1[i] > self.freq_contamination_level and counts_col_2[j] > self.freq_contamination_level:
                             low_count_cells.append((i, j))
 
             flagged_cells = []
@@ -8492,7 +8498,7 @@ class DataConsistencyChecker:
             total_flagged = 0
             for i, j in flagged_cells:
                 total_flagged += cell_counts[i][j]
-            if total_flagged > self.contamination_level:
+            if total_flagged > self.freq_contamination_level:
                 continue
 
             # Loop through each flagged cell and flag all rows in those cells
@@ -8545,9 +8551,9 @@ class DataConsistencyChecker:
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(numeric_pairs_list):,} pairs of numeric columns")
 
-            if self.orig_df[col_name_1].nunique(dropna=True) < self.contamination_level:
+            if self.orig_df[col_name_1].nunique(dropna=True) < self.freq_contamination_level:
                 continue
-            if self.orig_df[col_name_2].nunique(dropna=True) < self.contamination_level:
+            if self.orig_df[col_name_2].nunique(dropna=True) < self.freq_contamination_level:
                 continue
 
             # Skip pairs where only rare rows have no nulls
@@ -8900,7 +8906,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], floor_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -8917,7 +8923,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], ceil_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -8934,7 +8940,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], round_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -8951,7 +8957,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], round_10_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -8968,7 +8974,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], round_100_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -8985,7 +8991,7 @@ class DataConsistencyChecker:
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
                                    for x, y in zip(self.orig_df[col_name_1], round_1000_dict[col_name_2])]
-                    if test_series.count(False) < self.contamination_level:
+                    if test_series.count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             [col_name_2, col_name_1],
@@ -9052,7 +9058,7 @@ class DataConsistencyChecker:
                     continue
 
                 # If the difference between the number of missing values is too large, there is not a pattern
-                if abs(num_zero_1 - num_missing_2) > (self.contamination_level * 2.0):
+                if abs(num_zero_1 - num_missing_2) > (self.freq_contamination_level * 2.0):
                     continue
 
                 # Test first on a sample
@@ -9066,7 +9072,10 @@ class DataConsistencyChecker:
                     test_id,
                     [col_name_1, col_name_2],
                     test_series,
-                    f'Where "{col_name_1}" is 0, "{col_name_2}" is consistently Null and not Null otherwise'
+                    (f'The column "{col_name_1}" is 0 in {num_zero_1} rows and not in {self.num_rows - num_zero_1} '
+                     f'rows. The column "{col_name_2}" is Null in {num_missing_2} rows and not in '
+                     f'{self.num_rows - num_missing_2} rows. '
+                     f'Where "{col_name_1}" is 0, "{col_name_2}" is consistently Null and not Null otherwise')
                 )
 
     ##################################################################################################################
@@ -9131,8 +9140,8 @@ class DataConsistencyChecker:
                     continue
 
                 # Test the relationship on a small sample of the full data
-                test_series_a = abs(self.sample_numeric_vals_filled[col_name_3] / \
-                    abs(self.sample_numeric_vals_filled[col_name_1] - self.sample_numeric_vals_filled[col_name_2]))
+                test_series_a = (self.sample_numeric_vals_filled[col_name_3] / \
+                    (self.sample_numeric_vals_filled[col_name_1] - self.sample_numeric_vals_filled[col_name_2]))
                 if test_series_a.isna().sum() > (self.num_rows * 0.75):
                     continue
                 test_series_a = test_series_a.replace(np.NaN, 1.0)
@@ -9147,12 +9156,12 @@ class DataConsistencyChecker:
                     continue
 
                 # Test on the full data
-                test_series_a = abs(self.numeric_vals_filled[col_name_3] / \
-                                    abs(self.numeric_vals_filled[col_name_1] - self.numeric_vals_filled[col_name_2]))
+                test_series_a = (self.numeric_vals_filled[col_name_3] / \
+                                    (self.numeric_vals_filled[col_name_1] - self.numeric_vals_filled[col_name_2]))
                 test_series_a = test_series_a.replace(np.NaN, 1.0)
                 test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
                 num_matching = test_series.tolist().count(True)
-                if num_matching < (self.num_rows - self.contamination_level):
+                if num_matching < (self.num_rows - self.freq_contamination_level):
                     continue
 
                 # Test the match wouldn't be as close simply using col_name_1
@@ -9245,14 +9254,14 @@ class DataConsistencyChecker:
 
             # First check there is a reasonable number of matches before filling the null values.
             test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
-            if test_series.tolist().count(True) < self.contamination_level:
+            if test_series.tolist().count(True) < self.freq_contamination_level:
                 continue
 
             # We fill the null values to allow null values to not violate the pattern.
             test_series_a = test_series_a.replace(np.NaN, 1.0)
             test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
             num_matching = test_series.tolist().count(True)
-            if num_matching >= (self.num_rows - self.contamination_level):
+            if num_matching >= (self.num_rows - self.freq_contamination_level):
                 self.__process_analysis_binary(
                     test_id,
                     [col_name_1, col_name_2, col_name_3],
@@ -9339,7 +9348,7 @@ class DataConsistencyChecker:
             test_series = np.where((test_series_a > 0.9) & (test_series_a < 1.1), True, False)
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_3].isna()
             num_matching = test_series.tolist().count(True)
-            if num_matching >= (self.num_rows - self.contamination_level):
+            if num_matching >= (self.num_rows - self.freq_contamination_level):
                 self.__process_analysis_binary(
                     test_id,
                     [col_name_1, col_name_2, col_name_3],  # Put in order such that col_3 == col_1 / col_2
@@ -9395,7 +9404,7 @@ class DataConsistencyChecker:
 
             test_series = self.numeric_vals_filled[col_c].astype(float) > (self.numeric_vals_filled[col_a] + self.numeric_vals_filled[col_b])
             test_series = test_series | self.orig_df[col_a].isna() | self.orig_df[col_b].isna() | self.orig_df[col_c].isna()
-            if test_series.tolist().count(False) < self.contamination_level:
+            if test_series.tolist().count(False) < self.freq_contamination_level:
                 self.__process_analysis_binary(
                     test_id,
                     [col_a, col_b, col_c],
@@ -9412,7 +9421,7 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols:
             vals_arr = convert_to_numeric(self.orig_df[col_name], 1)
             column_pos_dict[col_name] = \
-                (((vals_arr >= 0) | self.orig_df[col_name].isna()).tolist().count(False) < self.contamination_level)
+                (((vals_arr >= 0) | self.orig_df[col_name].isna()).tolist().count(False) < self.freq_contamination_level)
 
         num_triples, column_triples = self.__get_numeric_column_triples_unique()
         if num_triples > self.max_combinations:
@@ -9511,7 +9520,7 @@ class DataConsistencyChecker:
 
             # Check the values are not strange in themselves, just the relationship between them.
             # And, only flag values significantly greater than the abs diff
-            if test_series.tolist().count(False) < self.contamination_level:
+            if test_series.tolist().count(False) < self.freq_contamination_level:
                 flagged_rows = np.where(~test_series)[0]
                 for row_num in flagged_rows:
                     # This may help, but leads to plots with the orange values mixed with the blue
@@ -9524,7 +9533,7 @@ class DataConsistencyChecker:
             else:
                 return False
 
-            if test_series.tolist().count(False) < self.contamination_level:
+            if test_series.tolist().count(False) < self.freq_contamination_level:
                 self.__process_analysis_binary(
                     test_id,
                     [col_a, col_b, col_c],  # Order such that the last depends on the others
@@ -9630,7 +9639,7 @@ class DataConsistencyChecker:
         # Track which columns are mostly positive. We execute this test only on those columns.
         column_pos_arr = []
         for col_name in self.numeric_cols:
-            if (self.numeric_vals_filled[col_name] >= 0).tolist().count(False) < self.contamination_level:
+            if (self.numeric_vals_filled[col_name] >= 0).tolist().count(False) < self.freq_contamination_level:
                 column_pos_arr.append(col_name)
 
         # Identify the set of similar columns for each positive numeric column
@@ -9714,7 +9723,7 @@ class DataConsistencyChecker:
                         diffs_series = self.orig_df[col_name].astype(float) - col_sums
                         col_values = diffs_series == 0
                         col_values = self.check_results_for_null(col_values, col_name, subset)
-                        if col_values.tolist().count(False) < self.contamination_level:
+                        if col_values.tolist().count(False) < self.freq_contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
                                 subset + [col_name],
@@ -9726,7 +9735,7 @@ class DataConsistencyChecker:
                             found_any = True
                             break
                         too_small_arr = self.orig_df[col_name].astype(float) > col_sums
-                        if too_small_arr.tolist().count(True) > self.contamination_level:
+                        if too_small_arr.tolist().count(True) > self.freq_contamination_level:
                             know_failed_subsets[tuple(subset)] = True
                     else:
                         too_small_arr = self.sample_df[col_name].astype(float) > col_sums
@@ -9740,7 +9749,7 @@ class DataConsistencyChecker:
                         median_diff = diffs_series.median()
                         col_values = [math.isclose(x, median_diff) for x in diffs_series]
                         col_values = self.check_results_for_null(col_values, col_name, subset)
-                        if col_values.tolist().count(False) < self.contamination_level:
+                        if col_values.tolist().count(False) < self.freq_contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
                                 subset + [col_name],
@@ -9761,7 +9770,7 @@ class DataConsistencyChecker:
                         median_ratio = ratios_series.median()
                         col_values = [math.isclose(x, median_ratio) for x in ratios_series]
                         col_values = self.check_results_for_null(col_values, col_name, subset)
-                        if col_values.tolist().count(False) < self.contamination_level:
+                        if col_values.tolist().count(False) < self.freq_contamination_level:
                             self.__process_analysis_binary(
                                 test_id,
                                 subset + [col_name],
@@ -9864,13 +9873,13 @@ class DataConsistencyChecker:
                     diffs_series = self.orig_df[col_name] - col_mins
                     test_series = diffs_series == 0
                     test_series = self.check_results_for_null(test_series, col_name, subset_names)
-                    if test_series.tolist().count(False) < self.contamination_level:
+                    if test_series.tolist().count(False) < self.freq_contamination_level:
                         # Check the target column is not identical to any of the source columns
                         subset_okay = True
                         for col in subset_names:
                             equal_series = [x == y or is_missing(x) or is_missing(y)
                                             for x, y in zip(self.orig_df[col_name], self.orig_df[col])]
-                            if equal_series.count(False) < self.contamination_level:
+                            if equal_series.count(False) < self.freq_contamination_level:
                                 subset_okay = False
                                 break
                         if not subset_okay:
@@ -9980,12 +9989,12 @@ class DataConsistencyChecker:
                     diffs_series = self.orig_df[col_name] - col_maxs
                     test_series = diffs_series == 0
                     test_series = self.check_results_for_null(test_series, col_name, subset_names)
-                    if test_series.tolist().count(False) < self.contamination_level:
+                    if test_series.tolist().count(False) < self.freq_contamination_level:
                         # Check the target column is not identical to any of the source columns
                         subset_okay = True
                         for col in subset_names:
                             equal_series = [x == y or is_missing(x) or is_missing(y) for x, y in zip(self.orig_df[col_name], self.orig_df[col])]
-                            if equal_series.count(False) < self.contamination_level:
+                            if equal_series.count(False) < self.freq_contamination_level:
                                 subset_okay = False
                                 break
                         if not subset_okay:
@@ -10045,7 +10054,7 @@ class DataConsistencyChecker:
         # Track which columns are mostly positive. We execute this test only on those columns.
         column_pos_arr = []
         for col_name in self.numeric_cols:
-            if (self.numeric_vals_filled[col_name] >= 0).tolist().count(False) < self.contamination_level:
+            if (self.numeric_vals_filled[col_name] >= 0).tolist().count(False) < self.freq_contamination_level:
                 column_pos_arr.append(col_name)
 
         # We loop through the positive numeric columns and for each find the set of columns with similar values.
@@ -10135,7 +10144,7 @@ class DataConsistencyChecker:
                     all_cols = list(set(subset + [col_name] + [matching_column]))
                     rest_of_cols = all_cols.copy()
                     rest_of_cols.remove(matching_column)
-                    if test_series.tolist().count(False) < self.contamination_level:
+                    if test_series.tolist().count(False) < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             sorted(rest_of_cols) + [matching_column],
@@ -10148,21 +10157,21 @@ class DataConsistencyChecker:
                         found_any = True
                         break
 
-    def generate_all_pos_or_all_neg(self):
+    def generate_mathed_set_pos_neg(self):
         """
-        Patterns without exceptions: None: 'all_pos_neg all' consistently has the same sign as 'all_pos_neg rand_a'.
+        Patterns without exceptions: None: 'matched_pos_neg all' consistently has the same sign as 'matched_pos_neg rand_a'.
             However, it is not reported as a pair of columns as it is part of a set of 3 features with near-perfect
             matching.
-        Patterns with exception: 'all_pos_neg most' consistently has the same sign as 'all_pos_neg rand_a',
-            and 'all_pos_neg all', with the exception of row 999.
+        Patterns with exception: 'matched_pos_neg most' consistently has the same sign as 'matched_pos_neg rand_a',
+            and 'matched_pos_neg all', with the exception of row 999.
         """
-        self.__add_synthetic_column('all_pos_neg rand_a', [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('all_pos_neg rand_b', [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('all_pos_neg all', self.synth_df['all_pos_neg rand_a'] * random.randint(1, 100))
-        self.__add_synthetic_column('all_pos_neg most', self.synth_df['all_pos_neg rand_a'] * random.randint(1, 100))
-        self.synth_df.at[999, 'all_pos_neg most'] = self.synth_df.at[999, 'all_pos_neg most'] * -1.0
+        self.__add_synthetic_column('matched_pos_neg rand_a', [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('matched_pos_neg rand_b', [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('matched_pos_neg all', self.synth_df['matched_pos_neg rand_a'] * random.randint(1, 100))
+        self.__add_synthetic_column('matched_pos_neg most', self.synth_df['matched_pos_neg rand_a'] * random.randint(1, 100))
+        self.synth_df.at[999, 'matched_pos_neg most'] = self.synth_df.at[999, 'matched_pos_neg most'] * -1.0
 
-    def check_all_pos_or_all_neg(self, test_id):
+    def check_mathed_set_pos_neg(self, test_id):
         """
         We identify sets of numeric columns, not necessarily on the same scale, that are all both frequently
         positive and frequently negative. We then find the subsets of these columns that are consistently positive and
@@ -10259,12 +10268,12 @@ class DataConsistencyChecker:
                 for c in subset[1:]:
                     pos_matching_arr = pos_matching_arr & (pos_dict[subset[0]] == pos_dict[c])
                     pos_matching_arr = self.check_results_for_null(pos_matching_arr, None, subset)
-                    if pos_matching_arr.tolist().count(False) > self.contamination_level:
+                    if pos_matching_arr.tolist().count(False) > self.freq_contamination_level:
                         subset_matches = False
                         break
                     neg_matching_arr = neg_matching_arr & (neg_dict[subset[0]] == neg_dict[c])
                     neg_matching_arr = self.check_results_for_null(neg_matching_arr, None, subset)
-                    if neg_matching_arr.tolist().count(False) > self.contamination_level:
+                    if neg_matching_arr.tolist().count(False) > self.freq_contamination_level:
                         subset_matches = False
                         break
                 if not subset_matches:
@@ -10278,7 +10287,7 @@ class DataConsistencyChecker:
                     ""
                 )
 
-    def generate_all_zero_or_all_non_zero(self):
+    def generate_matched_set_zero_non_zero(self):
         """
         Patterns without exceptions: None: 'all_zero_or_not all' is consistently zero or non-zero with
             'all_zero_or_not rand_a'. However, it is not reported as it is part of a set of 3 feature with near-perfect
@@ -10286,16 +10295,20 @@ class DataConsistencyChecker:
         Patterns with exception: 'all_zero_or_not most' consistently has the same sign as 'all_zero_or_not rand_a',
             and 'all_zero_or_not all', with the exception of row 999.
         """
-        self.__add_synthetic_column('all_zero_or_not rand_a', [random.randint(-2, 2) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('all_zero_or_not rand_b', [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('all_zero_or_not all', self.synth_df['all_zero_or_not rand_a'] * random.randint(1, 100))
-        self.__add_synthetic_column('all_zero_or_not most', self.synth_df['all_zero_or_not rand_a'] * random.randint(1, 100))
+        self.__add_synthetic_column('all_zero_or_not rand_a',
+                                    [random.randint(-2, 2) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('all_zero_or_not rand_b',
+                                    [random.randint(-1000, 1000) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('all_zero_or_not all',
+                                    self.synth_df['all_zero_or_not rand_a'] * random.randint(1, 100))
+        self.__add_synthetic_column('all_zero_or_not most',
+                                    self.synth_df['all_zero_or_not rand_a'] * random.randint(1, 100))
         if self.synth_df.at[999, 'all_zero_or_not most'] == 0:
             self.synth_df.at[999, 'all_zero_or_not most'] = 1
         else:
             self.synth_df.at[999, 'all_zero_or_not most'] = 0
 
-    def check_all_zero_or_all_non_zero(self, test_id):
+    def check_matched_set_zero_non_zero(self, test_id):
         """
         We identify sets of numeric columns, not necessarily on the same scale, that are all both frequently
         zero and frequently non-zero. We then find the subsets of these columns that are consistently zero and
@@ -10391,12 +10404,12 @@ class DataConsistencyChecker:
                         continue
                     zero_matching_arr = zero_matching_arr & (zero_dict[subset[0]] == zero_dict[c])
                     zero_matching_arr = self.check_results_for_null(zero_matching_arr, None, subset)
-                    if zero_matching_arr.tolist().count(False) > self.contamination_level:
+                    if zero_matching_arr.tolist().count(False) > self.freq_contamination_level:
                         subset_matches = False
                         break
                     non_zero_matching_arr = non_zero_matching_arr & (non_zero_dict[subset[0]] == non_zero_dict[c])
                     non_zero_matching_arr = self.check_results_for_null(non_zero_matching_arr, None, subset)
-                    if non_zero_matching_arr.tolist().count(False) > self.contamination_level:
+                    if non_zero_matching_arr.tolist().count(False) > self.freq_contamination_level:
                         subset_matches = False
                         break
                 if not subset_matches:
@@ -10942,10 +10955,10 @@ class DataConsistencyChecker:
             # Drop any columns that have almost the same set of Null values as the target column
             matching_cols = []
             for col_name_2 in x_df.columns:
-                if abs(num_missing_dict[col_name] - num_missing_dict[col_name_2]) > self.contamination_level:
+                if abs(num_missing_dict[col_name] - num_missing_dict[col_name_2]) > self.freq_contamination_level:
                     continue
                 num_matching = len([1 for x, y in zip(is_missing_dict[col_name], is_missing_dict[col_name_2]) if x == y])
-                if num_matching > (self.num_rows - self.contamination_level):
+                if num_matching > (self.num_rows - self.freq_contamination_level):
                     matching_cols.append(col_name_2)
             x_df = x_df.drop(columns=matching_cols)
 
@@ -11115,7 +11128,7 @@ class DataConsistencyChecker:
             # todo: test all methods with timestamps
             dow_list = pd.Series([x.day_of_week if hasattr(x, 'day_of_week') else x.dayofweek for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = dow_list.value_counts()
-            rare_dow = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
+            rare_dow = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.freq_contamination_level]
             if len(rare_dow) == 0:
                 continue
             test_series = np.array([x not in rare_dow for x in dow_list])
@@ -11148,7 +11161,7 @@ class DataConsistencyChecker:
 
             dom_list = pd.Series([x.day for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = dom_list.value_counts()
-            rare_dom = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
+            rare_dom = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.freq_contamination_level]
             if len(rare_dom) == 0:
                 continue
             test_series = np.array([x not in rare_dom for x in dom_list])
@@ -11183,7 +11196,7 @@ class DataConsistencyChecker:
 
             month_list = pd.Series([x.month for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = month_list.value_counts()
-            rare_months = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
+            rare_months = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.freq_contamination_level]
             if len(rare_months) == 0:
                 continue
             test_series = np.array([x not in rare_months for x in month_list])
@@ -11219,7 +11232,7 @@ class DataConsistencyChecker:
 
             hour_list = pd.Series([x.hour for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = hour_list.value_counts()
-            rare_hours = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
+            rare_hours = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.freq_contamination_level]
             if len(rare_hours) == 0:
                 continue
             test_series = np.array([x not in rare_hours for x in hour_list])
@@ -11228,7 +11241,8 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific hours of the day',
-                f"on the {rare_hours}th hours of the day"
+                f"on the {rare_hours}th hours of the day",
+                display_info={"hour_list": hour_list}
             )
 
     def __generate_unusual_minutes(self):
@@ -11256,7 +11270,7 @@ class DataConsistencyChecker:
 
             minutes_list = pd.Series([x.minute for x in pd.to_datetime(self.orig_df[col_name])])
             counts_list = minutes_list.value_counts()
-            rare_minutes = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.contamination_level]
+            rare_minutes = [x for x, y in zip(counts_list.index, counts_list.values) if y < self.freq_contamination_level]
             if len(rare_minutes) == 0:
                 continue
             test_series = np.array([x not in rare_minutes for x in minutes_list])
@@ -11697,9 +11711,9 @@ class DataConsistencyChecker:
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
                 print(f"  Examining pair {pair_idx:,} of {len(date_pairs_list):,} pairs of numeric columns")
 
-            if self.orig_df[col_name_1].nunique(dropna=True) < self.contamination_level:
+            if self.orig_df[col_name_1].nunique(dropna=True) < self.freq_contamination_level:
                 continue
-            if self.orig_df[col_name_2].nunique(dropna=True) < self.contamination_level:
+            if self.orig_df[col_name_2].nunique(dropna=True) < self.freq_contamination_level:
                 continue
 
             val_arr_1 = pd.to_numeric(pd.to_datetime(self.orig_df[col_name_1]))
@@ -11839,7 +11853,7 @@ class DataConsistencyChecker:
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
                     sub_test_series = pd.Series(num_vals_all <= threshold)
 
-                    if 0 < sub_test_series.tolist().count(False) <= self.contamination_level:
+                    if 0 < sub_test_series.tolist().count(False) <= self.freq_contamination_level:
                         index_of_large = \
                             [x for x, y in zip(list(bin_row_idxs[bin_id][0]), list(sub_test_series.values)) if not y]
                         for i in index_of_large:
@@ -11937,7 +11951,7 @@ class DataConsistencyChecker:
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
                     sub_test_series = pd.Series(num_vals_all >= threshold)
 
-                    if 0 < sub_test_series.tolist().count(False) <= self.contamination_level:
+                    if 0 < sub_test_series.tolist().count(False) <= self.freq_contamination_level:
                         index_of_small = \
                             [x for x, y in zip(list(bin_row_idxs[bin_id][0]), list(sub_test_series.values)) if not y]
                         for i in index_of_small:
@@ -12010,7 +12024,7 @@ class DataConsistencyChecker:
             # Test on the full columns
             test_series = np.array([x == y for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])])
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
-            if test_series.tolist().count(False) > self.contamination_level:
+            if test_series.tolist().count(False) > self.freq_contamination_level:
                 continue
 
             # Consider imbalanced arrays. We also check the macro f1 score
@@ -12054,7 +12068,7 @@ class DataConsistencyChecker:
                 continue
 
             test_series = np.array([x != y for x, y in zip(self.orig_df[col_name_1], self.orig_df[col_name_2])])
-            if test_series.tolist().count(False) > self.contamination_level:
+            if test_series.tolist().count(False) > self.freq_contamination_level:
                 continue
 
             # Consider imbalanced arrays. We also check the macro f1 score
@@ -12100,9 +12114,9 @@ class DataConsistencyChecker:
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 500 == 0:
                 print(f"  Examining pair: {pair_idx:,} of {len(column_pairs):,}  pairs of binary columns")
 
-            if self.orig_df[col_name_1].apply(is_missing).sum() > self.contamination_level:
+            if self.orig_df[col_name_1].apply(is_missing).sum() > self.freq_contamination_level:
                 continue
-            if self.orig_df[col_name_2].apply(is_missing).sum() > self.contamination_level:
+            if self.orig_df[col_name_2].apply(is_missing).sum() > self.freq_contamination_level:
                 continue
 
             vals_1 = self.column_unique_vals[col_name_1]
@@ -12145,7 +12159,7 @@ class DataConsistencyChecker:
 
             test_series = None
             pattern_str = ""
-            if count_aa < self.contamination_level:
+            if count_aa < self.freq_contamination_level:
                 # The expected count is based on the fraction of value a in column 1 and value b in column two,
                 # multiplied to the give the expected fraction of both, times the number of rows to give the expected
                 # number of rows. This is then: (count_1a / self_num_rows) * (count_1a / self_num_rows) * self.num_rows
@@ -12154,17 +12168,17 @@ class DataConsistencyChecker:
                 if count_aa < expected_count:
                     test_series = np.array(~mask_aa)
                     pattern_str = f'"{col_name_1}" value: {val_1a} consistently implies "{col_name_2}" value: {val_2b}'
-            elif count_ab < self.contamination_level:
+            elif count_ab < self.freq_contamination_level:
                 expected_count = (count_1a / self.num_rows) * (count_2b)
                 if count_ab < expected_count:
                     test_series = np.array(~mask_ab)
                     pattern_str = f'"{col_name_1}" value: {val_1a} consistently implies "{col_name_2}" value: {val_2a}'
-            elif count_ba < self.contamination_level:
+            elif count_ba < self.freq_contamination_level:
                 expected_count = (count_1a / self.num_rows) * (count_2b)
                 if count_ba < expected_count:
                     test_series = np.array(~mask_ba)
                     pattern_str = f'"{col_name_1}" value: {val_1b} consistently implies "{col_name_2}" value: {val_2b}'
-            elif count_bb < self.contamination_level:
+            elif count_bb < self.freq_contamination_level:
                 expected_count = (count_1a / self.num_rows) * (count_2b)
                 if count_bb < expected_count:
                     test_series = np.array(~mask_bb)
@@ -12235,7 +12249,7 @@ class DataConsistencyChecker:
                     continue
                 num_ones_not_matching = len([1 for x, y in zip(self.orig_df[col_name], self.orig_df[col_name_other])
                                              if (((x == val1) and (y != val1)) and (not is_missing(x)) and (not is_missing(y)))])
-                if num_ones_not_matching > self.contamination_level:
+                if num_ones_not_matching > self.freq_contamination_level:
                     continue
                 set_other_cols.append(col_name_other)
             if len(set_other_cols) < 2:
@@ -12272,7 +12286,7 @@ class DataConsistencyChecker:
                     test_series = np.array(self.orig_df[col_name] == and_of_cols)
                     test_series = self.check_results_for_null(test_series, col_name, subset)
                     num_matching = test_series.tolist().count(True)
-                    if num_matching > (self.num_rows - self.contamination_level):
+                    if num_matching > (self.num_rows - self.freq_contamination_level):
                         self.__process_analysis_binary(
                             test_id,
                             list(subset) + [col_name],
@@ -12342,7 +12356,7 @@ class DataConsistencyChecker:
                     continue
                 num_ones_not_matching = len([1 for x, y in zip(self.orig_df[col_name], self.orig_df[col_name_other])
                                              if ((x == val0) and (y == val1) and (not is_missing(x)) and (not is_missing(y)))])
-                if num_ones_not_matching > self.contamination_level:
+                if num_ones_not_matching > self.freq_contamination_level:
                     continue
                 set_other_cols.append(col_name_other)
             if len(set_other_cols) < 2:
@@ -12375,7 +12389,7 @@ class DataConsistencyChecker:
                     test_series = np.array(self.orig_df[col_name] == or_of_cols)
                     test_series = self.check_results_for_null(test_series, col_name, subset)
                     num_matching = test_series.tolist().count(True)
-                    if num_matching > (self.num_rows - self.contamination_level):
+                    if num_matching > (self.num_rows - self.freq_contamination_level):
                         self.__process_analysis_binary(
                             test_id,
                             list(subset) + [col_name],
@@ -12461,7 +12475,7 @@ class DataConsistencyChecker:
                 test_series = np.array(self.orig_df[col_name_1] == (vals_col_2 ^ vals_col_3))
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | self.orig_df[col_name_3].isna()
                 num_matching = test_series.tolist().count(True)
-                if num_matching >= (self.num_rows - self.contamination_level):
+                if num_matching >= (self.num_rows - self.freq_contamination_level):
                     self.__process_analysis_binary(
                         test_id,
                         [col_name_2, col_name_3, col_name_1],
@@ -12564,7 +12578,7 @@ class DataConsistencyChecker:
                     subset_df = one_zero_df[col_names].copy()
                     sums = subset_df.sum(axis=1)
                     vc = sums.value_counts(normalize=False).sort_values(ascending=False)
-                    if vc.iloc[0] > (self.num_rows - self.contamination_level):
+                    if vc.iloc[0] > (self.num_rows - self.freq_contamination_level):
                         test_series = np.array([sums == vc.index[0]][0])
                         self.__process_analysis_binary(
                                 test_id,
@@ -12656,7 +12670,7 @@ class DataConsistencyChecker:
 
             # Determine the upper limit for the count of a combination to be flagged. The count must be both below
             # the contamination rate and 1/10 of the expected count given a uniform joint distribution.
-            flagged_limit = int(min(self.contamination_level, (self.num_rows / math.pow(2, subset_size)) / 10.0))
+            flagged_limit = int(min(self.freq_contamination_level, (self.num_rows / math.pow(2, subset_size)) / 10.0))
 
             if self.verbose >= 2:
                 print(f"  Examining subsets of size {subset_size}. There are {len(subsets):,} subsets.")
@@ -12680,8 +12694,8 @@ class DataConsistencyChecker:
                 if len(counts_info[1]) > max_combination_count:
                     skipped_subsets[tuple(subset)] = True
 
-                sum_rare = sum([x for x in counts_info[1] if x < self.contamination_level])
-                if 0 < sum_rare < self.contamination_level:
+                sum_rare = sum([x for x in counts_info[1] if x < self.freq_contamination_level])
+                if 0 < sum_rare < self.freq_contamination_level:
                     skipped_subsets[tuple(subset)] = True
                     test_series = [True] * self.num_rows
 
@@ -12922,8 +12936,8 @@ class DataConsistencyChecker:
             test_series = None
 
             # Test if the binary column has val_0 iff the other 2 columns are equal
-            if (test_series_0.tolist().count(False) < self.contamination_level) and \
-                    (test_series_1.tolist().count(True) < self.contamination_level):
+            if (test_series_0.tolist().count(False) < self.freq_contamination_level) and \
+                    (test_series_1.tolist().count(True) < self.freq_contamination_level):
                 value_when_match = val0
                 value_when_dont = val1
                 test_series = [True] * self.num_rows
@@ -12935,8 +12949,8 @@ class DataConsistencyChecker:
                         test_series[i] = False
 
             # Test if the binary column has val_1 iff the other 2 columns are equal
-            if (test_series_0.tolist().count(True) < self.contamination_level) and \
-                    (test_series_1.tolist().count(False) < self.contamination_level):
+            if (test_series_0.tolist().count(True) < self.freq_contamination_level) and \
+                    (test_series_1.tolist().count(False) < self.freq_contamination_level):
                 value_when_match = val1
                 value_when_dont = val0
                 test_series = [True] * self.num_rows
@@ -13162,14 +13176,14 @@ class DataConsistencyChecker:
                 val_at_frac_0 = sorted_sum_arr[num_val_0]
                 idxs_below_threshold_0 = np.where(sum_arr[:50] < val_at_frac_0)
                 sub_df_0 = self.orig_df[bin_col].loc[idxs_below_threshold_0]
-                if sub_df_0.tolist().count(val1) < self.contamination_level:
+                if sub_df_0.tolist().count(val1) < self.freq_contamination_level:
                     val_0_for_smaller = True
 
                 if not val_0_for_smaller:
                     val_at_frac_1 = sorted_sum_arr[num_val_1]
                     idxs_below_threshold_1 = np.where(sum_arr[:50] < val_at_frac_1)
                     sub_df_1 = self.orig_df[bin_col].loc[idxs_below_threshold_1]
-                    if sub_df_1.tolist().count(val0) < self.contamination_level:
+                    if sub_df_1.tolist().count(val0) < self.freq_contamination_level:
                         val_1_for_smaller = True
 
                 if not val_0_for_smaller and not val_1_for_smaller:
@@ -13479,7 +13493,7 @@ class DataConsistencyChecker:
 
             # Check if there's a small set of characters that make up the bulk of the values
             count_most_common = np.where(
-                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.contamination_level))[0][0]
+                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.freq_contamination_level))[0][0]
             if count_most_common <= 5:
                 common_first_chars = list(counts_series.sort_values(ascending=False)[:count_most_common+1].index)
                 rare_first_chars = []
@@ -13593,7 +13607,7 @@ class DataConsistencyChecker:
 
             # Check if there's a small set of characters that make up the bulk of the values
             count_most_common = np.where(
-                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.contamination_level))[0]
+                counts_series.sort_values(ascending=False).cumsum() > (num_non_null_vals - self.freq_contamination_level))[0]
             if len(count_most_common) > 0:
                 count_most_common = count_most_common[0]
             if count_most_common <= 5:
@@ -13643,7 +13657,7 @@ class DataConsistencyChecker:
             special_chars_list = [x for x in special_chars_list if len(x)]
 
             # Skip columns where it is not the case that almost all values have special characters
-            if (len(special_chars_list) + self.orig_df[col_name].isna().sum()) < (self.num_rows - self.contamination_level):
+            if (len(special_chars_list) + self.orig_df[col_name].isna().sum()) < (self.num_rows - self.freq_contamination_level):
                 continue
 
             # Get the unique set of special characters
@@ -13654,7 +13668,7 @@ class DataConsistencyChecker:
             for c in special_chars_list:
                 if (self.orig_df[col_name].isna().sum() +
                     self.orig_df[col_name].astype(str).str.contains(c, regex=False).tolist().count(True)) > \
-                        (self.num_rows - self.contamination_level):
+                        (self.num_rows - self.freq_contamination_level):
                     common_special_chars_list.append(c)
 
             if len(common_special_chars_list) == 0:
@@ -13749,7 +13763,7 @@ class DataConsistencyChecker:
             for c in unique_chars_list:
                 if (self.orig_df[col_name].isna().sum() + \
                         self.orig_df[col_name].fillna("").astype(str).str.contains(c, regex=False).tolist().count(True)) > \
-                    (self.num_rows - self.contamination_level):
+                    (self.num_rows - self.freq_contamination_level):
                     common_chars_list.append(c)
 
             if len(common_chars_list) == 0:
@@ -14054,7 +14068,7 @@ class DataConsistencyChecker:
             for c in special_chars_list:
                 if (self.orig_df[col_name].isna().sum() + \
                         self.orig_df[col_name].fillna("").astype(str).str.contains(c, regex=False).tolist().count(True)) > \
-                        (self.num_rows - self.contamination_level):
+                        (self.num_rows - self.freq_contamination_level):
                     common_special_chars_list.append(c)
 
             if len(common_special_chars_list) == 0:
@@ -14070,11 +14084,11 @@ class DataConsistencyChecker:
                                         self.orig_df[col_name].fillna("").astype(str).str.rfind(c))]).replace(-1, np.NaN)
                 vc1 = list_1.value_counts()
                 vc2 = list_2.value_counts()
-                if (self.orig_df[col_name].isna().sum() + vc1.iloc[0]) >= (self.num_rows - self.contamination_level):
+                if (self.orig_df[col_name].isna().sum() + vc1.iloc[0]) >= (self.num_rows - self.freq_contamination_level):
                     common_posn = int(vc1.index[0])
                     common_posn_str = str(common_posn + 1)
                     test_series = self.orig_df[col_name].astype(str).str.find(c) == common_posn
-                elif (self.orig_df[col_name].isna().sum() + vc2.iloc[0]) >= (self.num_rows - self.contamination_level):
+                elif (self.orig_df[col_name].isna().sum() + vc2.iloc[0]) >= (self.num_rows - self.freq_contamination_level):
                     common_posn = int(vc2.index[0])
                     common_posn_str = f"{common_posn} from the end"
                     test_series = (self.orig_df[col_name].astype(str).str.len() -
@@ -14090,7 +14104,7 @@ class DataConsistencyChecker:
                     test_series,
                     pattern_str)
 
-                if test_series.tolist().count(False) < self.contamination_level:
+                if test_series.tolist().count(False) < self.freq_contamination_level:
                     break
 
     def __generate_chars_pattern(self):
@@ -14139,7 +14153,7 @@ class DataConsistencyChecker:
 
             # Skip columns that are almost entirely Null. If there are even a small number of non-null values, though,
             # and they consistently follow a pattern, we flag that pattern.
-            if self.orig_df[col_name].isna().sum() > (self.num_rows - self.contamination_level):
+            if self.orig_df[col_name].isna().sum() > (self.num_rows - self.freq_contamination_level):
                 continue
 
             # Skip columns which contain only alphanumeric characters
@@ -14158,7 +14172,7 @@ class DataConsistencyChecker:
 
             patterns_arr = self.orig_df[col_name].astype(str).apply(get_str_format)
             vc = patterns_arr.value_counts()
-            if len(vc) > self.contamination_level:
+            if len(vc) > self.freq_contamination_level:
                 continue
 
             test_series = [y or (x == vc.index[0]) for x, y in zip(patterns_arr, self.orig_df[col_name].isna())]
@@ -14335,9 +14349,9 @@ class DataConsistencyChecker:
             vc = pd.Series(first_words).value_counts()
             common_values = []
             for v in pd.Series(first_words).unique():
-                if vc[v] > self.contamination_level:
+                if vc[v] > self.freq_contamination_level:
                     common_values.append(v)
-            if len(common_values) > self.contamination_level:
+            if len(common_values) > self.freq_contamination_level:
                 continue
             test_series = [x in common_values for x in first_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
@@ -14381,9 +14395,9 @@ class DataConsistencyChecker:
             vc = pd.Series(last_words).value_counts()
             common_values = []
             for v in pd.Series(last_words).unique():
-                if vc[v] > self.contamination_level:
+                if vc[v] > self.freq_contamination_level:
                     common_values.append(v)
-            if len(common_values) > self.contamination_level:
+            if len(common_values) > self.freq_contamination_level:
                 continue
             test_series = [x in common_values for x in last_words] | self.orig_df[col_name].isna()
             self.__process_analysis_binary(
@@ -14493,7 +14507,7 @@ class DataConsistencyChecker:
             vc = pd.Series(flat_words_arr).value_counts(ascending=False)
             common_words_arr = []
             for v in vc.index:
-                if (self.orig_df[col_name].isna().sum() + vc[v]) >= (self.num_rows - self.contamination_level):
+                if (self.orig_df[col_name].isna().sum() + vc[v]) >= (self.num_rows - self.freq_contamination_level):
                     common_words_arr.append(v)
                 else:
                     break
@@ -14535,13 +14549,13 @@ class DataConsistencyChecker:
             vc = pd.Series(flat_words_arr).value_counts(ascending=True)
             rare_words_arr = []
             for v in vc.index:
-                if vc[v] < self.contamination_level:
+                if vc[v] < self.freq_contamination_level:
                     rare_words_arr.append(v)
                 else:
                     break
             if len(rare_words_arr) == 0:
                 continue
-            if len(rare_words_arr) > self.contamination_level:
+            if len(rare_words_arr) > self.freq_contamination_level:
                 continue
             test_series = [len(set(x).intersection(set(rare_words_arr))) == 0 for x in words_arr]
             self.__process_analysis_binary(
@@ -14580,7 +14594,7 @@ class DataConsistencyChecker:
 
         # Skip if there are any rare values
         min_count = col_values.value_counts().min()
-        if min_count < self.contamination_level:
+        if min_count < self.freq_contamination_level:
             return
 
         if self.orig_df[col_name].isna().sum() > (self.num_rows * 0.9):
@@ -14599,7 +14613,7 @@ class DataConsistencyChecker:
         # the number of rows that are the same as the next is the total number of rows - (number values -1). As well,
         # the last row is always unlike the next, as the next is undefined.
         ideal_same = self.num_valid_rows[col_name] - self.orig_df[col_name].nunique()
-        if (ideal_same - num_same) > self.contamination_level:
+        if (ideal_same - num_same) > self.freq_contamination_level:
             return
 
         # Test with the null values. This is necessary to maintain the actual row numbers
@@ -14608,7 +14622,7 @@ class DataConsistencyChecker:
         col_df['Same'] = col_df[col_name] == col_df['Next']
         num_same = col_df['Same'].tolist().count(True)
         ideal_same = self.num_valid_rows[col_name] - self.orig_df[col_name].nunique()
-        if (ideal_same - num_same) > self.contamination_level:
+        if (ideal_same - num_same) > self.freq_contamination_level:
             return
 
         test_series = np.array([1]*self.num_rows)
@@ -14651,7 +14665,7 @@ class DataConsistencyChecker:
             pattern_cols = [sort_col, col_name]
 
             # Get the index in the original (unsorted) dataframe of the flagged rows.
-            if test_series.tolist().count(False) < self.contamination_level:
+            if test_series.tolist().count(False) < self.freq_contamination_level:
                 idxs = list(np.where(test_series == False)[0])
                 test_series = [True] * self.num_rows
                 for idx in idxs:
@@ -14737,10 +14751,10 @@ class DataConsistencyChecker:
             test_series = np.array([True] * self.num_rows)
             for v1 in vc_1.index:
                 # Skip values that are themselves rare enough that rare combinations including it would be expected
-                if vc_1[v1] < math.pow(self.contamination_level, 2):
+                if vc_1[v1] < math.pow(self.freq_contamination_level, 2):
                     continue
                 for v2 in vc_2.index:
-                    if vc_2[v2] < math.pow(self.contamination_level, 2):
+                    if vc_2[v2] < math.pow(self.freq_contamination_level, 2):
                         continue
                     sub_df = self.orig_df[(self.orig_df[col_name_1] == v1) &
                                           (self.orig_df[col_name_2] == v2)]
@@ -14751,7 +14765,7 @@ class DataConsistencyChecker:
                     expected_count = ((vc_1[v1] / self.num_rows) * (vc_2[v2] / self.num_rows)) * self.num_rows
 
                     # Check the count is both low and lower than expected.
-                    if count_pair < self.contamination_level and count_pair < (expected_count * 0.5):
+                    if count_pair < self.freq_contamination_level and count_pair < (expected_count * 0.5):
                         rare_pairs_arr.append((v1, v2))
                         test_series[sub_df.index] = False
 
@@ -14803,7 +14817,7 @@ class DataConsistencyChecker:
             return
 
         # The minimum number of times a first character must appear within it's column to check pairs including it
-        freq_limit = math.pow(self.contamination_level, 2)
+        freq_limit = math.pow(self.freq_contamination_level, 2)
 
         # The maximum number of unique values in a column to consider the column
         unique_vals_limit = math.sqrt(self.num_rows)
@@ -14866,7 +14880,7 @@ class DataConsistencyChecker:
                     expected_count = (vc_1[v1] / self.num_rows) * vc_2[v2]
 
                     # Check the count is both low and lower than expected.
-                    if count_pair < self.contamination_level and count_pair < (expected_count * 0.5):
+                    if count_pair < self.freq_contamination_level and count_pair < (expected_count * 0.5):
                         rare_pairs_arr.append((v1, v2))
                         test_series[sub_df.index] = False
 
@@ -14935,10 +14949,10 @@ class DataConsistencyChecker:
             test_series = np.array([True] * self.num_rows)
             for v1 in vc_1.index:
                 # Skip values that are themselves rare enough that rare combinations including it would be expected
-                if vc_1[v1] < math.pow(self.contamination_level, 2):
+                if vc_1[v1] < math.pow(self.freq_contamination_level, 2):
                     continue
                 for v2 in vc_2.index:
-                    if vc_2[v2] < math.pow(self.contamination_level, 2):
+                    if vc_2[v2] < math.pow(self.freq_contamination_level, 2):
                         continue
                     sub_df = self.orig_df[(first_words_dict[col_name_1] == v1) &
                                           (first_words_dict[col_name_2] == v2)]
@@ -14949,7 +14963,7 @@ class DataConsistencyChecker:
                     expected_count = ((vc_1[v1] / self.num_rows) * (vc_2[v2] / self.num_rows)) * self.num_rows
 
                     # Check the count is both low and lower than expected.
-                    if count_pair < self.contamination_level and count_pair < (expected_count * 0.5):
+                    if count_pair < self.freq_contamination_level and count_pair < (expected_count * 0.5):
                         rare_pairs_arr.append((v1, v2))
                         test_series[sub_df.index] = False
 
@@ -15036,10 +15050,10 @@ class DataConsistencyChecker:
                     continue
 
                 # Skip values that are themselves rare enough that rare combinations including it would be expected
-                if vc_1[v1] < math.pow(self.contamination_level, 2):
+                if vc_1[v1] < math.pow(self.freq_contamination_level, 2):
                     continue
                 for v2 in vc_2.index:
-                    if vc_2[v2] < math.pow(self.contamination_level, 2):
+                    if vc_2[v2] < math.pow(self.freq_contamination_level, 2):
                         continue
                     sub_df = self.orig_df[(first_words_dict[col_name_1] == v1) & (self.orig_df[col_name_2] == v2)]
                     count_pair = len(sub_df)
@@ -15049,7 +15063,7 @@ class DataConsistencyChecker:
                     expected_count = ((vc_1[v1] / self.num_rows) * (vc_2[v2] / self.num_rows)) * self.num_rows
 
                     # Check the count is both low and lower than expected.
-                    if count_pair < self.contamination_level and count_pair < (expected_count * 0.5):
+                    if count_pair < self.freq_contamination_level and count_pair < (expected_count * 0.5):
                         rare_pairs_arr.append([v1, v2])
                         test_series[sub_df.index] = False
 
@@ -15230,7 +15244,7 @@ class DataConsistencyChecker:
             for test_threshold in np.arange(1.0, 0.6, -0.1):
                 test_series = [x >= test_threshold for x in similarity_series]
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
-                if test_series.tolist().count(False) < self.contamination_level:
+                if test_series.tolist().count(False) < self.freq_contamination_level:
                     self.__process_analysis_binary(
                         test_id,
                         [col_name_1, col_name_2],
@@ -15311,7 +15325,7 @@ class DataConsistencyChecker:
                                                   compare_1_to_median_of_2_series,
                                                   compare_2_to_median_of_1_series)]
                 test_series = (test_series | self.orig_df[col_name_1].isnull()) | self.orig_df[col_name_2].isnull()
-                if test_series.tolist().count(False) < self.contamination_level:
+                if test_series.tolist().count(False) < self.freq_contamination_level:
                     self.__process_analysis_binary(
                         test_id,
                         [col_name_1, col_name_2],
@@ -15368,7 +15382,7 @@ class DataConsistencyChecker:
                 first_chars_series_1 = self.orig_df[col_name_1].fillna("").astype(str).str.slice(0, num_chars_checking)
                 first_chars_series_2 = self.orig_df[col_name_2].fillna("").astype(str).str.slice(0, num_chars_checking)
                 num_matching = len([x == y for x, y in zip(first_chars_series_1, first_chars_series_2)])
-                if num_matching < (self.num_rows - self.contamination_level):
+                if num_matching < (self.num_rows - self.freq_contamination_level):
                     break
                 max_number_matching = num_chars_checking
 
@@ -15726,11 +15740,11 @@ class DataConsistencyChecker:
             # Test on the full columns
             special_col_1 = self.orig_df[col_name_1].apply(lambda x: "" if is_missing(x) else x)
             special_col_1 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_1]
-            if [len(x) > 0 for x in special_col_1].count(False) > self.contamination_level:
+            if [len(x) > 0 for x in special_col_1].count(False) > self.freq_contamination_level:
                 continue
             special_col_2 = self.orig_df[col_name_2].apply(lambda x: "" if is_missing(x) else x)
             special_col_2 = [[c for c in x if ((not c.isalpha()) and (not c.isdigit()) and (c != ' '))] for x in special_col_2]
-            if [len(x) > 0 for x in special_col_2].count(False) > self.contamination_level:
+            if [len(x) > 0 for x in special_col_2].count(False) > self.freq_contamination_level:
                 continue
             test_series = [set(x) == set(y) for x, y in zip(special_col_1, special_col_2)]
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
@@ -16022,7 +16036,8 @@ class DataConsistencyChecker:
                     test_id,
                     [col_name_1, col_name_2],
                     test_series,
-                    f'"{col_name_1}" is consistently similar, with regards to percentile, to "{col_name_2}"')
+                    f'"{col_name_1}" is consistently similar, with regards to percentile, to "{col_name_2}"',
+                    display_info={"col_1_percentiles": col_1_percentiles, "col_2_percentiles": col_2_percentiles})
 
                 # Test for negative correlation
                 test_series = np.array([abs(x-(1.0 - y)) < 0.1 for x, y in zip(col_1_percentiles, col_2_percentiles)])
@@ -16031,7 +16046,8 @@ class DataConsistencyChecker:
                     test_id,
                     [col_name_1, col_name_2],
                     test_series,
-                    f'"{col_name_1}" is consistently inversely similar in percentile to "{col_name_2}"')
+                    f'"{col_name_1}" is consistently inversely similar in percentile to "{col_name_2}"',
+                    display_info={"col_1_percentiles": col_1_percentiles, "col_2_percentiles": col_2_percentiles})
 
     ##################################################################################################################
     # Data consistency checks for one non-numeric column and one numeric column
@@ -16153,7 +16169,7 @@ class DataConsistencyChecker:
 
                         res = pd.Series([x <= upper_limit_subset for x in pd.to_datetime(sub_df[col_name_2])])
 
-                    if 0 < res.tolist().count(False) <= self.contamination_level:
+                    if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                         index_of_large = [x for x, y in zip(sub_df.index, res) if y == False]
                         for i in index_of_large:
                             test_series[i] = False
@@ -16284,7 +16300,7 @@ class DataConsistencyChecker:
 
                         res = pd.Series([x >= lower_limit_subset for x in pd.to_datetime(sub_df[col_name_2])])
 
-                    if 0 < res.tolist().count(False) <= self.contamination_level:
+                    if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                         index_of_small = [x for x, y in zip(sub_df.index, res) if not y]
                         for i in index_of_small:
                             test_series[i] = False
@@ -16434,7 +16450,7 @@ class DataConsistencyChecker:
                             continue
                         res = pd.Series([x <= upper_limit_subset for x in pd.to_datetime(sub_df[col_name_2])])
 
-                    if 0 < res.tolist().count(False) <= self.contamination_level:
+                    if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                         flagged_prefixes.append(v)
                         index_of_large = [x for x, y in zip(sub_df.index, res) if not y]
                         for i in index_of_large:
@@ -16562,7 +16578,7 @@ class DataConsistencyChecker:
 
                         res = pd.Series([x >= lower_limit_subset for x in pd.to_datetime(sub_df[col_name_2])])
 
-                    if 0 < res.tolist().count(False) <= self.contamination_level:
+                    if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                         flagged_prefixes.append(v)
                         index_of_large = [x for x, y in zip(sub_df.index, res) if not y]
                         for i in index_of_large:
@@ -16612,7 +16628,7 @@ class DataConsistencyChecker:
                 print((f"  Examining column {col_idx} of {len(self.numeric_cols) + len(self.date_cols)} numeric and "
                        f"date columns"))
 
-            if self.orig_df[col_name_1].nunique() < (self.num_valid_rows[col_name_1] - self.contamination_level):
+            if self.orig_df[col_name_1].nunique() < (self.num_valid_rows[col_name_1] - self.freq_contamination_level):
                 continue
 
             # Loop through the columns that we check if they are grouped, when sorted by col_name_1
@@ -16794,11 +16810,11 @@ class DataConsistencyChecker:
                         else:
                             res = sub_df[col_name_3] <= upper_limit
 
-                        if res.tolist().count(False) > self.contamination_level:
+                        if res.tolist().count(False) > self.freq_contamination_level:
                             found_many = True
                             break
 
-                        if 0 < res.tolist().count(False) <= self.contamination_level:
+                        if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                             if store_index_only:
                                 index_of_large = [x for x, y in zip(sub_df, res) if not y]
                             else:
@@ -16967,11 +16983,11 @@ class DataConsistencyChecker:
                         else:
                             res = sub_df[col_name_3] >= lower_limit
 
-                        if res.tolist().count(False) > self.contamination_level:
+                        if res.tolist().count(False) > self.freq_contamination_level:
                             found_many = True
                             break
 
-                        if 0 < res.tolist().count(False) <= self.contamination_level:
+                        if 0 < res.tolist().count(False) <= self.freq_contamination_level:
                             if store_index_only:
                                 index_of_small = [x for x, y in zip(sub_df, res) if not y]
                             else:
@@ -17386,7 +17402,7 @@ class DataConsistencyChecker:
                           col_pair_both_null_dict[tuple(sorted([col_name_a, col_name_c]))] | \
                           col_pair_both_null_dict[tuple(sorted([col_name_b, col_name_c]))]
             num_matching = test_series.tolist().count(True)
-            if num_matching >= (self.num_rows - self.contamination_level):
+            if num_matching >= (self.num_rows - self.freq_contamination_level):
                 matching_arr = [
                     "BOTH" if ((a == b == c) or (a_na and b_na and c_na))
                     else col_name_a if ((c == a) or (c_na and a_na))
@@ -17398,9 +17414,9 @@ class DataConsistencyChecker:
                         self.orig_df[col_name_c].isna())]
 
                 # Determine again how often C matched A and B. The test above allowed cases where it equalled both
-                if matching_arr.count(col_name_a) < self.contamination_level:
+                if matching_arr.count(col_name_a) < self.freq_contamination_level:
                     return
-                if matching_arr.count(col_name_b) < self.contamination_level:
+                if matching_arr.count(col_name_b) < self.freq_contamination_level:
                     return
 
                 # Calculating where they match on Null values is simply to include this information in the pattern
@@ -17519,9 +17535,9 @@ class DataConsistencyChecker:
             if cols_same_bool_dict[tuple(sorted([col_name_b, col_name_c]))]:
                 return
 
-            if cols_same_count_dict[tuple(sorted([col_name_a, col_name_c]))] < self.contamination_level:
+            if cols_same_count_dict[tuple(sorted([col_name_a, col_name_c]))] < self.freq_contamination_level:
                 return
-            if cols_same_count_dict[tuple(sorted([col_name_b, col_name_c]))] < self.contamination_level:
+            if cols_same_count_dict[tuple(sorted([col_name_b, col_name_c]))] < self.freq_contamination_level:
                 return
 
             test_series = [
@@ -17547,7 +17563,7 @@ class DataConsistencyChecker:
                     | col_pair_both_null_dict[tuple(sorted([col_name_b, col_name_c]))]
             )
             num_matching = test_series.tolist().count(True)
-            if num_matching >= (self.num_rows - self.contamination_level):
+            if num_matching >= (self.num_rows - self.freq_contamination_level):
                 self.__process_analysis_binary(
                     test_id,
                     self.get_col_set_name([col_name_a, col_name_b, col_name_c]),
@@ -17818,7 +17834,7 @@ class DataConsistencyChecker:
                 if self.num_rows <= max_combinations <= (self.num_rows * 2):
                     test_series = self.orig_df.duplicated(subset=subset)
                     num_dup = test_series.tolist().count(True)
-                    if 0 < num_dup < self.contamination_level:
+                    if 0 < num_dup < self.freq_contamination_level:
                         self.__process_analysis_binary(
                             test_id,
                             subset,
@@ -17926,7 +17942,7 @@ class DataConsistencyChecker:
     def __check_unique_values_per_row(self, test_id):
         counts_per_row = self.orig_df.apply(lambda x: len(set(x)), axis=1)
         counts_series = counts_per_row.value_counts(normalize=False)
-        uncommon_counts = [x for x, y in zip(counts_series.index, counts_series.values) if y < self.contamination_level]
+        uncommon_counts = [x for x, y in zip(counts_series.index, counts_series.values) if y < self.freq_contamination_level]
         common_counts = sorted([x for x in counts_series.index if x not in uncommon_counts])
         min_common_counts = min(common_counts)
         max_common_counts = max(common_counts)
