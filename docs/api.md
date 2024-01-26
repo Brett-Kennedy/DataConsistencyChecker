@@ -125,9 +125,9 @@
             If set True, the tests will be run in parallel, which can reduce overall execution time.
 
 
-### Methods to generate or modify test data
+## Methods to generate or modify test data
 
-### generate_synth_data
+## generate_synth_data
 **generate_synth_data**(all_cols=False, execute_list=None, exclude_list=None, seed=0, add_nones="none")
 
         Generate a random synthetic dataset which may be used to demonstrate each of the tests.
@@ -172,7 +172,7 @@
             a list of row numbers and column names, indicating the cells that were modified
 
 
-### Methods to output information about the tool, unrelated to any specific dataset or test execution
+## Methods to output information about the tool, unrelated to any specific dataset or test execution
 
 ## get_test_list
 **get_test_list**():
@@ -225,7 +225,7 @@
             If True, several versions of the data will be created with either few or many Null values.
         
 
-### Methods to output statistics about the dataset, unrelated to any tests executed
+## Methods to output statistics about the dataset, unrelated to any tests executed
 
 ## display_columns_types_list
 **display_columns_types_list**()
@@ -516,7 +516,7 @@
         A convenience method, which calls several other APIs, to give an overview of the results in a single API.
         
 
-### Methods to find relationships between the data and the numbers of issues found
+## Methods to find relationships between the data and the numbers of issues found
 
 **plot_columns_vs_final_scores**()
         
