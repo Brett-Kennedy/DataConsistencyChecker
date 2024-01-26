@@ -44,7 +44,7 @@
             2: a description of each test, and progress related to each of the more expensive tests will be displayed
                as well.
 
-##init_data
+## init_data
 **init_data**(df, known_date_cols=None)
 
         df: dataframe to be assessed
