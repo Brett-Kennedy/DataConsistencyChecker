@@ -680,6 +680,8 @@ Where it is known that no columns represent ID or code values, these tests may b
 The tool provides an API to generate synthetic data, which has been designed to provide columns that will be flagged by the tests, such that each test flags at least one column or set of columns. This may be useful for new users to help understand the tests, as they provide useful examples, and may be altered to determine when specifically the tests flag or do not flag patterns. The synthetic data is also used by the unit tests to help ensure consistent behaviour as the tests are expanded and improved. 
 
 ## Unit Tests
+[Notes on unit tests](https://github.com/Brett-Kennedy/DataConsistencyChecker/docs/unit_tests.md)
+
 The unit tests are organized such that each test .py file tests one DataQualityChecker test, both on real and synthetic data. 
 
 ### Unit Tests on Synthetic data with null values
