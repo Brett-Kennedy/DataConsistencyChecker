@@ -199,7 +199,7 @@
             only will be displayed.
         
 ## get_patterns_shortlist
-  **get_patterns_shortlist**()
+**get_patterns_shortlist**()
         
         Returns an array with the IDs of the tests in the short list. These are the tests that will be presented by
         default when calling get_patterns() to list the patterns discovered.
@@ -383,6 +383,28 @@
         heatmap: bool
             If True, a heatmap of form of the table will be displayed.
 
+## plot_final_scores_distribution_by_row
+**plot_final_scores_distribution_by_row**()
+        
+        Display a probability plot and histogram representing the distribution of final scores by row.
+        
+## plot_final_scores_distribution_by_feature
+**plot_final_scores_distribution_by_feature**()
+        
+        Display a bar plot representing the distribution of final scores by feature.
+        
+## plot_final_scores_distribution_by_test
+ **plot_final_scores_distribution_by_test**()
+        
+        Display a bar plot representing the distribution of final scores by test.
+
+## quick_report
+**quick_report**()
+        
+        A convenience method, which calls several other APIs, to give an overview of the results in a single API.
+
+## Methods to output the results
+               
 ## display_detailed_results
 **display_detailed_results**(
             test_id_list=None,
@@ -459,7 +481,9 @@
         with notebooks, for output to be spread over multiple cells, which can make viewing it simpler. Note though,
         where many tests flag patterns, in most cases only a subset of these would be useful to examine in detail,
         though this varies for different projects.
-        
+
+## Methods to describe specific rows in terms of their patterns and exceptions        
+
 ## get_outlier_scores
 **get_outlier_scores**()
         
@@ -473,21 +497,6 @@
         Returns a list of tuples, with each tuple containing a test ID, and column name, for all issues flagged in the
         specified row.
         
-## plot_final_scores_distribution_by_row
-**plot_final_scores_distribution_by_row**()
-        
-        Display a probability plot and histogram representing the distribution of final scores by row.
-        
-## plot_final_scores_distribution_by_feature
-**plot_final_scores_distribution_by_feature**()
-        
-        Display a bar plot representing the distribution of final scores by feature.
-        
-## plot_final_scores_distribution_by_test
- **plot_final_scores_distribution_by_test**()
-        
-        Display a bar plot representing the distribution of final scores by test.
-               
 ## display_least_flagged_rows
 **display_least_flagged_rows**(with_results=True, n_rows=10)
         
@@ -514,12 +523,6 @@
             columns will be highlighted, but there will not be an indication of which tests flagged them.
         n_rows: int
             The maximum number of original rows to present.
-
-## quick_report
-**quick_report**()
-        
-        A convenience method, which calls several other APIs, to give an overview of the results in a single API.
-        
 
 ## Methods to find relationships between the data and the numbers of issues found
 
