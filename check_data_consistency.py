@@ -2401,8 +2401,8 @@ class DataConsistencyChecker:
                                        'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM',
                                        'GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC']:
                             print()
-                            print_text(("Showing the first flagged example with the 5 rows before and 5 rows after (if "
-                                        "available):"))
+                            print_text((f"Showing a flagged example (row {flagged_df.index[0]}) with 5 rows "
+                                        f"before and 5 rows after (if available) the flagged row"))
                             self.__draw_rows_around_flagged_row(
                                 flagged_df[display_cols],
                                 test_id,
@@ -2726,9 +2726,33 @@ class DataConsistencyChecker:
     # Private methods to plot patterns
     ##################################################################################################################
 
-    def __plot_distribution(self, test_id, col_name, show_exceptions):
+    def __plot_distribution(self, test_id, col_name, show_exceptions, display_info):
         fig, ax = plt.subplots(figsize=(5, 3))
         s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100, ax=ax)
+
+        if show_exceptions:
+            if test_id in ['VERY_LARGE', 'LATE_DATES']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=display_info['upper_limit'], facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=display_info['upper_limit'], xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
+            if test_id in ['VERY_SMALL', 'EARLY_DATES']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=display_info['lower_limit'], facecolor='red', alpha=0.3)
+                ax.axvspan(xmin=display_info['lower_limit'], xmax=self.orig_df[col_name].max(), facecolor='blue',  alpha=0.3)
+            if test_id in ['VERY_SMALL_ABS']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=-display_info['lower_limit'], facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=-display_info['lower_limit'], xmax=display_info['lower_limit'], facecolor='red',  alpha=0.3)
+                ax.axvspan(xmin=display_info['lower_limit'], xmax=self.orig_df[col_name].max(), facecolor='blue', alpha=0.3)
+            if test_id in ['LESS_THAN_ONE']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=1, facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
+            if test_id in ['GREATER_THAN_ONE']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=1, facecolor='red', alpha=0.3)
+                ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='blue',  alpha=0.3)
+            if test_id in ['POSITIVE']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=0, facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=0, xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
+            if test_id in ['NEGATIVE']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=0, facecolor='red', alpha=0.3)
+                ax.axvspan(xmin=0, xmax=self.orig_df[col_name].max(), facecolor='blue',  alpha=0.3)
 
         # Ensure there are not too many tick labels to be readable
         clean_x_tick_labels(fig, 1, ax)
@@ -3130,7 +3154,7 @@ class DataConsistencyChecker:
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
                        'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
                        'EARLY_DATES', 'LATE_DATES']:
-            self.__plot_distribution(test_id, cols[0], show_exceptions)
+            self.__plot_distribution(test_id, cols[0], show_exceptions, display_info)
 
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             if len(cols) == 2:
@@ -3337,7 +3361,20 @@ class DataConsistencyChecker:
                 sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
             plt.show()
 
-        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
+        elif test_id in ['LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
+            df2 = self.orig_df[cols].copy()
+            df2[cols[1]] = df2[cols[1]].astype(float)
+            df2[cols[0]] = display_info['bin_assignments']
+            if cols[1] in self.date_cols:
+                df2['Epoch'] = (df2[cols[1]] - datetime.datetime(1970, 1, 1)).dt.total_seconds()
+                sns.boxplot(data=df2, orient='h', y=cols[0], x='Epoch')
+                plt.xlabel(cols[1])
+                plt.xticks([])
+            else:
+                sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
+            plt.show()
+
+        elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
             df2[cols[1]] = df2[cols[1]].astype(float)
             col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
@@ -3395,23 +3432,26 @@ class DataConsistencyChecker:
                 results_col = self.test_results_df[results_col_name]  # Array of True/False indicating the flagged rows
                 flagged_idxs = np.where(results_col)
 
-            vals = self.orig_df[cols[2]].unique()
+            vals = self.orig_df[cols[0]].unique()
             plotted_vals = []
             for val in vals:
-                if self.orig_df[cols[2]].tolist().count(val) > 100:
+                if self.orig_df[cols[0]].tolist().count(val) > 100:
                     plotted_vals.append(val)
 
             for val in plotted_vals:
-                df2 = self.orig_df[self.orig_df[cols[2]] == val]
+                if (val == None) or (val != val):
+                    df2 = self.orig_df[self.orig_df[cols[0]].isna()]
+                else:
+                    df2 = self.orig_df[self.orig_df[cols[0]] == val]
                 fig, ax = plt.subplots(figsize=(3, 3))
-                s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
-                s.set_title(f'Where Column "{cols[2]}" is "{val}"')
+                s = sns.scatterplot(data=df2, x=cols[1], y=cols[2], color='blue')
+                s.set_title(f'Where Column "{cols[0]}" is "{val}"')
 
                 if show_exceptions:
                     for flagged_idx in flagged_idxs:
                         if flagged_idx in list(df2.index):
                             df3 = df2.loc[flagged_idx]
-                            s = sns.scatterplot(data=df3, x=cols[0], y=cols[1], color='red')
+                            s = sns.scatterplot(data=df3, x=cols[1], y=cols[2], color='red')
                 plt.show()
 
         elif test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
@@ -3737,6 +3777,8 @@ class DataConsistencyChecker:
         elif test_id in ['CORRELATED_ALPHA_ORDER']:
             df['Percentile Column 1'] = pd.Series(display_info['col_1_percentiles']).loc[df.index]
             df['Percentile Column 2'] = pd.Series(display_info['col_2_percentiles']).loc[df.index]
+        elif test_id in ['LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
+            df[f'Bin Number {cols[0]}'] = pd.Series(display_info['bin_assignments']).loc[df.index]
 
         # Set the column order
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
@@ -3877,7 +3919,8 @@ class DataConsistencyChecker:
             # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
             df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0) & (self.orig_df[col_name_1].notna())].head(n_examples - len(df_v_zero))
+            df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0) &
+                                               (self.orig_df[col_name_1].notna())].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_non_zero])
         elif test_id in ['SAME_OR_CONSTANT']:
             # Show where col1 == col2 and where doesn't (in both cases where col1 is not null)
@@ -7148,7 +7191,8 @@ class DataConsistencyChecker:
                 test_series,
                 (f"The test marked any values less than {lower_limit:,.2f} as very small given the 10th decile is "
                  f"{d1:,.2f} and the 90th is {d9:,.2f}. The coefficient is set at {self.idr_limit}"),
-                allow_patterns=False
+                allow_patterns=False,
+                display_info={"lower_limit": lower_limit}
             )
 
     def __generate_very_large(self):
@@ -7178,7 +7222,8 @@ class DataConsistencyChecker:
                 test_series,
                 (f"The test marked any values larger than {upper_limit:,.2f} as very large given the 25th quartile "
                  f"is {q1:,.2f} and 75th is {q3:,.2f}"),
-                allow_patterns=False
+                allow_patterns=False,
+                display_info={"upper_limit": upper_limit}
             )
 
     def __generate_very_small_abs(self):
@@ -7221,7 +7266,8 @@ class DataConsistencyChecker:
                  f"were flagged, given the 10th percentile of absolute values is {d1:,.2f} and the 90th is {d9:,.2f}. " 
                  f" The coefficient is set at {self.idr_limit}"),
                 "",
-                allow_patterns=False
+                allow_patterns=False,
+                display_info={'lower_limit': lower_limit}
             )
 
     def __generate_multiple_constant(self):
@@ -8918,7 +8964,7 @@ class DataConsistencyChecker:
 
             # Test ceil function
             if number_decimals_dict[col_name_2].median() > 0:
-                test_series = [is_missing(x) or is_missing(y) or x == math.floor(y)
+                test_series = [is_missing(x) or is_missing(y) or x == math.ceil(y)
                                for x, y in zip(self.sample_df[col_name_1], sample_ceil_dict[col_name_2])]
                 if test_series.count(False) <= 1:
                     test_series = [is_missing(x) or is_missing(y) or x == round(y)
@@ -9028,7 +9074,6 @@ class DataConsistencyChecker:
         This may occur, for example if the numeric column is "Number of Children" and the other column is
         "Age First Child". If there are zero children, we expect Null in the other column.
         """
-        # todo: when list non-flagged, give examples all 4 combos
 
         # Calculate and cache the col_missing_arr for every column
         sample_col_missing_dict = {}
@@ -10316,8 +10361,6 @@ class DataConsistencyChecker:
 
         Handling null values: Null is treated as a non-zero value.
         """
-        # todo: when list non-flagged, give both cases
-        # todo: in the pattern string, give the number of rows with & without zero for both columns
 
         # Check all columns examined have at least 10% zero and 10% non-zero values.
         cols = []
@@ -10416,11 +10459,17 @@ class DataConsistencyChecker:
                     continue
                 found_any = True
 
+                num_zeros_str = ""
+                if len(subset) < 5:
+                    for col_name in subset:
+                        num_zeros = self.orig_df[col_name].tolist().count(0)
+                        num_zeros_str += (f"Column {col_name} contains {num_zeros} zero values and "
+                                          f"{self.num_rows - num_zeros} non-zero values. ")
                 self.__process_analysis_binary(
                     test_id,
                     list(subset),
                     zero_matching_arr & non_zero_matching_arr,
-                    "The columns are consistently zero or non-zero together.",
+                    f"{num_zeros_str}The columns are consistently zero or non-zero together.",
                     ""
                 )
 
@@ -11069,7 +11118,8 @@ class DataConsistencyChecker:
                 test_series,
                 (f"The test flagged any values earlier than {lower_limit} as very early given the 25th quartile is "
                  f"{q1} and 75th is {q3}"),
-                allow_patterns=False
+                allow_patterns=False,
+                display_info={'lower_limit': lower_limit}
             )
 
     def __generate_late_dates(self):
@@ -11098,7 +11148,8 @@ class DataConsistencyChecker:
                 test_series,
                 (f"The test flagged any values later than {upper_limit} as very late given the 25th quartile is "
                  f"{q1} and 75th is {q3}"),
-                allow_patterns=False
+                allow_patterns=False,
+                display_info={'upper_limit': upper_limit}
             )
 
     # todo: also check for unusual dates (with distant neighbors)
@@ -11865,7 +11916,8 @@ class DataConsistencyChecker:
                     test_series,
                     f'"{num_col}" is unusually large given the date column: "{date_col}"',
                     f"",
-                    allow_patterns=False
+                    allow_patterns=False,
+                    display_info={"bin_assignments": bin_assignments}
                 )
 
     def __generate_small_given_date(self):
@@ -13684,12 +13736,17 @@ class DataConsistencyChecker:
                 test_series = test_series & self.orig_df[col_name].astype(str).str.contains(c, regex=False)
             test_series = test_series | self.orig_df[col_name].isna()
 
+            chars_str = ""
+            for c in common_special_chars_list:
+                chars_str += c + ', '
+            chars_str = chars_str[:-2]
+
             # In the string, remove the [] symbols from the string representation of an array.
             self.__process_analysis_binary(
                 test_id,
                 [col_name],
                 test_series,
-                f"The column consistently contains the {str(common_special_chars_list)[1:-1]} character(s)",
+                f"The column consistently contains the {chars_str} character(s)",
                 allow_patterns=True)
 
     def __generate_common_chars(self):
@@ -17017,7 +17074,7 @@ class DataConsistencyChecker:
         Patterns without exceptions: 'corr_given_val rand_a' and 'corr_given_val rand_b' are correlated when
             conditioning on 'corr_given_val rand_string'. When the string column as value 'A', then the 2 numeric
             columns are positively correlated, and with value 'B', they are negatively correlated. They are not
-            correlated if not considering column 'corr_given_val rand_a'.
+            correlated if not considering column 'corr_given_val rand_string'.
         Patterns with exception: 'corr_given_val rand_a' and 'corr_given_val most' have almost the same relationship
             with an exception in row 499 (the last row of list_b).
         """
@@ -17033,7 +17090,7 @@ class DataConsistencyChecker:
         random.shuffle(c)
         list_c, list_d = zip(*c)
 
-        self.__add_synthetic_column('corr_given_val rand_string', ['A']*500 + ['B']*(self.num_synth_rows - 500))
+        self.__add_synthetic_column('corr_given_val rand_string', [None]*500 + ['B']*(self.num_synth_rows - 500))
         self.__add_synthetic_column('corr_given_val rand_a', list_a + list_c)
         self.__add_synthetic_column('corr_given_val rand_b', list_b + list_d)
         list_b = list(list_b)
@@ -17043,7 +17100,7 @@ class DataConsistencyChecker:
     def __check_corr_given_val(self, test_id):
 
         # From: https://stackoverflow.com/questions/71844846/is-there-a-faster-way-to-get-correlation-coefficents
-        # Modified to check for all zero arrays
+        # Modified to check for all-zero arrays
         def pairwise_correlation(a, b):
             am = a - np.mean(a, axis=0)
             bm = b - np.mean(b, axis=0)
@@ -17068,11 +17125,15 @@ class DataConsistencyChecker:
                 numeric_df = pd.concat([numeric_df, self.numeric_vals_filled[col_name]], axis=1)
         numeric_np = numeric_df.values
 
+        # Create a sample. We do not use self.sample_df, as it may have Nulls removed, and we do not wish to remove
+        # rows where the conditioning column has Null values
+        sample_df = self.orig_df.sample(n=50)
+
         # Create a sample array similarly
         numeric_sample_df = None
         for col_name in self.numeric_cols:
             if numeric_sample_df is None:
-                numeric_sample_df = convert_to_numeric(self.sample_df[col_name], self.column_medians[col_name])
+                numeric_sample_df = convert_to_numeric(sample_df[col_name], self.column_medians[col_name])
             else:
                 numeric_sample_df = pd.concat([numeric_sample_df, convert_to_numeric(self.sample_df[col_name], self.column_medians[col_name])], axis=1)
         numeric_sample_df.columns = self.numeric_cols
@@ -17102,7 +17163,7 @@ class DataConsistencyChecker:
             conditioning_vals = []
             val_idxs_dict = {}
             for val in vals:
-                if val is None:
+                if (val == None) or (val != val):
                     idxs = np.where(self.orig_df[col_cond].isna())[0]
                 else:
                     idxs = np.where(self.orig_df[col_cond] == val)[0]
@@ -17157,7 +17218,10 @@ class DataConsistencyChecker:
                         break
 
                     # pairwise_correlation() is fast, but does not distinguish positive from negative correlation
-                    sub_df = self.orig_df[self.orig_df[col_cond] == val]
+                    if (val == None) or (val != val):
+                        sub_df = self.orig_df[self.orig_df[col_cond].isna()]
+                    else:
+                        sub_df = self.orig_df[self.orig_df[col_cond] == val]
                     spearancorr = sub_df[col_name_1].corr(sub_df[col_name_2], method='spearman')
                     if abs(spearancorr) < 0.95:
                         any_subsets_uncorrelated = True
@@ -17178,7 +17242,7 @@ class DataConsistencyChecker:
                 if not any_subsets_uncorrelated and some_subset_correlated:
                     self.__process_analysis_binary(
                         test_id,
-                        [col_name_1, col_name_2, col_cond],
+                        [col_cond, col_name_1, col_name_2],
                         test_series,
                         (f'"{col_name_1}" is consistently correlated with "{col_name_2}" when conditioning on '
                          f'"{col_cond}"'))
@@ -18206,7 +18270,7 @@ def is_notebook():
         return False      # Probably standard Python interpreter
 
 
-def print_text(s):
+def print_text(s, remove_markdown=True):
     """
     General method to handle printing text to either console or notebook, in the form of markdown.
     """
@@ -18217,7 +18281,7 @@ def print_text(s):
         display(Markdown(s))
     else:
         # Remove or replace any characters that are specific to markdown
-        print(s.replace("*", "").replace("#", "").replace("<br>", "\n"))
+        print(s.replace("**", "").replace("#", "").replace("<br>", "\n"))
 
 
 def is_missing(x):
