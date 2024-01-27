@@ -2742,17 +2742,25 @@ class DataConsistencyChecker:
                 ax.axvspan(xmin=-display_info['lower_limit'], xmax=display_info['lower_limit'], facecolor='red',  alpha=0.3)
                 ax.axvspan(xmin=display_info['lower_limit'], xmax=self.orig_df[col_name].max(), facecolor='blue', alpha=0.3)
             if test_id in ['LESS_THAN_ONE']:
-                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=1, facecolor='blue', alpha=0.3)
-                ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
+                if self.orig_df[col_name].min() < -1:
+                    ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=-1, facecolor='red', alpha=0.3)
+                ax.axvspan(xmin=max(-1, self.orig_df[col_name].min()), xmax=min(1, self.orig_df[col_name].max()),
+                           facecolor='blue',  alpha=0.3)
+                if self.orig_df[col_name].max() > 1:
+                    ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='red', alpha=0.3)
             if test_id in ['GREATER_THAN_ONE']:
-                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=1, facecolor='red', alpha=0.3)
-                ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='blue',  alpha=0.3)
+                if self.orig_df[col_name].min() < -1:
+                    ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=-1, facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=max(-1, self.orig_df[col_name].min()), xmax=min(1, self.orig_df[col_name].max()),
+                           facecolor='red',  alpha=0.3)
+                if self.orig_df[col_name].max() > 1:
+                    ax.axvspan(xmin=1, xmax=self.orig_df[col_name].max(), facecolor='blue', alpha=0.3)
             if test_id in ['POSITIVE']:
-                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=0, facecolor='blue', alpha=0.3)
-                ax.axvspan(xmin=0, xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
-            if test_id in ['NEGATIVE']:
                 ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=0, facecolor='red', alpha=0.3)
                 ax.axvspan(xmin=0, xmax=self.orig_df[col_name].max(), facecolor='blue',  alpha=0.3)
+            if test_id in ['NEGATIVE']:
+                ax.axvspan(xmin=self.orig_df[col_name].min(), xmax=0, facecolor='blue', alpha=0.3)
+                ax.axvspan(xmin=0, xmax=self.orig_df[col_name].max(), facecolor='red',  alpha=0.3)
 
         # Ensure there are not too many tick labels to be readable
         clean_x_tick_labels(fig, 1, ax)
@@ -5127,6 +5135,8 @@ class DataConsistencyChecker:
         """
         Similar to get_col_pair_both_null_dict(), but checks if either are null, not if both are, and contains a single 
         boolean value for each pair of columns indicating True if there are at least 90% of the rows having either null.
+
+        Set force=True if the results will not be used to loop through tests, only to create a dictionary for reference.
         """
         if self.col_pairs_either_null_bool_dict:
             return self.col_pairs_either_null_bool_dict
@@ -8926,7 +8936,7 @@ class DataConsistencyChecker:
 
         cols_same_count_dict = self.get_cols_same_count_dict()
         cols_same_bool_dict = self.get_cols_same_bool_dict()
-        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict(force=True)
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             if self.verbose >= 2 and pair_idx > 0 and pair_idx % 10_000 == 0:
