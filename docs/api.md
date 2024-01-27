@@ -355,7 +355,7 @@
 ## summarize_patterns_by_test
 **summarize_patterns_by_test**(heatmap=False)
         
-        Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
+        Create and return a dataframe with a row for each test, indicating the number of features where the pattern
         was found.
 
         heatmap: bool
