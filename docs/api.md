@@ -7,7 +7,8 @@
    #### Methods to generate or modify test data
 - [generate_synth_data](#generate_synth_data)
 - [modify_real_data](#modify_real_data)
-   #### Methods to output information about the tool, unrelated to any specific dataset or test execution
+   #### Methods to output information about the tool
+  These unrelated to any specific dataset or test execution
 - [get_test_list](#get_test_list)
 - [get_test_descriptions](#get_test_descriptions)
 - [print_test_descriptions](#print_test_descriptions)
@@ -177,7 +178,7 @@
             a list of row numbers and column names, indicating the cells that were modified
 
 
-## Methods to output information about the tool, unrelated to any specific dataset or test execution
+## Methods to output information about the tool
 
 ## get_test_list
 **get_test_list**():
