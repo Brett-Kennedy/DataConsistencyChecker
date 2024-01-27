@@ -1,6 +1,7 @@
 # Full API
 
    #### &nbsp;&nbsp;&nbsp; The main APIs
+   These APIs must be called for any analysis. These create a DataConsistencyChecker object and use this to evaluate a dataset. The following APIs may be used to view the results. 
 - [DataConsistencyChecker](#DataConsistencyChecker)
 - [init_data](#init_data)
 - [check_data_quality](#check_data_quality)
