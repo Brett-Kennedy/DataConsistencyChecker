@@ -8,7 +8,7 @@
 - [generate_synth_data](#generate_synth_data)
 - [modify_real_data](#modify_real_data)
    #### Methods to output information about the tool
-  These unrelated to any specific dataset or test execution
+  These are unrelated to any specific dataset or test execution
 - [get_test_list](#get_test_list)
 - [get_test_descriptions](#get_test_descriptions)
 - [print_test_descriptions](#print_test_descriptions)
