@@ -17,7 +17,8 @@
     #### Methods to output statistics about the dataset, unrelated to any tests executed
 - [display_columns_types_list](#display_columns_types_list)
 - [display_columns_types_table](#display_columns_types_table)
-    #### Methods to output the results of the analysis in various ways
+    #### Methods to output summaries of the results
+  These provide counts of the numbers of rows and features identified as patterns with and without exceptions.
 - [get_test_ids_with_results](#get_test_ids_with_results)
 - [get_single_feature_tests_matrix](#get_single_feature_tests_matrix)
 - [get_patterns_list](#get_patterns_list)
@@ -28,17 +29,21 @@
 - [summarize_patterns_by_test](#summarize_patterns_by_test)
 - [summarize_exceptions_by_test](#summarize_exceptions_by_test)
 - [summarize_patterns_and_exceptions](#summarize_patterns_and_exceptions)
-- [display_detailed_results](#display_detailed_results)
-- [display_next](#display_next)
-- [get_outlier_scores](#get_outlier_scores)
-- [get_results_by_row_id](#get_results_by_row_id)
 - [plot_final_scores_distribution_by_row](#plot_final_scores_distribution_by_row)
 - [plot_final_scores_distribution_by_feature](#plot_final_scores_distribution_by_feature)
 - [plot_final_scores_distribution_by_test](#plot_final_scores_distribution_by_test)
+- [quick_report](#quick_report)
+  #### Methods to output the results
+  These provide information about the specific patterns and exceptions found.
+- [display_detailed_results](#display_detailed_results)
+- [display_next](#display_next)
+  #### Methods to describe specific rows in terms of their patterns and exceptions
+  These summarize specific rows and compare rows to each other
+- [get_outlier_scores](#get_outlier_scores)
+- [get_results_by_row_id](#get_results_by_row_id)
 - [display_least_flagged_rows](#display_least_flagged_rows)
 - [display_most_flagged_rows](#display_most_flagged_rows)
-- [quick_report](#quick_report)
-    #### Methods to find relationships between the data and the numbers of issues found
+  #### Methods to find relationships between the data and the numbers of issues found
 - [plot_columns_vs_final_scores](#plot_columns_vs_final_scores)
     
 
@@ -241,13 +246,13 @@
         calling display_columns_types_list(), this may be used to determine if the inferred column types are correct.
         
         
-## Methods to output the results of the analysis in various ways
+## Methods to output summaries of the results
 
 ## get_test_ids_with_results
 **get_test_ids_with_results**(include_patterns=True, include_exceptions=True)
         
         Gets a list of test ids, which may be used, for example, to loop through tests calling other APIs such as
-        display_detailed_results()
+        display_detailed_results(). These are the ids of tests that flagged at least one pattern and/or exeception.
 
         include_patterns: bool
             If True, the returned list will include all test ids for tests that flagged at least one pattern without
