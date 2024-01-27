@@ -518,6 +518,7 @@
 
 ## Methods to find relationships between the data and the numbers of issues found
 
+## plot_columns_vs_final_scores
 **plot_columns_vs_final_scores**()
         
         Used to determine if there are any relationships between column values and the final scores of the rows. This
