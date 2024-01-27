@@ -491,7 +491,8 @@
         
         Returns an outlier score for each row, similar to most outlier detectors.
         Returns a python array with an element for each row in the original data. All values are non-negative integer
-        values, with most rows containing zero for most datasets.
+        values, with most rows containing zero for most datasets. The scores indicate the number of tests that flagged
+        each row. 
 
 ## get_results_by_row_id
 **get_results_by_row_id**(row_num)
@@ -523,6 +524,7 @@
             If True, the flagged rows will be display in separate tables, with additional rows indicating which tests
             flagged which columns. If False, all displayed rows will be displayed in a single table; the flagged
             columns will be highlighted, but there will not be an indication of which tests flagged them.
+            
         n_rows: int
             The maximum number of original rows to present.
 
