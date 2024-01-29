@@ -1719,7 +1719,7 @@ class DataConsistencyChecker:
     def get_test_ids_with_results(self, include_patterns=True, include_exceptions=True):
         """
         Gets a list of test ids, which may be used, for example, to loop through tests calling other APIs such as
-        display_detailed_results()
+        display_detailed_results(). These are the ids of tests that flagged at least one pattern and/or exeception.
 
         include_patterns: bool
             If True, the returned list will include all test ids for tests that flagged at least one pattern without
@@ -1953,7 +1953,7 @@ class DataConsistencyChecker:
 
     def summarize_patterns_by_test(self, heatmap=False):
         """
-        Create and return a dataframe with a row for each test, indicating 1) the number of features where the pattern
+        Create and return a dataframe with a row for each test, indicating the number of features where the pattern
         was found.
 
         heatmap: bool
@@ -2052,6 +2052,95 @@ class DataConsistencyChecker:
 
         df = df.replace(0, '')
         return df
+
+    def plot_final_scores_distribution_by_row(self):
+        """
+        Display a probability plot and histogram representing the distribution of final scores by row.
+        """
+
+        if self.test_results_df is None or self.test_results_df.empty:
+            return
+
+        final_scores_df = self.test_results_df.copy()
+        final_scores_df = final_scores_df.sort_values('FINAL SCORE', ascending=True)
+        final_scores_df['Rank'] = range(self.num_rows)
+        plt.subplots(figsize=(5, 3))
+        s = sns.scatterplot(data=final_scores_df, x='Rank', y='FINAL SCORE')
+        s.set_title("Distribution of Scores by Row, ordered lowest to highest scores")
+        plt.show()
+
+        plt.subplots(figsize=(5, 3))
+        s = sns.histplot(data=final_scores_df, x='FINAL SCORE')
+        s.set_title("Distribution of Scores per Row")
+        plt.show()
+
+        if final_scores_df['FINAL SCORE'].nunique() > 2:
+            plt.subplots(figsize=(5, 3))
+            s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
+            s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
+            plt.show()
+
+    def plot_final_scores_distribution_by_feature(self):
+        """
+        Display a bar plot representing the distribution of final scores by feature.
+        """
+
+        final_scores_series = pd.Series(self.test_results_by_column_np.sum(axis=0)).sort_values(ascending=True).values
+        final_scores_df = pd.DataFrame({'Feature': self.orig_df.columns,
+                                        'Total Scores': final_scores_series})
+        plt.subplots(figsize=(5, len(final_scores_df)*0.25))
+        s = sns.barplot(data=final_scores_df, orient='h', y='Feature', x='Total Scores')
+        s.set_title("Distribution of Total Scores per Column")
+        plt.show()
+
+    def plot_final_scores_distribution_by_test(self):
+        """
+        Display a bar plot representing the distribution of final scores by test.
+        """
+
+        if len(self.exceptions_summary_df) == 0:
+            print("No exceptions found")
+            return
+
+        scores_by_test = pd.DataFrame(self.exceptions_summary_df.groupby('Test ID')['Number of Exceptions'].sum().sort_values())
+        scores_by_test['Test ID'] = scores_by_test.index
+
+        plt.subplots(figsize=(5, len(scores_by_test) * 0.25))
+        s = sns.barplot(data=scores_by_test, orient='h', y='Test ID', x='Number of Exceptions')
+        s.set_title("Distribution of Scores per Test")
+        plt.show()
+
+    def quick_report(self):
+        """
+        A convenience method, which calls several other APIs, to give an overview of the results in a single API.
+        """
+
+        def display_api_results(df, title):
+            print("\n\n\n")
+            if is_notebook():
+                display(Markdown(f'# {title}'))
+                display(df)
+            else:
+                print(title + ":")
+                print(df)
+
+        def display_plot(func, title):
+            print("\n\n\n")
+            if is_notebook():
+                display(Markdown(f'# {title}'))
+            else:
+                print(title + ":")
+            func()
+
+        display_api_results(self.get_patterns_list(), 'Patterns List (short list only)')
+        display_api_results(self.summarize_patterns_by_test_and_feature(), 'Patterns by Test and Feature')
+        display_api_results(self.get_exceptions_list(), 'Exceptions List')
+        display_api_results(self.summarize_exceptions_by_test_and_feature(), 'Exceptions Summary by Test and Feature')
+        display_api_results(self.summarize_exceptions_by_test(), 'Exceptions Summary by Test')
+        display_api_results(self.summarize_patterns_and_exceptions(), 'Summary of Patterns and Exceptions (all tests)')
+        display_plot(self.plot_final_scores_distribution_by_row, "Final Scores by Row of the Data")
+        display_plot(self.plot_final_scores_distribution_by_feature, "Final Scores by Feature")
+        display_plot(self.plot_final_scores_distribution_by_test, "Final Scores by Test")
 
     def display_detailed_results(
             self,
@@ -2481,63 +2570,6 @@ class DataConsistencyChecker:
             issues_list.append((test_id, col_name))
         return issues_list
 
-    def plot_final_scores_distribution_by_row(self):
-        """
-        Display a probability plot and histogram representing the distribution of final scores by row.
-        """
-
-        if self.test_results_df is None or self.test_results_df.empty:
-            return
-
-        final_scores_df = self.test_results_df.copy()
-        final_scores_df = final_scores_df.sort_values('FINAL SCORE', ascending=True)
-        final_scores_df['Rank'] = range(self.num_rows)
-        plt.subplots(figsize=(5, 3))
-        s = sns.scatterplot(data=final_scores_df, x='Rank', y='FINAL SCORE')
-        s.set_title("Distribution of Scores by Row, ordered lowest to highest scores")
-        plt.show()
-
-        plt.subplots(figsize=(5, 3))
-        s = sns.histplot(data=final_scores_df, x='FINAL SCORE')
-        s.set_title("Distribution of Scores per Row")
-        plt.show()
-
-        if final_scores_df['FINAL SCORE'].nunique() > 2:
-            plt.subplots(figsize=(5, 3))
-            s = sns.histplot(data=final_scores_df[final_scores_df['FINAL SCORE'] > 0], x='FINAL SCORE')
-            s.set_title("Distribution of Scores per Row (Excluding Scores of 0)")
-            plt.show()
-
-    def plot_final_scores_distribution_by_feature(self):
-        """
-        Display a bar plot representing the distribution of final scores by feature.
-        """
-
-        final_scores_series = pd.Series(self.test_results_by_column_np.sum(axis=0)).sort_values(ascending=True).values
-        final_scores_df = pd.DataFrame({'Feature': self.orig_df.columns,
-                                        'Total Scores': final_scores_series})
-        plt.subplots(figsize=(5, len(final_scores_df)*0.25))
-        s = sns.barplot(data=final_scores_df, orient='h', y='Feature', x='Total Scores')
-        s.set_title("Distribution of Total Scores per Column")
-        plt.show()
-
-    def plot_final_scores_distribution_by_test(self):
-        """
-        Display a bar plot representing the distribution of final scores by test.
-        """
-
-        if len(self.exceptions_summary_df) == 0:
-            print("No exceptions found")
-            return
-
-        scores_by_test = pd.DataFrame(self.exceptions_summary_df.groupby('Test ID')['Number of Exceptions'].sum().sort_values())
-        scores_by_test['Test ID'] = scores_by_test.index
-
-        plt.subplots(figsize=(5, len(scores_by_test) * 0.25))
-        s = sns.barplot(data=scores_by_test, orient='h', y='Test ID', x='Number of Exceptions')
-        s.set_title("Distribution of Scores per Test")
-        plt.show()
-
     def display_least_flagged_rows(self, with_results=True, n_rows=10):
         """
         This displays the n_rows rows from the original data with the lowest scores. These are the rows with the least
@@ -2594,38 +2626,6 @@ class DataConsistencyChecker:
                                        axis=None))
             else:
                 print(df)
-
-    def quick_report(self):
-        """
-        A convenience method, which calls several other APIs, to give an overview of the results in a single API.
-        """
-
-        def display_api_results(df, title):
-            print("\n\n\n")
-            if is_notebook():
-                display(Markdown(f'# {title}'))
-                display(df)
-            else:
-                print(title + ":")
-                print(df)
-
-        def display_plot(func, title):
-            print("\n\n\n")
-            if is_notebook():
-                display(Markdown(f'# {title}'))
-            else:
-                print(title + ":")
-            func()
-
-        display_api_results(self.get_patterns_list(), 'Patterns List (short list only)')
-        display_api_results(self.summarize_patterns_by_test_and_feature(), 'Patterns by Test and Feature')
-        display_api_results(self.get_exceptions_list(), 'Exceptions List')
-        display_api_results(self.summarize_exceptions_by_test_and_feature(), 'Exceptions Summary by Test and Feature')
-        display_api_results(self.summarize_exceptions_by_test(), 'Exceptions Summary by Test')
-        display_api_results(self.summarize_patterns_and_exceptions(), 'Summary of Patterns and Exceptions (all tests)')
-        display_plot(self.plot_final_scores_distribution_by_row, "Final Scores by Row of the Data")
-        display_plot(self.plot_final_scores_distribution_by_feature, "Final Scores by Feature")
-        display_plot(self.plot_final_scores_distribution_by_test, "Final Scores by Test")
 
     ##################################################################################################################
     # Methods to find relationships between the data and the numbers of issues found.
@@ -3787,6 +3787,9 @@ class DataConsistencyChecker:
             df['Percentile Column 2'] = pd.Series(display_info['col_2_percentiles']).loc[df.index]
         elif test_id in ['LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
             df[f'Bin Number {cols[0]}'] = pd.Series(display_info['bin_assignments']).loc[df.index]
+        elif test_id in ['FEW_NEIGHBORS']:
+            df['Closest smaller value'] = pd.Series(display_info['prev_val']).loc[df.index]
+            df['Closest larger value'] = pd.Series(display_info['next_val']).loc[df.index]
 
         # Set the column order
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
@@ -6971,8 +6974,9 @@ class DataConsistencyChecker:
                                     [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
                                     [random.randint(10_000, 20_000) for _ in range(100)])
         self.__add_synthetic_column('few neighbors most',
-                                    [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
-                                    [random.randint(10_000, 20_000) for _ in range(99)] + [5000])
+                                    [random.randint(10_000, 20_000) for _ in range(self.num_synth_rows-100)] +
+                                    [5000] +
+                                    [random.randint(1000, 2000) for _ in range(99)])
 
         date_1 = datetime.datetime.strptime("01-7-2018", "%d-%m-%Y")
         date_2 = datetime.datetime.strptime("01-7-2025", "%d-%m-%Y")
@@ -7005,7 +7009,8 @@ class DataConsistencyChecker:
             diff_from_next = sorted_vals.diff(-1)
             diff_threshold = (self.numeric_vals[col_name].max() - self.numeric_vals[col_name].min()) / 10.0
 
-            test_arr = [True if not math.isnan(x) and not math.isnan(y) and (abs(x) > diff_threshold) and (abs(y) > diff_threshold)
+            test_arr = [True if not math.isnan(x) and not math.isnan(y) and (abs(x) > diff_threshold) and
+                                (abs(y) > diff_threshold)
                            else False for x, y in zip(diff_from_prev, diff_from_next)]
             num_isolated_points = test_arr.count(True)
 
@@ -7013,13 +7018,18 @@ class DataConsistencyChecker:
                 # Flag the correct rows. We currently have their indexes based on a sorted array.
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
+                prev_arr = np.array(sorted(self.orig_df[col_name].values))[list(self.orig_df[col_name].rank().astype(int)-2)].tolist()
+                next_arr = np.array(sorted(self.orig_df[col_name].values.tolist() + [np.NaN]))[list(self.orig_df[col_name].rank().astype(int))].tolist()
+
                 self.__process_analysis_binary(
                     test_id,
                     [col_name],
                     test_series,
                     (f"The test marked any values more than {diff_threshold:.3f} away from both the next smallest and "
-                     "next largest values in the column"),
-                    allow_patterns=False
+                     f"next largest values in the column. The minimum value for the column is "
+                     f"{self.numeric_vals[col_name].min()} and the maximum is {self.numeric_vals[col_name].max()}. "),
+                    allow_patterns=False,
+                    display_info={"prev_val": prev_arr, "next_val": next_arr}
                 )
 
         for col_name in self.date_cols:
@@ -7028,7 +7038,8 @@ class DataConsistencyChecker:
             sorted_vals = pd.Series(sorted_vals)
             diff_from_prev = sorted_vals.diff(1)
             diff_from_next = sorted_vals.diff(-1)
-            diff_threshold = (pd.to_datetime(self.orig_df[col_name]).max() - pd.to_datetime(self.orig_df[col_name]).min()) / 10.0
+            diff_threshold = (pd.to_datetime(self.orig_df[col_name]).max() -
+                              pd.to_datetime(self.orig_df[col_name]).min()) / 10.0
 
             test_arr = [True if (x == x) and (y == y) and (abs(x) > diff_threshold) and (abs(y) > diff_threshold)
                         else False for x, y in zip(diff_from_prev, diff_from_next)]
@@ -7038,13 +7049,17 @@ class DataConsistencyChecker:
                 # Flag the correct rows. We currently have their indexes based on a sorted array.
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
+                prev_arr = np.array(sorted(self.orig_df[col_name].values))[list(self.orig_df[col_name].rank().astype(int)-2)]
+                next_arr = np.array([pd.Timestamp(x) for x in np.concatenate([np.array(sorted(self.orig_df[col_name].values)), np.array([self.orig_df[col_name].max()])]).astype(pd.Timestamp)])[list(self.orig_df[col_name].rank().astype(int))]
+
                 self.__process_analysis_binary(
                     test_id,
                     [col_name],
                     test_series,
                     (f"The test marked any values more than {diff_threshold.days} days away from both the next "
                      "smallest and next largest values in the column"),
-                    allow_patterns=False
+                    allow_patterns=False,
+                    display_info={"prev_val": prev_arr, "next_val": next_arr}
                 )
 
     def __generate_few_within_range(self):
