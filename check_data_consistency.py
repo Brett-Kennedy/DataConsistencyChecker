@@ -3790,6 +3790,8 @@ class DataConsistencyChecker:
         elif test_id in ['FEW_NEIGHBORS']:
             df['Closest smaller value'] = pd.Series(display_info['prev_val']).loc[df.index]
             df['Closest larger value'] = pd.Series(display_info['next_val']).loc[df.index]
+        elif test_id in ['FEW_WITHIN_RANGE']:
+            df['Number in Range'] = pd.Series(display_info['Number in Range']).loc[df.index]
 
         # Set the column order
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
@@ -7018,8 +7020,8 @@ class DataConsistencyChecker:
                 # Flag the correct rows. We currently have their indexes based on a sorted array.
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
-                prev_arr = np.array(sorted(self.orig_df[col_name].values))[list(self.orig_df[col_name].rank().astype(int)-2)].tolist()
-                next_arr = np.array(sorted(self.orig_df[col_name].values.tolist() + [np.NaN]))[list(self.orig_df[col_name].rank().astype(int))].tolist()
+                prev_arr = np.array(sorted([np.NaN] + self.orig_df[col_name].values.tolist()))[list(self.orig_df[col_name].rank().astype(int)-1)].tolist()
+                next_arr = np.array(sorted(self.orig_df[col_name].values.tolist() + [np.NaN, np.NaN]))[list(self.orig_df[col_name].rank().astype(int)+0)].tolist()
 
                 self.__process_analysis_binary(
                     test_id,
@@ -7050,7 +7052,9 @@ class DataConsistencyChecker:
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
                 prev_arr = np.array(sorted(self.orig_df[col_name].values))[list(self.orig_df[col_name].rank().astype(int)-2)]
-                next_arr = np.array([pd.Timestamp(x) for x in np.concatenate([np.array(sorted(self.orig_df[col_name].values)), np.array([self.orig_df[col_name].max()])]).astype(pd.Timestamp)])[list(self.orig_df[col_name].rank().astype(int))]
+                next_arr = np.array([pd.Timestamp(x) for x in np.concatenate( # It converts to integer otherwise
+                        [np.array(sorted(self.orig_df[col_name].values)), np.array([self.orig_df[col_name].max()])]
+                    ).astype(pd.Timestamp)])[list(self.orig_df[col_name].rank().astype(int))]
 
                 self.__process_analysis_binary(
                     test_id,
@@ -7089,7 +7093,7 @@ class DataConsistencyChecker:
 
     def __check_few_within_range(self, test_id):
         """
-        This identifies only internal outliers, and not extreme values. It flags values where there are few other values
+        This identifies only internal outliers and not extreme values. It flags values where there are few other values
         within a range on either side. To do this efficiently, it divides the column into 50 equal-width bins.
         It is concerned with bins of width 1/10 the full data range, but to do this in a more robust manner, it
         uses 50 bins, and considers sets of 7 bins.
@@ -7122,6 +7126,16 @@ class DataConsistencyChecker:
             bin_counts = binned_values.value_counts()
 
             rare_bins = []
+
+            # Set combined bins counts for elements outside the normal range
+            combined_bins_counts = [0]*len(bin_counts)
+            combined_bins_counts[0] = bin_counts[0] + bin_counts[1] + bin_counts[2]
+            combined_bins_counts[1] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3]
+            combined_bins_counts[2] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3] + bin_counts[4]
+            combined_bins_counts[-1] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3]
+            combined_bins_counts[-2] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4]
+            combined_bins_counts[-3] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4] + bin_counts[-5]
+
             for bin_id in bin_labels[3:-3]:
                 rows_count = bin_counts.loc[bin_id-3] + \
                              bin_counts.loc[bin_id-2] + \
@@ -7130,6 +7144,7 @@ class DataConsistencyChecker:
                              bin_counts.loc[bin_id+1] + \
                              bin_counts.loc[bin_id+2] + \
                              bin_counts.loc[bin_id+3]
+                combined_bins_counts[bin_id] = rows_count
                 if (bin_counts.sort_index().loc[bin_id+1:].sum() > (self.num_rows / 10.0)) and \
                     (bin_counts.sort_index().loc[:bin_id].sum() > (self.num_rows / 10.0)) and \
                     (rows_count < self.freq_contamination_level):
@@ -7143,8 +7158,10 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
-                 f"their and the neighboring bins (width {bin_width:.4f})"))
+                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors "
+                 f"within their and the neighboring bins (width {bin_width:.4f})"),
+                display_info={'Number in Range': [combined_bins_counts[x] for x in binned_values]}
+            )
 
         for col_name in self.date_cols:
             # Skip columns with few unique values
@@ -7159,10 +7176,20 @@ class DataConsistencyChecker:
             for i in range(num_bins + 2):
                 bins.append(min_val + (i * bin_width))
             bin_labels = [int(x) for x in range(len(bins)-1)]
-            binned_values = pd.cut(pd.to_datetime(self.orig_df[col_name]), bins=bins, labels=bin_labels)
+            binned_values = pd.cut(pd.to_datetime(self.orig_df[col_name]), bins=bins, labels=bin_labels, include_lowest=True)
             bin_counts = binned_values.value_counts()
 
             rare_bins = []
+
+            # Set combined bins counts for elements outside the normal range
+            combined_bins_counts = [0]*len(bin_counts)
+            combined_bins_counts[0] = bin_counts[0] + bin_counts[1] + bin_counts[2]
+            combined_bins_counts[1] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3]
+            combined_bins_counts[2] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3] + bin_counts[4]
+            combined_bins_counts[-1] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3]
+            combined_bins_counts[-2] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4]
+            combined_bins_counts[-3] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4] + bin_counts[-5]
+
             for bin_id in bin_labels[3:-3]:
                 rows_count = bin_counts.loc[bin_id-3] + \
                              bin_counts.loc[bin_id-2] + \
@@ -7171,6 +7198,7 @@ class DataConsistencyChecker:
                              bin_counts.loc[bin_id+1] + \
                              bin_counts.loc[bin_id+2] + \
                              bin_counts.loc[bin_id+3]
+                combined_bins_counts[bin_id] = rows_count
                 if (bin_counts.sort_index().loc[bin_id+1:].sum() > (self.num_rows / 10.0)) and \
                         (bin_counts.sort_index().loc[:bin_id].sum() > (self.num_rows / 10.0)) and \
                         (rows_count < self.freq_contamination_level) and (rows_count > 0):
@@ -7185,7 +7213,8 @@ class DataConsistencyChecker:
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
                 (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
-                 f"their and the neighboring bins (width {bin_width.days} days)"))
+                 f"their and the neighboring bins (width {bin_width.days} days)"),
+                display_info={'Number in Range': [combined_bins_counts[x] for x in binned_values]})
 
     def __generate_very_small(self):
         """
