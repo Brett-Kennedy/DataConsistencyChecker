@@ -3432,7 +3432,6 @@ class DataConsistencyChecker:
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
-            df2[cols[1]] = df2[cols[1]].astype(float)
             col_vals = df2[cols[0]].astype(str).apply(replace_special_with_space)
             df2[cols[0]] = [x[0] if len(x) > 0 else "" for x in col_vals.str.split()]
             if cols[1] in self.date_cols:
@@ -3441,6 +3440,7 @@ class DataConsistencyChecker:
                 plt.xlabel(cols[1])
                 plt.xticks([])
             else:
+                df2[cols[1]] = df2[cols[1]].astype(float)
                 sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
             plt.show()
 
@@ -7056,6 +7056,10 @@ class DataConsistencyChecker:
         for col_name in self.numeric_cols:
             # Skip columns with any non-numeric values
             if len(self.numeric_vals[col_name]) < self.num_rows:
+                continue
+
+            # Skip columns with many null values
+            if self.orig_df[col_name].isna().sum() > (self.num_rows / 2):
                 continue
 
             sorted_vals = copy.copy(self.orig_df[col_name].astype(float).values)
