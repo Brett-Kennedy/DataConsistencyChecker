@@ -2550,6 +2550,10 @@ class DataConsistencyChecker:
         though this varies for different projects.
         """
 
+        if self.current_display_test >= len(self.found_tests):
+            print("No further test results")
+            return
+
         test_id = self.found_tests[self.current_display_test]
 
         if is_notebook():
@@ -3342,7 +3346,7 @@ class DataConsistencyChecker:
                 plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.dayofweek)
+            sns.countplot(x=self.orig_df[cols[0]].dt.strftime('%A'))
             plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_MONTH']:
@@ -7984,7 +7988,7 @@ class DataConsistencyChecker:
                 [col_name_1, col_name_2],
                 test_series,
                 (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their ratio (with '
-                 f'{int(num_same)} rows having identical values)'),
+                 f'{int(num_same)} rows having identical values). Rows with values of zero are not tested.'),
                 display_info={'Ratio': test_series_a}
             )
 
@@ -8050,8 +8054,8 @@ class DataConsistencyChecker:
                 [col_name_1, col_name_2],
                 test_series,
                 (f'"{col_name_1}" and "{col_name_2}" have consistently similar values in terms of their absolute '
-                 f'difference (with {cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))]} rows having '
-                 f'identical values)'),
+                 f'difference (with {int(cols_same_count_dict[tuple(sorted([col_name_1, col_name_2]))])} rows having '
+                 f'identical values). Rows with values of zero are not tested.'),
                 display_info={"Diff": test_series_a}
             )
 
@@ -12020,7 +12024,7 @@ class DataConsistencyChecker:
                     # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
                     # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
-                    sub_test_series = pd.Series(num_vals_all <= threshold)
+                    sub_test_series = pd.Series([(x < threshold) or (x!=x) or (x==None) for x in num_vals_all])
 
                     if 0 < sub_test_series.tolist().count(False) <= self.freq_contamination_level:
                         index_of_large = \
@@ -12120,7 +12124,7 @@ class DataConsistencyChecker:
                     # We can not use self.numeric_value_filled, as that was filled with the median for the full column,
                     # not the median for this subset.
                     num_vals_all = convert_to_numeric(sub_df[num_col], med)
-                    sub_test_series = pd.Series(num_vals_all >= threshold)
+                    sub_test_series = pd.Series([(x >= threshold) or (x!=x) or (x==None) for x in num_vals_all])
 
                     if 0 < sub_test_series.tolist().count(False) <= self.freq_contamination_level:
                         index_of_small = \
@@ -18309,7 +18313,7 @@ def convert_to_numeric(arr, filler):
     Ensure an array has all numeric values. Any non-numeric values are replaced by the specified filler value.
     Null values as well as variables with non-numeric characters will be removed.
     """
-    return pd.Series([float(x) if is_number(x) else filler for x in arr], dtype='float64')
+    return pd.Series([float(x) if (is_number(x) and x == x and x != None) else filler for x in arr], dtype='float64')
 
 
 def get_num_decimal_digits(num):
