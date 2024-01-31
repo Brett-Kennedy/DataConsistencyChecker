@@ -3366,7 +3366,9 @@ class DataConsistencyChecker:
             plt.show()
 
         elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
+            fig, ax = plt.subplots()
             sns.countplot(x=(self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days)
+            clean_x_tick_labels(fig, 1, ax)
             plt.show()
 
         elif test_id in ['RARE_PAIRS_FIRST_CHAR']:
@@ -7234,7 +7236,7 @@ class DataConsistencyChecker:
 
             # Set combined bins counts for elements outside the normal range
             combined_bins_counts = [0]*len(bin_counts)
-            list_counts = bin_counts.tolist()
+            list_counts = bin_counts.sort_index().tolist()
             combined_bins_counts[0] = list_counts[0] + list_counts[1] + list_counts[2]
             combined_bins_counts[1] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3]
             combined_bins_counts[2] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3] + list_counts[4]
@@ -7289,7 +7291,7 @@ class DataConsistencyChecker:
 
             # Set combined bins counts for elements outside the normal range
             combined_bins_counts = [0]*len(bin_counts)
-            list_counts = bin_counts.tolist()
+            list_counts = bin_counts.sort_index().tolist()
             combined_bins_counts[0] = list_counts[0] + list_counts[1] + list_counts[2]
             combined_bins_counts[1] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3]
             combined_bins_counts[2] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3] + list_counts[4]
@@ -18517,6 +18519,9 @@ def call_test(dc, test_id):
 
 
 def clean_x_tick_labels(fig, n_axis, ax):
+    """
+    n_axis: the number of axes in the figure
+    """
 
     # Ensure the x tick labels are populated
     plt.draw()
