@@ -9334,6 +9334,13 @@ class DataConsistencyChecker:
                 if (nunique_dict[col_name_1] == 1) or (nunique_dict[col_name_2] == 1) or (nunique_dict[col_name_3] == 1):
                     continue
 
+                # Check the two columns that have the values that are checked have a reasonable number of at least
+                # two unique values
+                if self.orig_df[col_name_1].value_counts().values[1] < self.freq_contamination_level:
+                    continue
+                if self.orig_df[col_name_2].value_counts().values[1] < self.freq_contamination_level:
+                    continue
+
                 if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
                     continue
 
