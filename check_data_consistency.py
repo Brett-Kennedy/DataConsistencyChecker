@@ -6730,15 +6730,13 @@ class DataConsistencyChecker:
                     continue
 
                 # Check there are few decreasing values
-                decr_series = (self.orig_df[col_name].astype(float).diff() < 0) | \
-                              [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
+                decr_series = self.orig_df[col_name].astype(float).diff() < 0
                 num_decr = decr_series.tolist().count(True)
                 if num_decr > self.freq_contamination_level:
                     continue
 
                 # Check the number of increases is significantly more than the number of decreases
-                incr_series = (self.orig_df[col_name].astype(float).diff() > 0) | \
-                              [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
+                incr_series = self.orig_df[col_name].astype(float).diff() > 0
                 num_incr = incr_series.tolist().count(True)
                 if num_decr > (num_incr / 10.0):
                     continue
@@ -6746,6 +6744,18 @@ class DataConsistencyChecker:
                 test_series = (self.orig_df[col_name].astype(float).diff() >= 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
             else:
+                # Check there are few decreasing values
+                decr_series = self.orig_df[col_name].diff().dt.total_seconds() < 0
+                num_decr = decr_series.tolist().count(True)
+                if num_decr > self.freq_contamination_level:
+                    continue
+
+                # Check the number of increases is significantly more than the number of decreases
+                incr_series = self.orig_df[col_name].diff().dt.total_seconds() > 0
+                num_incr = incr_series.tolist().count(True)
+                if num_decr > (num_incr / 10.0):
+                    continue
+
                 test_series = np.array([x.total_seconds() for x in (pd.to_datetime(self.orig_df[col_name]) - pd.to_datetime(self.orig_df[col_name]).shift())]) >= 0
                 test_series = test_series | pd.to_datetime(self.orig_df[col_name]).diff().isna()
             # The shift operation is undefined for the first row, which results in a NaN that we fill here.
@@ -6783,15 +6793,13 @@ class DataConsistencyChecker:
                     continue
 
                 # Check there are few increasing values
-                incr_series = (self.orig_df[col_name].astype(float).diff() > 0) | \
-                              [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
+                incr_series = self.orig_df[col_name].astype(float).diff() > 0
                 num_incr = incr_series.tolist().count(True)
                 if num_incr > self.freq_contamination_level:
                     continue
 
                 # Check the number of decreases is significantly more than the number of increases
-                decr_series = (self.orig_df[col_name].astype(float).diff() < 0) | \
-                              [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
+                decr_series = self.orig_df[col_name].astype(float).diff() < 0
                 num_decr = decr_series.tolist().count(True)
                 if num_incr > (num_decr / 10.0):
                     continue
@@ -6799,6 +6807,18 @@ class DataConsistencyChecker:
                 test_series = (self.orig_df[col_name].astype(float).diff() <= 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
             else:
+                # Check there are few increasing values
+                incr_series = self.orig_df[col_name].diff().dt.total_seconds() > 0
+                num_incr = incr_series.tolist().count(True)
+                if num_incr > self.freq_contamination_level:
+                    continue
+
+                # Check the number of decreases is significantly more than the number of increases
+                decr_series = self.orig_df[col_name].diff().dt.total_seconds() < 0
+                num_decr = decr_series.tolist().count(True)
+                if num_incr > (num_decr / 10.0):
+                    continue
+
                 test_series = np.array([x.total_seconds() for x in (pd.to_datetime(self.orig_df[col_name]) - pd.to_datetime(self.orig_df[col_name]).shift())]) <= 0
                 test_series = test_series | pd.to_datetime(self.orig_df[col_name]).diff().isna()
             # The shift operation is undefined for the first row, which results in a NaN we fill here.
@@ -7100,6 +7120,10 @@ class DataConsistencyChecker:
                 )
 
         for col_name in self.date_cols:
+            # Skip columns with many null values
+            if self.orig_df[col_name].isna().sum() > (self.num_rows / 2):
+                continue
+
             sorted_vals = copy.copy(pd.to_datetime(self.orig_df[col_name]).values)
             sorted_vals.sort()
             sorted_vals = pd.Series(sorted_vals)
