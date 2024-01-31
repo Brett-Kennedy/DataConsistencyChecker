@@ -3403,7 +3403,6 @@ class DataConsistencyChecker:
         elif test_id in ['LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
             df2 = self.orig_df[cols].copy()
             df2[cols[1]] = df2[cols[1]].astype(float)
-            df2[cols[0]] = display_info['bin_assignments']
             if cols[1] in self.date_cols:
                 df2['Epoch'] = (df2[cols[1]] - datetime.datetime(1970, 1, 1)).dt.total_seconds()
                 sns.boxplot(data=df2, orient='h', y=cols[0], x='Epoch')
@@ -3411,8 +3410,20 @@ class DataConsistencyChecker:
                 plt.ylabel(cols[0] + " Bin Number")
                 plt.xticks([])
             else:
-                sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
-                plt.ylabel(cols[0] + " Bin Number")
+                fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 3))
+                sns.scatterplot(data=df2, x=cols[0], y=cols[1], ax=ax[0])
+                for v in display_info['bin_edges']:
+                    ax[0].axvline(v, color='green', linewidth=1, alpha=0.3)
+                for label in ax[0].get_xmajorticklabels():
+                    label.set_rotation(30)
+                    label.set_horizontalalignment("right")
+                ax[0].set_title('Values with Bin Edges')
+
+                df2[cols[0]] = display_info['bin_assignments']
+                s = sns.boxplot(data=df2, orient='v', x=cols[0], y=cols[1], ax=ax[1])
+                s.set_xlabel(cols[0] + " Bin Number")
+                s.set_title("Values by Bin")
+            plt.tight_layout()
             plt.show()
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
@@ -3839,6 +3850,7 @@ class DataConsistencyChecker:
         else:
             df = df.sort_index()
 
+        pd.options.display.float_format = '{:f}'.format
         if is_notebook():
             display(df)
         else:
@@ -7014,9 +7026,9 @@ class DataConsistencyChecker:
                                     [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
                                     [random.randint(10_000, 20_000) for _ in range(100)])
         self.__add_synthetic_column('few neighbors most',
-                                    [random.randint(10_000, 20_000) for _ in range(self.num_synth_rows-100)] +
-                                    [5000] +
-                                    [random.randint(1000, 2000) for _ in range(99)])
+                                    [random.randint(10_000_000_000, 20_000_000_000) for _ in range(self.num_synth_rows-100)] +
+                                    [5000_000_000] +
+                                    [random.randint(1000_000_000, 2000_000_000) for _ in range(99)])
 
         date_1 = datetime.datetime.strptime("01-7-2018", "%d-%m-%Y")
         date_2 = datetime.datetime.strptime("01-7-2025", "%d-%m-%Y")
@@ -9249,6 +9261,7 @@ class DataConsistencyChecker:
             return
 
         col_triples_any_null_bool_dict = self.get_col_triples_any_null_bool_dict()
+        nunique_dict = self.get_nunique_dict()
 
         flagged_tuples = {}
         for col_idx, col_name_3 in enumerate(self.numeric_cols):
@@ -9257,6 +9270,9 @@ class DataConsistencyChecker:
             _, column_pairs = self.__get_numeric_column_pairs_unique()
             for cols_idx, (col_name_1, col_name_2) in enumerate(column_pairs):
                 if col_name_1 == col_name_3 or col_name_2 == col_name_3:
+                    continue
+
+                if (nunique_dict[col_name_1] == 1) or (nunique_dict[col_name_2] == 1) or (nunique_dict[col_name_3] == 1):
                     continue
 
                 if col_triples_any_null_bool_dict[tuple(sorted([col_name_1, col_name_2, col_name_3]))]:
@@ -11457,7 +11473,7 @@ class DataConsistencyChecker:
             max_date = pd.to_datetime(self.orig_df[col_name]).max()
 
             # Ensure there is at least 3 months of range
-            if ((max_date - min_date) / np.timedelta64(1, 'M')) < 3:
+            if ((max_date - min_date) / np.timedelta64(1, 'D')) < 91:
                 continue
 
             dom_arr = pd.to_datetime(self.orig_df[col_name]).dt.day
@@ -11942,7 +11958,8 @@ class DataConsistencyChecker:
 
             # Create 10 equal-width bins for the dates in the current date column
             bin_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-            bin_assignments = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels)
+            bin_assignments, bin_edges = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels,
+                                                retbins=True)
             if bin_assignments.isna().sum() > 0:
                 bin_labels.append(-1)
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
@@ -12009,7 +12026,7 @@ class DataConsistencyChecker:
                     f'"{num_col}" is unusually large given the bin of the date column: "{date_col}"',
                     f"",
                     allow_patterns=False,
-                    display_info={"bin_assignments": bin_assignments}
+                    display_info={"bin_assignments": bin_assignments, "bin_edges": bin_edges}
                 )
 
     def __generate_small_given_date(self):
@@ -12041,7 +12058,8 @@ class DataConsistencyChecker:
 
             # Create 10 equal-width bins for the dates
             bin_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-            bin_assignments = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels)
+            bin_assignments, bin_edges = pd.cut(pd.to_datetime(self.orig_df[date_col]), bins=10, labels=bin_labels,
+                                                retbins=True)
             if bin_assignments.isna().sum() > 0:
                 bin_labels.append(-1)
                 bin_assignments = pd.Series([-1 if is_missing(x) else x for x in bin_assignments])
@@ -12108,7 +12126,7 @@ class DataConsistencyChecker:
                     f'"{num_col}" is unusually small given the bin of the date column: "{date_col}"',
                     f"",
                     allow_patterns=False,
-                    display_info={"bin_assignments": bin_assignments}
+                    display_info={"bin_assignments": bin_assignments, "bin_edges": bin_edges}
                 )
 
     ##################################################################################################################
