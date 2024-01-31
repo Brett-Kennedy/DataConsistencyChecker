@@ -7073,11 +7073,12 @@ class DataConsistencyChecker:
                 # Some versions of pandas cannot work with NaN values here, so use the min & max
                 prev_arr = np.array(
                     sorted([self.orig_df[col_name].min()] +
-                    self.orig_df[col_name].values.tolist())
-                )[list(self.orig_df[col_name].rank().astype(int)-1)].tolist()
+                    self.numeric_vals_filled[col_name].values.tolist())
+                )[list(self.numeric_vals_filled[col_name].rank().astype(int)-1)].tolist()
                 next_arr = np.array(
-                    sorted(self.orig_df[col_name].values.tolist() + [self.orig_df[col_name].max(), self.orig_df[col_name].max()])
-                )[list(self.orig_df[col_name].rank().astype(int)+0)].tolist()
+                    sorted(self.numeric_vals_filled[col_name].values.tolist() +
+                           [self.orig_df[col_name].max(), self.orig_df[col_name].max()])
+                )[list(self.numeric_vals_filled[col_name].rank().astype(int)+0)].tolist()
 
                 self.__process_analysis_binary(
                     test_id,
@@ -16190,7 +16191,7 @@ class DataConsistencyChecker:
             # Test first on a sample
             vals_arr_1 = self.sample_df[col_name_1].astype(str)
             vals_arr_2 = self.sample_df[col_name_2].astype(str)
-            spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
+            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2, method='spearman'))
             if spearancorr < 0.8:  # Require a less perfect correlation on samples, which may vary.
                 continue
 
@@ -16199,7 +16200,7 @@ class DataConsistencyChecker:
             vals_arr_2 = self.orig_df[col_name_2].astype(str)
 
             # The class variable, self.spearman_corr, covers only numeric columns, so we calculate the correlation here.
-            spearancorr = abs(vals_arr_1.corr(vals_arr_2, method='spearman'))
+            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2, method='spearman'))
 
             if spearancorr >= 0.95:
                 col_1_percentiles = percentiles_dict[col_name_1]
