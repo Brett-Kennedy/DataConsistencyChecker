@@ -12995,6 +12995,10 @@ class DataConsistencyChecker:
             sub_df_1 = self.orig_df[self.orig_df[bin_col] == val1]
 
             for num_col in self.numeric_cols:
+                # Check the numeric column that has the values has a reasonable number of values besides the most frequent
+                if self.orig_df[num_col].value_counts().values[0] > (self.num_rows - self.freq_contamination_level):
+                    return
+
                 set_0_numeric_vals = pd.Series([float(x) for x in sub_df_0[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
                 set_1_numeric_vals = pd.Series([float(x) for x in sub_df_1[num_col] if str(x).replace('-', '').replace('.', '').isdigit()])
 
@@ -13112,6 +13116,13 @@ class DataConsistencyChecker:
             if cols_same_bool_dict[tuple(sorted([col_name_2, col_name_3]))]:
                 return
 
+            # Check the two columns that have the values that are checked have a reasonable number of values besides
+            # the most frequent
+            if self.orig_df[col_name_2].value_counts().values[0] > (self.num_rows - self.freq_contamination_level):
+                return
+            if self.orig_df[col_name_3].value_counts().values[0] > (self.num_rows - self.freq_contamination_level):
+                return
+
             # Test first on a sample of the rows where the bin_col has value 0
             if sample_sub_df_0[col_name_2].dtype.name == 'category' or \
                     sample_sub_df_0[col_name_3].dtype.name == 'category':
@@ -13208,8 +13219,6 @@ class DataConsistencyChecker:
                 display_info={"Match": (self.orig_df[col_name_2] == self.orig_df[col_name_3]) |
                                        (self.orig_df[col_name_2].isna() & self.orig_df[col_name_3].isna())}
             )
-
-
 
         if len(self.binary_cols) == 0:
             return
@@ -13365,6 +13374,13 @@ class DataConsistencyChecker:
         sums_arr_dict = {}
         sorted_sums_arr_dict = {}
         for num_col_1, num_col_2 in pairs:
+            # Check the two columns that have the values that are checked have a reasonable number of values besides
+            # the most frequent
+            if self.orig_df[num_col_1].value_counts().values[0] > (self.num_rows - self.freq_contamination_level):
+                return
+            if self.orig_df[num_col_2].value_counts().values[0] > (self.num_rows - self.freq_contamination_level):
+                return
+
             if not self.check_columns_same_scale_2(num_col_1, num_col_2):
                 continue
             sum_arr = pd.Series(self.numeric_vals_filled[num_col_1] + self.numeric_vals_filled[num_col_2])
