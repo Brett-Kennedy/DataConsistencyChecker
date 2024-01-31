@@ -7024,11 +7024,11 @@ class DataConsistencyChecker:
                                     [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('few neighbors all',
                                     [random.randint(1000, 2000) for _ in range(self.num_synth_rows-100)] +
-                                    [random.randint(10_000, 20_000) for _ in range(100)])
+                                    [random.randint(10, 20) for _ in range(100)])
         self.__add_synthetic_column('few neighbors most',
-                                    [random.randint(10_000_000_000, 20_000_000_000) for _ in range(self.num_synth_rows-100)] +
-                                    [5000_000_000] +
-                                    [random.randint(1000_000_000, 2000_000_000) for _ in range(99)])
+                                    [random.randint(10_000, 20_000) for _ in range(self.num_synth_rows-100)] +
+                                    [5000] +
+                                    [random.randint(1000, 2000) for _ in range(99)])
 
         date_1 = datetime.datetime.strptime("01-7-2018", "%d-%m-%Y")
         date_2 = datetime.datetime.strptime("01-7-2025", "%d-%m-%Y")
@@ -7070,8 +7070,14 @@ class DataConsistencyChecker:
                 # Flag the correct rows. We currently have their indexes based on a sorted array.
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
-                prev_arr = np.array(sorted([np.NaN] + self.orig_df[col_name].values.tolist()))[list(self.orig_df[col_name].rank().astype(int)-1)].tolist()
-                next_arr = np.array(sorted(self.orig_df[col_name].values.tolist() + [np.NaN, np.NaN]))[list(self.orig_df[col_name].rank().astype(int)+0)].tolist()
+                # Some versions of pandas cannot work with NaN values here, so use the min & max
+                prev_arr = np.array(
+                    sorted([self.orig_df[col_name].min()] +
+                    self.orig_df[col_name].values.tolist())
+                )[list(self.orig_df[col_name].rank().astype(int)-1)].tolist()
+                next_arr = np.array(
+                    sorted(self.orig_df[col_name].values.tolist() + [self.orig_df[col_name].max(), self.orig_df[col_name].max()])
+                )[list(self.orig_df[col_name].rank().astype(int)+0)].tolist()
 
                 self.__process_analysis_binary(
                     test_id,
@@ -7179,12 +7185,13 @@ class DataConsistencyChecker:
 
             # Set combined bins counts for elements outside the normal range
             combined_bins_counts = [0]*len(bin_counts)
-            combined_bins_counts[0] = bin_counts[0] + bin_counts[1] + bin_counts[2]
-            combined_bins_counts[1] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3]
-            combined_bins_counts[2] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3] + bin_counts[4]
-            combined_bins_counts[-1] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3]
-            combined_bins_counts[-2] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4]
-            combined_bins_counts[-3] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4] + bin_counts[-5]
+            list_counts = bin_counts.tolist()
+            combined_bins_counts[0] = list_counts[0] + list_counts[1] + list_counts[2]
+            combined_bins_counts[1] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3]
+            combined_bins_counts[2] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3] + list_counts[4]
+            combined_bins_counts[-1] = list_counts[-1] + list_counts[-2] + list_counts[-3]
+            combined_bins_counts[-2] = list_counts[-1] + list_counts[-2] + list_counts[-3] + list_counts[-4]
+            combined_bins_counts[-3] = list_counts[-1] + list_counts[-2] + list_counts[-3] + list_counts[-4] + list_counts[-5]
 
             for bin_id in bin_labels[3:-3]:
                 rows_count = bin_counts.loc[bin_id-3] + \
@@ -7233,12 +7240,13 @@ class DataConsistencyChecker:
 
             # Set combined bins counts for elements outside the normal range
             combined_bins_counts = [0]*len(bin_counts)
-            combined_bins_counts[0] = bin_counts[0] + bin_counts[1] + bin_counts[2]
-            combined_bins_counts[1] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3]
-            combined_bins_counts[2] = bin_counts[0] + bin_counts[1] + bin_counts[2] + bin_counts[3] + bin_counts[4]
-            combined_bins_counts[-1] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3]
-            combined_bins_counts[-2] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4]
-            combined_bins_counts[-3] = bin_counts[-1] + bin_counts[-2] + bin_counts[-3] + bin_counts[-4] + bin_counts[-5]
+            list_counts = bin_counts.tolist()
+            combined_bins_counts[0] = list_counts[0] + list_counts[1] + list_counts[2]
+            combined_bins_counts[1] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3]
+            combined_bins_counts[2] = list_counts[0] + list_counts[1] + list_counts[2] + list_counts[3] + list_counts[4]
+            combined_bins_counts[-1] = list_counts[-1] + list_counts[-2] + list_counts[-3]
+            combined_bins_counts[-2] = list_counts[-1] + list_counts[-2] + list_counts[-3] + list_counts[-4]
+            combined_bins_counts[-3] = list_counts[-1] + list_counts[-2] + list_counts[-3] + list_counts[-4] + list_counts[-5]
 
             for bin_id in bin_labels[3:-3]:
                 rows_count = bin_counts.loc[bin_id-3] + \
@@ -11530,7 +11538,7 @@ class DataConsistencyChecker:
             max_date = pd.to_datetime(self.orig_df[col_name]).max()
 
             # Ensure there is at least 3 months of range
-            if ((max_date - min_date) / np.timedelta64(1, 'M')) < 3:
+            if ((max_date - min_date) / np.timedelta64(1, 'D')) < 91:
                 continue
 
             test_series = pd.to_datetime(self.orig_df[col_name]).apply(check_last_dom) | (self.orig_df[col_name].isna())
