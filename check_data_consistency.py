@@ -6741,6 +6741,10 @@ class DataConsistencyChecker:
                 if num_decr > (num_incr / 10.0):
                     continue
 
+                # Check there are a decent number increasing
+                if num_incr < (self.num_rows / 20):
+                    continue
+
                 test_series = (self.orig_df[col_name].astype(float).diff() >= 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
             else:
@@ -6754,6 +6758,10 @@ class DataConsistencyChecker:
                 incr_series = self.orig_df[col_name].diff().dt.total_seconds() > 0
                 num_incr = incr_series.tolist().count(True)
                 if num_decr > (num_incr / 10.0):
+                    continue
+
+                # Check there are a decent number increasing
+                if num_incr < (self.num_rows / 20):
                     continue
 
                 test_series = np.array([x.total_seconds() for x in (pd.to_datetime(self.orig_df[col_name]) - pd.to_datetime(self.orig_df[col_name]).shift())]) >= 0
@@ -6804,6 +6812,10 @@ class DataConsistencyChecker:
                 if num_incr > (num_decr / 10.0):
                     continue
 
+                # Check there are a decent number decreasing
+                if num_decr < (self.num_rows / 20):
+                    continue
+
                 test_series = (self.orig_df[col_name].astype(float).diff() <= 0) | \
                               [is_missing(x) for x in self.orig_df[col_name].astype(float).diff()]
             else:
@@ -6817,6 +6829,10 @@ class DataConsistencyChecker:
                 decr_series = self.orig_df[col_name].diff().dt.total_seconds() < 0
                 num_decr = decr_series.tolist().count(True)
                 if num_incr > (num_decr / 10.0):
+                    continue
+
+                # Check there are a decent number decreasing
+                if num_decr < (self.num_rows / 20):
                     continue
 
                 test_series = np.array([x.total_seconds() for x in (pd.to_datetime(self.orig_df[col_name]) - pd.to_datetime(self.orig_df[col_name]).shift())]) <= 0
