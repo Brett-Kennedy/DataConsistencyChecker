@@ -16191,7 +16191,7 @@ class DataConsistencyChecker:
             # Test first on a sample
             vals_arr_1 = self.sample_df[col_name_1].astype(str)
             vals_arr_2 = self.sample_df[col_name_2].astype(str)
-            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2, method='spearman'))
+            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2.rank(), method='spearman'))
             if spearancorr < 0.8:  # Require a less perfect correlation on samples, which may vary.
                 continue
 
@@ -16200,7 +16200,7 @@ class DataConsistencyChecker:
             vals_arr_2 = self.orig_df[col_name_2].astype(str)
 
             # The class variable, self.spearman_corr, covers only numeric columns, so we calculate the correlation here.
-            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2, method='spearman'))
+            spearancorr = abs(vals_arr_1.rank().corr(vals_arr_2.rank(), method='spearman'))
 
             if spearancorr >= 0.95:
                 col_1_percentiles = percentiles_dict[col_name_1]
