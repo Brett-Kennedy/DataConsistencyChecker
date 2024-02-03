@@ -326,7 +326,7 @@ class DataConsistencyChecker:
             'LARGER_DIFF_RANGE':        ('Check if one column is consistently larger than another',
                                          ('Check if one column is consistently larger than another, but within one '
                                           'order of magnitude, where the two columns have different ranges of values.'),
-                                         self.__check_larger, self.__generate_larger,
+                                         self.__check_larger_diff_range, self.__generate_larger_diff_range,
                                          False, True, False, False),
             'LARGER_SAME_RANGE':        ('Check if one column is consistently larger than another row by row',
                                          ('Check if one column is consistently larger than another column, where the '
@@ -732,6 +732,9 @@ class DataConsistencyChecker:
                                          ('Check if there is a consistent number of characters in each value in a '
                                           'column.'),
                                          self.__check_number_chars, self.__generate_number_chars,
+                                         True, True, True, False),
+            'NONPRINTABLE_CHARS':       ('', 'Check for features with non-printable characters.',
+                                         self.__check_nonprintable_chars, self.__generate_nonprintable_chars,
                                          True, True, True, False),
             'MANY_CHARS':               ('', ('Check if any values have an unusually large number of characters for '
                                               'the column.'),
@@ -1192,6 +1195,11 @@ class DataConsistencyChecker:
             self.sample_df = self.orig_df.dropna().sample(n=50, random_state=0)
         else:
             self.sample_df = self.orig_df.sample(n=min(len(self.orig_df), 50), random_state=0)
+
+        if (len(self.sample_df) < 50) and (len(self.sample_df) < len(self.orig_df)):
+            num_needed = 50 - len(self.sample_df)
+            self.sample_df = pd.concat([self.sample_df,
+                                        self.orig_df.sample(n=min(len(self.orig_df), 50), random_state=0)])
 
         # Similar to numeric_vals_filled, fill in this for the sample_df
         for col_name in self.numeric_cols:
@@ -3415,6 +3423,8 @@ class DataConsistencyChecker:
                 plt.xlabel(cols[1])
                 plt.ylabel(cols[0] + " Bin Number")
                 plt.xticks([])
+                plt.tight_layout()
+                plt.show()
             else:
                 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 3))
                 sns.scatterplot(data=df2, x=cols[0], y=cols[1], ax=ax[0])
@@ -3429,8 +3439,8 @@ class DataConsistencyChecker:
                 s = sns.boxplot(data=df2, orient='v', x=cols[0], y=cols[1], ax=ax[1])
                 s.set_xlabel(cols[0] + " Bin Number")
                 s.set_title("Values by Bin")
-            plt.tight_layout()
-            plt.show()
+                plt.tight_layout()
+                plt.show()
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
@@ -3527,8 +3537,8 @@ class DataConsistencyChecker:
 
             def highlight_cells():
                 for row_idx in flagged_df.index:
-                    v0 = flagged_df.loc[row_idx, cols[0]]
-                    v1 = flagged_df.loc[row_idx, cols[1]]
+                    v0 = flagged_df.loc[row_idx, cols[0]].strip()
+                    v1 = flagged_df.loc[row_idx, cols[1]].strip()
                     patch_x = counts_df.columns.tolist().index(v1)
                     patch_y = counts_df.index.tolist().index(v0)
                     ax.add_patch(Rectangle((patch_x, patch_y), 1, 1, fill=False, edgecolor='yellow', lw=3))
@@ -3685,9 +3695,9 @@ class DataConsistencyChecker:
             vals = convert_to_numeric(vals, 0)
             vals = vals.astype(int)
             vals = vals.astype(str)
-            vals = vals.replace('-9595959484', np.nan)
             s = vals.str.replace('.0', '', regex=False).str.len() - \
                 vals.str.replace('.0', '', regex=False).str.strip('0').str.len()
+            vals = vals.replace('-9595959484', np.nan)
             df['Number Zeros'] = s.values
         elif test_id in ['SUM_OF_COLUMNS']:
             if display_info and display_info['operation'] == "plus":
@@ -3743,7 +3753,7 @@ class DataConsistencyChecker:
         elif test_id in ['NUMBER_ALPHANUMERIC_CHARS']:
             df['Num Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if e.isalnum()]))
         elif test_id in ['NUMBER_NON-ALPHANUMERIC_CHARS']:
-            df['Num Non-Alpha-Numeric Chars'] = df[col_name].astype(str).apply(lambda x: len([e for e in x if not e.isalnum()]))
+            df['Num Non-Alpha-Numeric Chars'] = display_info['test_series'].loc[df.index]
         elif test_id in ['NUMBER_CHARS', 'MANY_CHARS', 'FEW_CHARS']:
             df['Num Chars'] = df[col_name].astype(str).str.len()
         elif test_id in ['FIRST_CHAR_ALPHA', 'FIRST_CHAR_NUMERIC', 'FIRST_CHAR_SMALL_SET', 'FIRST_CHAR_UPPERCASE',
@@ -3842,6 +3852,10 @@ class DataConsistencyChecker:
             df['Closest larger value'] = pd.Series(display_info['next_val']).loc[df.index]
         elif test_id in ['FEW_WITHIN_RANGE']:
             df['Number in Range'] = pd.Series(display_info['Number in Range']).loc[df.index]
+        elif test_id in ['NONPRINTABLE_CHARS']:
+            for i in df.index:
+                v = str([x for x in df.loc[i, cols[0]] if not x.isprintable()])
+                df.loc[i, 'Non-Printable Chars'] = v
 
         # Set the column order
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
@@ -4663,7 +4677,7 @@ class DataConsistencyChecker:
                                'PREDICT_NULL_DT']:
                     summary_str = f'{pattern_string}'
                 else:
-                    summary_str = f'{pattern_string}, with exceptions {exception_str}'
+                    summary_str = f'{pattern_string}, with exceptions{exception_str}'
             else:
                 summary_str = f'{pattern_string}, {exception_str}'
             summary_str = summary_str.replace(" .", ".").replace("..", ".").replace(".,", ",")
@@ -5837,7 +5851,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column contains values that are consistently unique",
-                f"including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated value(s))"
+                f" including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated value(s))"
             )
 
         self.single_test_summary_dict[test_id] = single_test_results
@@ -7266,7 +7280,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors "
+                (f" -- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors "
                  f"within their and the neighboring bins (width {bin_width:.4f})"),
                 display_info={'Number in Range': [combined_bins_counts[x] for x in binned_values]}
             )
@@ -7321,7 +7335,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f"-- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
+                (f" -- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
                  f"their and the neighboring bins (width {bin_width.days} days)"),
                 display_info={'Number in Range': [combined_bins_counts[x] for x in binned_values]})
 
@@ -7555,9 +7569,9 @@ class DataConsistencyChecker:
                 desc_str = f'The column has values with consistently {min_normal} trailing zeros.'
 
             if min_normal > 0:
-                exception_str = f"with {max_normal + 3} or more trailing zeros"
+                exception_str = f" -- values with with {max_normal + 3} or more trailing zeros"
             else:
-                exception_str = f"with less than {min_normal} or with more than {max_normal + 2} trailing zeros"
+                exception_str = f" -- values with less than {min_normal} or with more than {max_normal + 2} trailing zeros"
 
             self.__process_analysis_binary(
                 test_id,
@@ -7671,17 +7685,6 @@ class DataConsistencyChecker:
     # Data consistency checks for pairs of numeric columns
     ##################################################################################################################
 
-    def __generate_larger(self):
-        """
-        Patterns without exceptions: 'larger all_2' is consisently larger than 'larger all', which is consistently
-            larger than 'larger rand'
-        Patterns with exception: 'larger most' is consistently larger than 'larger rand' with 1 exception
-        """
-        self.__add_synthetic_column('larger rand', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('larger all',  [random.randint(200, 300) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('larger all_2',  [random.randint(400, 500) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('larger most', [random.randint(200, 300) for _ in range(self.num_synth_rows-1)] + [50])
-
     def __check_two_cols_larger(self, test_id, require_same_scale):
         """
         Used by __check_larger() and __check_larger_same_range()
@@ -7711,6 +7714,10 @@ class DataConsistencyChecker:
             if test_series is None:
                 continue
 
+            # Skip columns that do not have some correlation
+            if abs(self.spearman_corr[col_name_1][col_name_2]) < 0.4:
+                continue
+
             # Skip columns that are almost entirely the same
             if cols_same_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
@@ -7723,6 +7730,12 @@ class DataConsistencyChecker:
             if self.orig_df[col_name_1].notna().sum() < self.freq_contamination_level:
                 continue
             if self.orig_df[col_name_2].notna().sum() < self.freq_contamination_level:
+                continue
+
+            # Skip columns that are mostly a single value
+            if self.orig_df[col_name_1].value_counts(normalize=True).values[0] > 0.8:
+                continue
+            if self.orig_df[col_name_2].value_counts(normalize=True).values[0] > 0.8:
                 continue
 
             # Skip pairs where only rare rows have no nulls
@@ -7808,13 +7821,25 @@ class DataConsistencyChecker:
 
             self.__process_analysis_binary(
                 test_id,
-                cols,
+                sorted(cols),
                 [True]*self.num_rows,
                 desc,
                 display_info={'patterns_pairs_arr': patterns_pairs_arr[pattern_idx]}
             )
 
-    def __check_larger(self, test_id):
+    def __generate_larger_diff_range(self):
+        """
+        Patterns without exceptions: 'larger all_2' is consistently larger than 'larger all', which is consistently
+            larger than 'larger rand'
+        Patterns with exception: 'larger most' is consistently larger than 'larger rand' with 1 exception
+        """
+        self.__add_synthetic_column('larger rand', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('larger all',   self.synth_df['larger rand'] + 50)
+        self.__add_synthetic_column('larger all_2', self.synth_df['larger rand'] + 200)
+        self.__add_synthetic_column('larger most',  self.synth_df['larger rand'] + 50)
+        self.synth_df.loc[999, 'larger most'] = -5
+
+    def __check_larger_diff_range(self, test_id):
         """
         Where a pair of numeric columns is flagged, this may indicate a anomaly with either column, or with the
         relationship between the two columns.
@@ -7822,7 +7847,7 @@ class DataConsistencyChecker:
         This test checks pairs of columns that are on different scales, while LARGER_SAME_RANGE tests pairs of
         columns that are on the same scale. Typically, exceptions are more interesting in this test than in
         LARGER_SAME_SCALE, while patterns without exceptions are more interesting in LARGER_SAME_SCALE than in this
-        test.
+        test. This requires the featuers have some correlation.
         """
         self.__check_two_cols_larger(test_id, require_same_scale=False)
 
@@ -7924,7 +7949,7 @@ class DataConsistencyChecker:
                     [col_name_2, col_name_1],
                     test_series,
                     f'"{col_name_1}" is consistently an order of magnitude or more larger than "{col_name_2}"',
-                    '(where values may still be larger, but not by the normal extent)')
+                    ' (where values may still be larger, but not by the normal extent)')
             else:
                 much_larger_pairs_arr.append([col_name_1, col_name_2])
 
@@ -9615,6 +9640,12 @@ class DataConsistencyChecker:
             if not self.check_columns_same_scale_2(col_a, col_b, order=5):
                 return False
 
+            # Check both features have some correlation with the summed feature
+            if self.spearman_corr[col_a][col_c] < 0.40:
+                return False
+            if self.spearman_corr[col_b][col_c] < 0.40:
+                return False
+
             # Test the relationship on a small sample of the full data
             test_series = self.sample_df[col_c].astype(float) > (self.sample_df[col_a].astype(float) + self.sample_df[col_b].astype(float))
             num_not_matching = test_series.tolist().count(False)
@@ -9632,8 +9663,6 @@ class DataConsistencyChecker:
                      f' and "{col_b}"'))
                 return True
             return False
-
-        # todo: we should also check the spearman correlations match
 
         # Track which columns are mostly positive. We execute this test only on those columns.
         column_pos_dict = {}
@@ -11362,7 +11391,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific days of the week',
-                f"on the {rare_dow}th days of the week"
+                f" on the {rare_dow}th days of the week"
             )
 
     def __generate_unusual_dom(self):
@@ -11395,7 +11424,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific days of the month',
-                f"on the {rare_dom}th days of the month"
+                f" on the {rare_dom}th days of the month"
             )
 
     def __generate_unusual_month(self):
@@ -11430,7 +11459,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific months of the year',
-                f"on the {rare_months}th months of the year"
+                f" on the {rare_months}th months of the year"
             )
 
     def __generate_unusual_hour(self):
@@ -11466,7 +11495,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific hours of the day',
-                f"on the {rare_hours}th hours of the day",
+                f" on the {rare_hours}th hours of the day",
                 display_info={"hour_list": hour_list}
             )
 
@@ -11504,7 +11533,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in Column "{col_name}" were consistently on specific minutes of the hour',
-                f"on the {rare_minutes}th minutes of the hour"
+                f" on the {rare_minutes}th minutes of the hour"
             )
 
     def __generate_constant_dom(self):
@@ -13580,7 +13609,7 @@ class DataConsistencyChecker:
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} leading spaces (minimum: '
                  f'{test_series_counts.min()}, maximum: {test_series_counts.max()})'),
-                'with significantly more or less leading spaces'
+                ' with significantly more or less leading spaces'
             )
 
     def __generate_trailing_whitespace(self):
@@ -13628,7 +13657,7 @@ class DataConsistencyChecker:
                 test_series,
                 (f'Column "{col_name}" consistently contains about {median_num_spaces} trailing spaces (minimum: '
                  f'{test_series_counts.min()}, maximum: {test_series_counts.max()})'),
-                'with significantly more or less trailing spaces'
+                ' with significantly more or less trailing spaces'
             )
 
     def __generate_first_char_alpha(self):
@@ -13752,7 +13781,7 @@ class DataConsistencyChecker:
                     results_col,
                     (f'The column "{col_name}" has {self.orig_df[col_name].nunique()} distinct values and contains '
                      f'values that consistently start with one of {common_first_chars}'),
-                    f'with some values starting with one of {rare_first_chars}'
+                    f' with some values starting with one of {rare_first_chars}'
                 )
 
     def __generate_first_char_uppercase(self):
@@ -13868,7 +13897,7 @@ class DataConsistencyChecker:
                     results_col,
                     (f'The column "{col_name}" has {self.orig_df[col_name].nunique()} distinct values and contains '
                      f'values that consistently end with one of {common_last_chars}'),
-                    f'with some values ending with one of {rare_last_chars}'
+                    f' with some values ending with one of {rare_last_chars}'
                 )
 
     def __generate_common_special_chars(self):
@@ -14141,9 +14170,9 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('non-alphanumeric rand',
             [['@'.join(random.choice(digits) for _ in range(random.randint(1, 10)))][0] for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('non-alphanumeric all',
-            [['@'.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows)])
+            [['@'.join(random.choice(digits + ' ') for _ in range(5))][0] for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('non-alphanumeric most',
-            [['@'.join(random.choice(digits) for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['$432'])
+            [['@'.join(random.choice(digits + ' ') for _ in range(5))][0] for _ in range(self.num_synth_rows-1)] + ['$432'])
 
     def __check_number_non_alphanumeric_chars(self, test_id):
         """
@@ -14167,7 +14196,8 @@ class DataConsistencyChecker:
                 test_series,
                 "The column contains values with consistently",
                 "non-alphanumeric characters",
-                allow_patterns=(test_series.max() != 0)
+                allow_patterns=(test_series.max() != 0),
+                display_info={'test_series': test_series}
             )
 
     def __generate_number_chars(self):
@@ -14201,6 +14231,36 @@ class DataConsistencyChecker:
                 test_series,
                 "The column contains values with consistently",
                 "characters")
+
+    def __generate_nonprintable_chars(self):
+        """
+        Patterns without exceptions: This test does not generate patterns
+        Patterns with exception: 'nonprintable one' has one value with a non-printable character
+        """
+        self.__add_synthetic_column('nonprintable none',
+            [['A'.join(random.choice(letters) for _ in range(random.randint(1, 10)))][0] for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('nonprintable one',
+            [['A'.join(random.choice(letters) for _ in range(5))][0] for _ in range(self.num_synth_rows - 1)] + ['abcd\x10'])
+
+    def __check_nonprintable_chars(self, test_id):
+        """
+        This test is different from most in that it simply considers any non-printable character an exception and does
+        not look at the normal number or set of non-printable characters within a dataset.
+
+        Handling null values: null values are considered zero-length strings, with no alphabetic, numeric, or
+        special characters.
+        """
+
+        for col_name in self.string_cols:
+            test_series = [len([y for y in x if not x.isprintable()]) == 0
+                           for x in self.orig_df[col_name].fillna("").astype(str)]
+            self.__process_analysis_binary(
+                test_id,
+                [col_name],
+                test_series,
+                "The strings contain one or more non-printable characters.",
+                allow_patterns=False
+            )
 
     def __generate_many_chars(self):
         """
@@ -14561,7 +14621,7 @@ class DataConsistencyChecker:
                     test_series,
                     (f'The column "{col_name}" consistently contains values containing only the characters: '
                      f'{list(common_chars.keys())}'),
-                    f'Rare characters found: {list(rare_chars.keys())}'
+                    f' Rare characters found: {list(rare_chars.keys())}'
                 )
 
     def __generate_first_word(self):
@@ -14813,7 +14873,7 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 f'The values in column "{col_name}" consistently use only words common to this column',
-                f'Flagging values containing the rare words: {array_to_str(rare_words_arr)}'
+                f' Flagging values containing the rare words: {array_to_str(rare_words_arr)}'
             )
 
     def __generate_grouped_strings(self):
