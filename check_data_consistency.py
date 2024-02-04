@@ -3558,7 +3558,7 @@ class DataConsistencyChecker:
             if len(counts_df) > 10:
                 fig_size_y = len(counts_df) * 0.4
             else:
-                fig_size_y = max(3, len(counts_df) * 0.6)
+                fig_size_y = max(3, len(counts_df) * 0.9)
             fig, ax = plt.subplots(figsize=(fig_size_x, fig_size_y))
             s = sns.heatmap(counts_df, annot=True, cmap="YlGnBu", fmt='g', linewidths=1.0, linecolor='black', clip_on=False)
             s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
@@ -7243,7 +7243,7 @@ class DataConsistencyChecker:
                 bins.append(min_val + (i * bin_width))
             bins.append(np.inf)
             bin_labels = [int(x) for x in range(len(bins)-1)]
-            binned_values = pd.cut(self.numeric_vals[col_name], bins, labels=bin_labels)
+            binned_values = pd.cut(self.numeric_vals[col_name], bins, labels=bin_labels).dropna()
             bin_counts = binned_values.value_counts()
 
             rare_bins = []
@@ -7941,7 +7941,8 @@ class DataConsistencyChecker:
                 (vals_arr_1 / vals_arr_2) > 10.0,
                 False
             )
-            test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
+            test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna() | \
+                          (self.orig_df[col_name_2] == 0)
 
             if test_series.tolist().count(False) > 0:
                 self.__process_analysis_binary(
@@ -7953,6 +7954,7 @@ class DataConsistencyChecker:
             else:
                 much_larger_pairs_arr.append([col_name_1, col_name_2])
 
+        # Consolidate patterns where possible, in order to generate fewer, and more useful, patterns.
         patterns_arr = []  # The set of unique columns in each pattern
         patterns_pairs_arr = []  # The set of pair-wise relationships between columns in each pattern
         for col_name_1, col_name_2 in much_larger_pairs_arr:
@@ -13917,7 +13919,7 @@ class DataConsistencyChecker:
         def get_non_alphanumeric(x):
             if x.isalnum():
                 return []
-            return [c for c in x if (not str(c).isalnum()) and (not c == '')]
+            return [c for c in x if (not str(c).isalnum()) and (not c == ' ')]
 
         for col_name in self.string_cols:
             # Skip columns which contain only alphanumeric characters
