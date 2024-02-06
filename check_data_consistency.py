@@ -2960,7 +2960,10 @@ class DataConsistencyChecker:
 
     def __plot_count_plot(self, column_name):
         fig, ax = plt.subplots(figsize=(4, 4))
-        s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE").str.strip())
+        if column_name in self.date_cols:
+            s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
+        else:
+            s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE").str.strip())
         s.set_title(f"Counts of unique values in {column_name}")
         clean_x_tick_labels(fig, 1, ax)
         plt.show()
@@ -3354,28 +3357,32 @@ class DataConsistencyChecker:
                 plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.strftime('%A'))
+            sns.countplot(x=self.orig_df[cols[0]].dt.strftime('%A').fillna('NONE'))
             plt.show()
 
         if test_id in ['UNUSUAL_DAY_OF_MONTH']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.day)
+            sns.countplot(x=self.orig_df[cols[0]].dt.day.fillna('NONE'))
             plt.show()
 
         if test_id in ['UNUSUAL_MONTH']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.month)
+            sns.countplot(x=self.orig_df[cols[0]].dt.month.fillna('NONE'))
             plt.show()
 
         if test_id in ['UNUSUAL_HOUR']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.hour)
+            sns.countplot(x=self.orig_df[cols[0]].dt.hour.fillna('NONE'))
             plt.show()
 
         if test_id in ['UNUSUAL_MINUTES']:
-            sns.countplot(x=self.orig_df[cols[0]].dt.minute)
+            sns.countplot(x=self.orig_df[cols[0]].dt.minute.fillna('NONE'))
             plt.show()
 
         elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
             fig, ax = plt.subplots()
-            sns.countplot(x=(self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days)
+            gaps_arr = (self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days.fillna('NONE')
+            if gaps_arr.nunique() > 20:
+                sns.histplot(x=gaps_arr)
+            else:
+                sns.countplot(x=gaps_arr)
             clean_x_tick_labels(fig, 1, ax)
             plt.show()
 
@@ -3441,6 +3448,31 @@ class DataConsistencyChecker:
                 s.set_title("Values by Bin")
                 plt.tight_layout()
                 plt.show()
+
+            # Also draw a histogram of the relevant classes.
+            results_col_name = self.get_results_col_name(test_id, columns_set)
+            results_col = self.test_results_df[results_col_name]
+            flagged_idxs = np.where(results_col)
+            flagged_df = self.orig_df.loc[flagged_idxs]
+            bins_with_flagged = set(display_info['bin_assignments'].values[flagged_idxs].tolist())
+            nvals = len(bins_with_flagged)
+            fig, ax = plt.subplots(nrows=1, ncols=nvals, figsize=(nvals*4, 4))
+            for idx, bin_id in enumerate(bins_with_flagged):
+                rows_for_bin = np.where(display_info['bin_assignments'] == bin_id)
+                bin_df = df2.loc[rows_for_bin]
+                if nvals == 1:
+                    curr_ax = ax
+                else:
+                    curr_ax = ax[idx]
+                s = sns.histplot(data=bin_df, x=cols[1], color='blue', bins=100, ax=curr_ax)
+                s.set_title(f"Values for bin {bin_id}\nFlagged values in red")
+
+                # Draw the flagged values
+                for i in flagged_df.index:
+                    if display_info['bin_assignments'][i] == bin_id:
+                        curr_ax.axvline(flagged_df.loc[i, cols[1]], color='red')
+
+            plt.show()
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
@@ -3995,9 +4027,14 @@ class DataConsistencyChecker:
                 df = pd.concat([df_v000, df_v001, df_v010, df_v011, df_v100, df_v101, df_v110, df_v111])[cols]
             elif len(cols) == 3 and cols[2] in self.binary_cols:
                 v0, v1 = self.orig_df[cols[2]].dropna().unique()
-                df_v0 = self.orig_df[self.orig_df[cols[2]] == v0].head(n_examples // 2)
-                df_v1 = self.orig_df[self.orig_df[cols[2]] == v1].head(n_examples // 2)
-                df = pd.concat([df_v0, df_v1])[cols]
+                va = self.orig_df[cols[0]].dropna().value_counts().values[0]
+                df_v0 = self.orig_df[self.orig_df[cols[2]] == v0] #.head(n_examples // 2)
+                df_v1 = self.orig_df[self.orig_df[cols[2]] == v1] #.head(n_examples // 2)
+                df_v0a = df_v0[df_v0[cols[0]] == va].head(n_examples // 4)
+                df_v0b = df_v0[df_v0[cols[0]] != va].head((n_examples // 2) - len(df_v0a))
+                df_v1a = df_v1[df_v1[cols[0]] == va].head(n_examples // 4)
+                df_v1b = df_v1[df_v1[cols[0]] != va].head((n_examples // 2) - len(df_v1a))
+                df = pd.concat([df_v0a, df_v0b, df_v1a, df_v1b])[cols]
         elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'MATCHED_SET_ZERO_NON_ZERO']:
             # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
@@ -7569,9 +7606,10 @@ class DataConsistencyChecker:
                 desc_str = f'The column has values with consistently {min_normal} trailing zeros.'
 
             if min_normal > 0:
-                exception_str = f" -- values with with {max_normal + 3} or more trailing zeros"
+                exception_str = f" -- flagging values with with {max_normal + 3} or more trailing zeros"
             else:
-                exception_str = f" -- values with less than {min_normal} or with more than {max_normal + 2} trailing zeros"
+                exception_str = (f" -- flagging values with less than {min_normal} or with more than {max_normal + 2} "
+                                 "trailing zeros")
 
             self.__process_analysis_binary(
                 test_id,
@@ -10563,6 +10601,10 @@ class DataConsistencyChecker:
         We identify sets of numeric columns, not necessarily on the same scale, that are all both frequently
         zero and frequently non-zero. We then find the subsets of these columns that are consistently zero and
         non-zero together.
+
+        This is partially redundant with MATCHED_ZERO, though identify slightly different things. That test will
+        check pairs of features, and will combine patterns without exceptions into larger patterns, but does not look
+        at larger groups of features with exceptions, which this will do.
 
         Handling null values: Null is treated as a non-zero value.
         """
