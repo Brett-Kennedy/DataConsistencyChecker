@@ -8,7 +8,7 @@ from sklearn.linear_model import Lasso
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn import tree
 from sklearn.metrics import f1_score, r2_score
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 import copy
 import math
 import statistics
@@ -3471,7 +3471,7 @@ class DataConsistencyChecker:
                 for i in flagged_df.index:
                     if display_info['bin_assignments'][i] == bin_id:
                         curr_ax.axvline(flagged_df.loc[i, cols[1]], color='red')
-
+            plt.tight_layout()
             plt.show()
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
@@ -10887,8 +10887,8 @@ class DataConsistencyChecker:
 
     def __generate_lin_regressor(self):
         """
-        Patterns without exceptions:
-        Patterns with exception:
+        Patterns without exceptions: 'lin regr 2' is is based on '1a', '1b', and '1c'
+        Patterns with exception: 'lin regr 3' is based on '1d', '1e', '1f', with one exception.
         """
         self.__add_synthetic_column('lin regr 1a', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1b', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
@@ -10908,9 +10908,9 @@ class DataConsistencyChecker:
         """
         We determine if it's possible to create a small, interpretable linear regression which is accurate and
         substantially more accurate than a naive model, which simply predicts the median. We check the in-sample score
-        on the linear regression, as it is a constricted model so unlikely to over-fit, and does not need to predict
-        new instances, just summarize well the existing data. We measure accuracy in terms of normalized root mean
-        squared error. The linear regression uses only the numeric features in the data.
+        on the linear regression, as it does not need to predict new instances, just summarize well the existing data.
+        We measure accuracy in terms of normalized root mean squared error. The linear regression uses only the numeric
+        features in the data.
         """
 
         cols_same_bool_dict = self.get_cols_same_bool_dict(force=True)
@@ -10928,18 +10928,18 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].isna().sum() > (self.num_rows / 10.0):
                 continue
 
-            regr = Lasso(alpha=100.0)
+            regr = Lasso(alpha=1.0)
 
             x_data = self.orig_df.drop(columns=[col_name])
             x_data = x_data.drop(columns=self.binary_cols + self.date_cols + self.string_cols)
             uncorrelated_cols = []
             for c in x_data.columns:
-                if abs(self.pearson_corr.loc[col_name, c]) > 0.2:
+                if cols_same_bool_dict[tuple(sorted([col_name, c]))]:
+                    uncorrelated_cols.append(c)  # Actually over-correlated, but removed as well.
+                elif abs(self.pearson_corr.loc[col_name, c]) > 0.2:
                     x_data[c] = self.numeric_vals_filled[c]
                     x_data[c] = x_data[c].fillna(self.column_medians[c])
                     x_data[c] = x_data[c].replace([np.inf, -np.inf], self.column_medians[c])
-                elif cols_same_bool_dict[tuple(sorted([col_name, c]))]:
-                    uncorrelated_cols.append(c)  # Actually over-correlated, but removed as well.
                 else:
                     uncorrelated_cols.append(c)
             x_data = x_data.drop(columns=uncorrelated_cols)
@@ -10958,26 +10958,18 @@ class DataConsistencyChecker:
             if len(train_x_data) < 50:
                 continue
 
-            # todo: min-max scale the features in order to be able to determine from the coefficients which are the
-            #   most relevant. Then fit again using the original scales, but use the first coefficients to also
-            #   indicate rough feature importances.
-
-            # todo: use R2 instead of NRMSE.
-
-            # scaler = MinMaxScaler()
-            # cols = train_x_data.columns
-            # train_x_data = scaler.fit_transform(train_x_data)
-            # train_x_data = pd.DataFrame(train_x_data, columns=cols)
-            # drop_cols = []
-            # for c in train_x_data.columns:
-            #     if train_x_data[c].nunique() == 0:
-            #         drop_cols.append(c)
-            # train_x_data = train_x_data.drop(columns=drop_cols)
-
             # A simple model should be derivable from a small number of records. We train on 900 rows for robustness
             # and speed
             train_y = train_y.sample(min(900, len(train_y)), random_state=0)
             train_x_data = x_data.loc[train_y.index]
+
+            # Scale the data
+            scaler = RobustScaler()
+            cols = train_x_data.columns
+            train_x_data = scaler.fit_transform(train_x_data)
+            train_x_data = pd.DataFrame(train_x_data, columns=cols)
+            x_data_scaled = scaler.transform(x_data)
+            x_data_scaled = pd.DataFrame(x_data_scaled, columns=cols)
 
             try:
                 regr.fit(train_x_data, train_y)
@@ -10986,11 +10978,7 @@ class DataConsistencyChecker:
                     print(colored(f"Error fitting Linear Regression in {test_id}: {e}", 'red'))
                 continue
 
-            # cols = x_data.columns
-            # x_data = scaler.transform(x_data)
-            # x_data = pd.DataFrame(x_data, columns=cols)
-            # x_data = x_data[train_x_data.columns]
-            y_pred = regr.predict(x_data)
+            y_pred = regr.predict(x_data_scaled)
             mae_lr = metrics.median_absolute_error(y, y_pred)
             mae_naive = metrics.median_absolute_error(y, [statistics.median(y)] * len(y))
 
@@ -11872,7 +11860,7 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    [col_name_1, col_name_2],
+                    [col_small, col_big],
                     test_series,
                     f'"{col_big}" is consistently later than "{col_small}"',
                     f"",
