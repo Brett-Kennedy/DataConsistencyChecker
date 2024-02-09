@@ -3378,7 +3378,7 @@ class DataConsistencyChecker:
 
         elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
             fig, ax = plt.subplots()
-            gaps_arr = (self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days.fillna('NONE')
+            gaps_arr = (self.orig_df[cols[1]] - self.orig_df[cols[0]]).dt.days.dropna()
             if gaps_arr.nunique() > 20:
                 sns.histplot(x=gaps_arr)
             else:
@@ -11774,9 +11774,9 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    [col_name_1, col_name_2],
+                    [col_small, col_big],
                     test_series,
-                    (f'The gap between "{col_name_1}" and "{col_name_2}" is larger than normal. We flag any gaps '
+                    (f'The gap between "{col_small}" and "{col_big}" is larger than normal. We flag any gaps '
                      f'larger than {threshold} days, as the 25th percentile is {q1} days and the 75th {q3} days.'),
                     f"",
                     allow_patterns=False
@@ -11811,9 +11811,11 @@ class DataConsistencyChecker:
                     col_small = col_name_1
                 gap_array = pd.Series([0 if (is_missing(x) or is_missing(y))
                                        else (x-y).days
-                                       for x, y in zip(pd.to_datetime(self.orig_df[col_big]), pd.to_datetime(self.orig_df[col_small]))])
+                                       for x, y in zip(pd.to_datetime(self.orig_df[col_big]),
+                                                       pd.to_datetime(self.orig_df[col_small]))])
                 gap_array_no_null = pd.Series([(x-y).days
-                                               for x, y in zip(pd.to_datetime(self.orig_df[col_big]), pd.to_datetime(self.orig_df[col_small]))
+                                               for x, y in zip(pd.to_datetime(self.orig_df[col_big]),
+                                                               pd.to_datetime(self.orig_df[col_small]))
                                                if not is_missing(x) and not is_missing(y)])
                 q1 = gap_array_no_null.quantile(0.25)
                 q3 = gap_array_no_null.quantile(0.75)
@@ -11826,9 +11828,9 @@ class DataConsistencyChecker:
                 test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
                 self.__process_analysis_binary(
                     test_id,
-                    [col_name_1, col_name_2],
+                    [col_small, col_big],
                     test_series,
-                    (f'The gap between "{col_name_1}" and "{col_name_2}" is smaller than normal. We flag any gaps '
+                    (f'The gap between "{col_small}" and "{col_big}" is smaller than normal. We flag any gaps '
                      f'smaller than {threshold} days, as the 25th percentile is {q1} days and the 75th {q3} days.'),
                     f"",
                     allow_patterns=False
