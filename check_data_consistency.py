@@ -10928,7 +10928,7 @@ class DataConsistencyChecker:
             if self.orig_df[col_name].isna().sum() > (self.num_rows / 10.0):
                 continue
 
-            regr = Lasso(alpha=1.0)
+            regr = Lasso(alpha=0.0)
 
             # Collect the relevant features and remove any null or inf values from these
             x_data = self.orig_df.drop(columns=[col_name])
@@ -10972,6 +10972,12 @@ class DataConsistencyChecker:
             train_x_data = pd.DataFrame(train_x_data, columns=cols)
             x_data_scaled = scaler.transform(x_data)
             x_data_scaled = pd.DataFrame(x_data_scaled, columns=cols)
+
+            # Scale the target
+            orig_y = y
+            scaler = RobustScaler()
+            train_y = scaler.fit_transform(train_y.values.reshape(-1, 1)).reshape(1, -1)[0]
+            y = scaler.fit_transform(y.values.reshape(-1, 1)).reshape(1, -1)[0]
 
             try:
                 regr.fit(train_x_data, train_y)
@@ -11023,7 +11029,10 @@ class DataConsistencyChecker:
                 # Determine if the formula is still accurate when using just the selected columns
                 # todo: fill in
 
-                errors_arr = (y_pred - y)
+                # Switch back to the original scale to calculate the errors and to display the predictions
+                y_pred = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(1, -1)[0]
+
+                errors_arr = (y_pred - orig_y)
                 normalized_errors_arr = abs(errors_arr / self.column_medians[col_name])
                 test_series = normalized_errors_arr < 0.5
                 self.__process_analysis_binary(
