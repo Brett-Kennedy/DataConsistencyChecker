@@ -10890,18 +10890,18 @@ class DataConsistencyChecker:
         Patterns without exceptions: 'lin regr 2' is is based on '1a', '1b', and '1c'
         Patterns with exception: 'lin regr 3' is based on '1d', '1e', '1f', with one exception.
         """
-        self.__add_synthetic_column('lin regr 1a', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('lin regr 1a', [random.randint(1, 10)  for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1b', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1c', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('lin regr 1d', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('lin regr 1d', [random.randint(1, 10)  for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1e', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('lin regr 1f', [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column(
             'lin regr 2',
-            (4.1 * self.synth_df['lin regr 1a']) + (2.1 * self.synth_df['lin regr 1b']) + (5.1 * self.synth_df['lin regr 1c']))
+            (40.1 * self.synth_df['lin regr 1a']) + (2.1 * self.synth_df['lin regr 1b']) + (5.1 * self.synth_df['lin regr 1c']))
         self.__add_synthetic_column(
             'lin regr 3',
-            (4.1 * self.synth_df['lin regr 1d']) + (2.1 * self.synth_df['lin regr 1e']) + (5.1 * self.synth_df['lin regr 1f']))
+            (40.1 * self.synth_df['lin regr 1d']) + (3.1 * self.synth_df['lin regr 1e']) + (5.1 * self.synth_df['lin regr 1f']))
         self.synth_df.at[999, 'lin regr 3'] = self.synth_df.at[999, 'lin regr 3'] * 10.0
 
     def __check_lin_regressor(self, test_id):
@@ -10930,6 +10930,7 @@ class DataConsistencyChecker:
 
             regr = Lasso(alpha=1.0)
 
+            # Collect the relevant features and remove any null or inf values from these
             x_data = self.orig_df.drop(columns=[col_name])
             x_data = x_data.drop(columns=self.binary_cols + self.date_cols + self.string_cols)
             uncorrelated_cols = []
@@ -10946,6 +10947,7 @@ class DataConsistencyChecker:
             if len(x_data.columns) == 0:
                 continue
 
+            # Clean the target column
             y = self.numeric_vals_filled[col_name]
             y = y.fillna(self.column_medians[col_name])
             y = y.replace([np.inf, -np.inf], self.column_medians[col_name])
@@ -11029,7 +11031,9 @@ class DataConsistencyChecker:
                     features_used + [col_name],
                     test_series,
                     (f'The column "{col_name}" contains values that are consistently predictable based on a linear '
-                     f'regression formula: \n{regression_formula}'),
+                     f'regression formula: \n{regression_formula}. (The co-efficients are based on scaled values '
+                     f'and do not apply the the original values. This is to represent the relative importances of the '
+                     f'features)'),
                     display_info={'Pred': pd.Series(y_pred)}
                 )
 
