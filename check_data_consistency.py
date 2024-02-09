@@ -7576,6 +7576,8 @@ class DataConsistencyChecker:
         """
 
         for col_name in self.numeric_cols:
+            if self.orig_df[col_name].notna().sum() < self.freq_contamination_level:
+                continue
 
             # Skip any columns than have more than a few non-integer values. We do not use self.numeric_vals_filled
             # as the median values may have decimals or not.
@@ -7668,6 +7670,9 @@ class DataConsistencyChecker:
                 continue
 
             if self.orig_df[col_name].nunique() < 3:
+                continue
+
+            if self.orig_df[col_name].notna().sum() < self.freq_contamination_level:
                 continue
 
             # We do not use self.numeric_vals_filled, as we wish to fill with 0.5 and not the median.
