@@ -6619,6 +6619,8 @@ class DataConsistencyChecker:
 
     def __check_positive_values(self, test_id):
         for col_name in self.numeric_cols:
+            if self.orig_df[col_name].notna().sum() < self.freq_contamination_level:
+                continue
             vals_arr = convert_to_numeric(self.orig_df[col_name], 1)
             test_series = (self.orig_df[col_name].isna()) | (vals_arr >= 0)
             self.__process_analysis_binary(
@@ -6638,6 +6640,8 @@ class DataConsistencyChecker:
 
     def __check_negative_values(self, test_id):
         for col_name in self.numeric_cols:
+            if self.orig_df[col_name].notna().sum() < self.freq_contamination_level:
+                continue
             vals_arr = convert_to_numeric(self.orig_df[col_name], -1)
             test_series_neg = (vals_arr < 0)
             if test_series_neg.tolist().count(False) > (self.num_rows * 0.75):
