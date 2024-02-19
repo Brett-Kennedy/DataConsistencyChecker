@@ -4038,7 +4038,10 @@ class DataConsistencyChecker:
         elif test_id in ['MATCHED_ZERO', 'MATCHED_ZERO_MISSING', 'MATCHED_SET_ZERO_NON_ZERO']:
             # Show where col1 is zero and non-zero
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
+            col_name_2 = cols[1]
+            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0) & (self.orig_df[col_name_1].notna())].head(n_examples // 2)
+            if len(df_v_zero) < (n_examples // 2):
+                df_v_zero = pd.concat([df_v_zero, self.orig_df[cols][(self.orig_df[col_name_1] == 0) & (self.orig_df[col_name_1].isna())].head((n_examples // 2) - len(df_v_zero))])
             df_v_non_zero = self.orig_df[cols][(self.orig_df[col_name_1] != 0) &
                                                (self.orig_df[col_name_1].notna())].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_non_zero])
@@ -7935,9 +7938,10 @@ class DataConsistencyChecker:
         self.__add_synthetic_column('much larger rand',
                                     [random.randint(1, 100) for _ in range(self.num_synth_rows)])
         self.__add_synthetic_column('much larger all',
-                                    [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows)])
-        self.__add_synthetic_column('much larger most',
-                                    [random.randint(200_000, 300_000) for _ in range(self.num_synth_rows-1)] + [50])
+                                    [random.randint(2000, 2100) for _ in range(self.num_synth_rows)])
+        self.synth_df['much larger all'] = self.synth_df['much larger all'] + (3.0 * self.synth_df['much larger rand'])
+        self.synth_df['much larger most'] = self.synth_df['much larger all']
+        self.synth_df.loc[999, 'much larger most'] = 50
 
     def __check_much_larger(self, test_id):
 
@@ -7966,6 +7970,11 @@ class DataConsistencyChecker:
 
             # Skip pairs where only rare rows have no nulls
             if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
+                continue
+
+            # Test on a sample that the columns are correlated
+            corr = scipy.stats.spearmanr(self.sample_df[col_name_1], self.sample_df[col_name_2])
+            if corr.correlation < 0.9:
                 continue
 
             # Test on a sample
@@ -9696,12 +9705,20 @@ class DataConsistencyChecker:
                 return False
 
             # Test the relationship on a small sample of the full data
-            test_series = self.sample_df[col_c].astype(float) > (self.sample_df[col_a].astype(float) + self.sample_df[col_b].astype(float))
+            test_series = self.sample_df[col_c].astype(float) > (self.sample_df[col_a].astype(float) +
+                                                                 self.sample_df[col_b].astype(float))
             num_not_matching = test_series.tolist().count(False)
             if num_not_matching > 1:
                 return False
 
-            test_series = self.numeric_vals_filled[col_c].astype(float) > (self.numeric_vals_filled[col_a] + self.numeric_vals_filled[col_b])
+            # Test there is a correlation on a sample
+            corr = scipy.stats.spearmanr(self.sample_df[col_a].astype(float) + self.sample_df[col_b].astype(float),
+                                            self.sample_df[col_c].astype(float))
+            if corr.correlation < 0.9:
+                return False
+
+            test_series = self.numeric_vals_filled[col_c].astype(float) > (self.numeric_vals_filled[col_a] +
+                                                                           self.numeric_vals_filled[col_b])
             test_series = test_series | self.orig_df[col_a].isna() | self.orig_df[col_b].isna() | self.orig_df[col_c].isna()
             if test_series.tolist().count(False) < self.freq_contamination_level:
                 self.__process_analysis_binary(
