@@ -5,6 +5,7 @@
 - [DataConsistencyChecker](#DataConsistencyChecker)
 - [init_data](#init_data)
 - [check_data_quality](#check_data_quality)
+- [check_data_quality_by_feature_pairs](#check_data_quality_by_feature_pairs)
    #### Methods to generate or modify test data
 - [generate_synth_data](#generate_synth_data)
 - [modify_real_data](#modify_real_data)
@@ -130,6 +131,18 @@
 
         run_parallel: bool
             If set True, the tests will be run in parallel, which can reduce overall execution time.
+
+## check_data_quality_by_feature_pairs
+**check_data_quality_by_feature_pairs**(max_features_shown=30)
+
+      An alternative to check_data_quality(). This runs similar (though fewer) tests on pairs of features and, for
+        each test, presents a matrix indicating for what fraction of the rows a given relationship between the features
+        holds true.
+
+        max_features_shown: int
+            Where there are many features, it can be infeasible to show a heatmap of all features. However, it may be
+            useful to render a heatmap for the first features. max_features_shown specifies how many features, at most,
+            will be included in the heatmaps rendered.
 
 
 ## Methods to generate or modify test data
