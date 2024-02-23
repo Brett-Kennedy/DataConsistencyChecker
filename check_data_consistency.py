@@ -1599,8 +1599,11 @@ class DataConsistencyChecker:
             if matrix.sum().sum() == 0:
                 print_text("No instances found")
                 return
-            d = pd.DataFrame(matrix, columns=self.orig_df.columns, index=self.orig_df.columns)
+            d = pd.DataFrame(matrix, columns=self.orig_df.columns[:max_features_shown],
+                             index=self.orig_df.columns[:max_features_shown])
             d = d.replace(0, np.NaN)
+            num_feats = min(len(self.orig_df.columns), max_features_shown)
+            fig, ax = plt.subplots(figsize=(num_feats, num_feats))
             s = sns.heatmap(d, annot=True, fmt='.4f', cmap="seismic", linewidths=1.1, linecolor='blue', cbar=False)
             for _, spine in s.spines.items():
                 spine.set_visible(True)
@@ -1633,17 +1636,17 @@ class DataConsistencyChecker:
 
         print_text(f"## Fraction of rows where both columns contain positive values")
         def test_both_positive(col_name_1, col_name_2):
-            return self.orig_df[(self.orig_df[col_name_1] >= 0) & (self.orig_df[col_name_2] >= 0)]
+            return self.orig_df[(self.numeric_vals_filled[col_name_1] >= 0) & (self.numeric_vals_filled[col_name_2] >= 0)]
         run_test(test_both_positive)
 
         print_text(f"## Fraction of rows where both columns contain negative values")
         def test_both_negative(col_name_1, col_name_2):
-            return self.orig_df[(self.orig_df[col_name_1] < 0) & (self.orig_df[col_name_2] < 0)]
+            return self.orig_df[(self.numeric_vals_filled[col_name_1] < 0) & (self.numeric_vals_filled[col_name_2] < 0)]
         run_test(test_both_negative)
 
         print_text(f"## Fraction of rows where one columns is the negative of the other")
         def test_negative(col_name_1, col_name_2):
-            return self.orig_df[self.orig_df[col_name_1] == (-1)*self.orig_df[col_name_2]]
+            return self.orig_df[self.numeric_vals_filled[col_name_1] == (-1)*self.numeric_vals_filled[col_name_2]]
         run_test(test_negative)
 
         print_text(f"## Fraction of rows where one columns is an even multiple of the other")
@@ -1657,12 +1660,12 @@ class DataConsistencyChecker:
 
         print_text(f"## Fraction of rows where one column is larger (using absolute values) than the other")
         def test_larger(col_name_1, col_name_2):
-            return self.orig_df[abs(self.orig_df[col_name_1]) > abs(self.orig_df[col_name_2])]
+            return self.orig_df[abs(self.numeric_vals_filled[col_name_1]) > abs(self.numeric_vals_filled[col_name_2])]
         run_test(test_larger)
 
         print_text(f"## Fraction of rows where one columns is ten or more times (using absolute values) larger than the other")
         def test_much_larger(col_name_1, col_name_2):
-            return self.orig_df[abs(self.orig_df[col_name_1]) > abs((10.0)*self.orig_df[col_name_2])]
+            return self.orig_df[abs(self.numeric_vals_filled[col_name_1]) > abs((10.0)*self.numeric_vals_filled[col_name_2])]
         run_test(test_much_larger)
 
     ##################################################################################################################
@@ -6713,6 +6716,11 @@ class DataConsistencyChecker:
                     continue
                 if self.orig_df[col_name_2].nunique() > (self.num_rows / 2):
                     continue
+
+                counts_arr = self.sample_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
+                if len(counts_arr) < (len(self.sample_df) * 0.9):
+                    continue
+
                 counts_arr = self.orig_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
                 repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
                 test_series = [True if counts_arr[x, y] == 1 else False
