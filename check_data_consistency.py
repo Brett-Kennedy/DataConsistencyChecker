@@ -1249,6 +1249,7 @@ class DataConsistencyChecker:
         self.larger_or_equal_pairs_with_bool_dict = None
         self.is_missing_dict = None
         self.sample_is_missing_dict = None
+        self.num_missing_dict = None
         self.percentiles_dict = None
         self.nunique_dict = None
         self.count_most_freq_value_dict = None
@@ -5145,6 +5146,18 @@ class DataConsistencyChecker:
             self.is_missing_dict[col_name] = self.orig_df[col_name].apply(is_missing)
         return self.is_missing_dict
 
+    def get_num_missing_dict(self):
+        """
+        For all columns, creates an integer indicated the number of missing values.
+        """
+        if self.num_missing_dict:
+            return self.num_missing_dict
+        self.num_missing_dict = {}
+        is_missing_dict = self.get_is_missing_dict()
+        for col_name in self.orig_df.columns:
+            self.num_missing_dict[col_name] = is_missing_dict[col_name].tolist().count(True)
+        return self.num_missing_dict
+
     def get_sample_is_missing_dict(self):
         """
         Equivalent to get_is_missing_dict(), but done on the sample dataframe.
@@ -6706,21 +6719,36 @@ class DataConsistencyChecker:
         self.synth_df.loc[999, 'unique_pair most'] = self.synth_df.loc[998, 'unique_pair most']
 
     def __check_unique_pair(self, test_id):
+        nunique_dict = self.get_nunique_dict()
+        num_missing_dict = self.get_num_missing_dict()
+        nunique_threshold = (self.num_rows / 2)
+        nunique_sample_pairs_threshold = len(self.sample_df) * 0.9
+        missing_threshold = self.num_rows * 0.1
+        sample_df = self.sample_df.copy().fillna('NONE')
         for col_name_1_idx, col_name_1 in enumerate(self.orig_df.columns):
-            if self.orig_df[col_name_1].nunique() < 2:
+            print(col_name_1)
+            if num_missing_dict[col_name_1] > missing_threshold:
                 continue
-            if self.orig_df[col_name_1].nunique() > (self.num_rows / 2):
+            if nunique_dict[col_name_1] < 2:
                 continue
+            if nunique_dict[col_name_1] > nunique_threshold:
+                continue
+            print("here")
             for col_name_2 in self.orig_df.columns[col_name_1_idx + 1:]:
-                if self.orig_df[col_name_2].nunique() < 2:
+                print(" ", col_name_2)
+                if num_missing_dict[col_name_2] > missing_threshold:
                     continue
-                if self.orig_df[col_name_2].nunique() > (self.num_rows / 2):
+                if nunique_dict[col_name_2] < 2:
                     continue
+                if nunique_dict[col_name_2] > nunique_threshold:
+                    continue
+                print(" here2")
 
-                counts_arr = self.sample_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
-                if len(counts_arr) < (len(self.sample_df) * 0.9):
+                counts_arr = sample_df[[col_name_1, col_name_2]].value_counts(dropna=False)
+                if len(counts_arr) < nunique_sample_pairs_threshold:
+                    print("  skipping")
                     continue
-
+                print("************************")
                 counts_arr = self.orig_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
                 repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
                 test_series = [True if counts_arr[x, y] == 1 else False
