@@ -6721,9 +6721,12 @@ class DataConsistencyChecker:
     def __check_unique_pair(self, test_id):
         nunique_dict = self.get_nunique_dict()
         num_missing_dict = self.get_num_missing_dict()
+
         nunique_threshold = (self.num_rows / 2)
         nunique_sample_pairs_threshold = len(self.sample_df) * 0.9
         missing_threshold = self.num_rows * 0.1
+        min_number_combinations = self.num_rows - self.freq_contamination_level
+
         sample_df = self.sample_df.copy().fillna('NONE')
         for col_name_1_idx, col_name_1 in enumerate(self.orig_df.columns):
             print(col_name_1)
@@ -6733,27 +6736,29 @@ class DataConsistencyChecker:
                 continue
             if nunique_dict[col_name_1] > nunique_threshold:
                 continue
-            print("here")
+            #print("here")
             for col_name_2 in self.orig_df.columns[col_name_1_idx + 1:]:
-                print(" ", col_name_2)
+                #print(" ", col_name_2)
                 if num_missing_dict[col_name_2] > missing_threshold:
                     continue
                 if nunique_dict[col_name_2] < 2:
                     continue
                 if nunique_dict[col_name_2] > nunique_threshold:
                     continue
-                print(" here2")
+                if nunique_dict[col_name_1] * nunique_dict[col_name_2] < min_number_combinations:
+                    continue
+                #print(" here2")
 
                 counts_arr = sample_df[[col_name_1, col_name_2]].value_counts(dropna=False)
                 if len(counts_arr) < nunique_sample_pairs_threshold:
-                    print("  skipping")
+                    #print("  skipping")
                     continue
-                print("************************")
-                counts_arr = self.orig_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
+                #print("************************")
+                df = self.orig_df[[col_name_1, col_name_2]].copy().fillna('NONE')
+                counts_arr = df.fillna('NONE').value_counts(dropna=False)
                 repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
                 test_series = [True if counts_arr[x, y] == 1 else False
-                               for x, y in zip(self.orig_df[col_name_1].fillna('NONE'),
-                                               self.orig_df[col_name_2].fillna('NONE'))]
+                               for x, y in zip(df[col_name_1], df[col_name_2])]
                 self.__process_analysis_binary(
                     test_id,
                     [col_name_1, col_name_2],
