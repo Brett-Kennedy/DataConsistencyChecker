@@ -38,7 +38,6 @@ import seaborn as sns
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 import scipy.stats as scipy_stats
-#from scipy.stats import SpearmanRConstantInputWarning
 
 # Uncomment to debug any warnings.
 # warnings.filterwarnings("error")
@@ -239,6 +238,9 @@ class DataConsistencyChecker:
                                          ('Check one column consistently has either the same value as another column, '
                                           'or a small number of other values.'),
                                          self.__check_same_or_constant, self.__generate_same_or_constant,
+                                         True, True, False, False),
+            'UNIQUE_PAIR':              ('', 'Check if two columns consistently have a unique pair of values.',
+                                         self.__check_unique_pair, self.__generate_unique_pair,
                                          True, True, False, False),
 
             # Tests on single numeric columns
@@ -1580,6 +1582,88 @@ class DataConsistencyChecker:
         # Initialize variables used by display_next()
         self.found_tests = self.get_test_ids_with_results()
         self.current_display_test = 0
+
+    def check_data_quality_by_feature_pairs(self, max_features_shown=30):
+        """
+        An alternative to check_data_quality(). This runs similar (though fewer) tests on pairs of features and, for
+        each test, presents a matrix indicating for what fraction of the rows a given relationship between the features
+        holds true.
+
+        max_features_shown: int
+            Where there are many features, it can be infeasible to show a heatmap of all features. However, it may be
+            useful to render a heatmap for the first features. max_features_shown specifies how many features, at most,
+            will be included in the heatmaps rendered.
+        """
+
+        def handle_results(matrix):
+            if matrix.sum().sum() == 0:
+                print_text("No instances found")
+                return
+            d = pd.DataFrame(matrix, columns=self.orig_df.columns, index=self.orig_df.columns)
+            d = d.replace(0, np.NaN)
+            s = sns.heatmap(d, annot=True, fmt='.4f', cmap="seismic", linewidths=1.1, linecolor='blue', cbar=False)
+            for _, spine in s.spines.items():
+                spine.set_visible(True)
+            plt.show()
+
+        def run_test(func):
+            matrix = np.zeros((min(len(self.numeric_cols), max_features_shown),
+                               min(len(self.numeric_cols), max_features_shown)))
+            for col_name_1_idx, col_name_1 in enumerate(self.numeric_cols[:max_features_shown]):
+                for col_name_2_idx, col_name_2 in enumerate(self.numeric_cols[:max_features_shown]):
+                    df = func(col_name_1, col_name_2)
+                    matrix[col_name_1_idx, col_name_2_idx] = len(df) / self.num_rows
+            handle_results(matrix)
+
+        print_text("Blank cells indicate counts of zero for the corresponding pair of features.")
+        print_text(f"## Fraction of rows where both columns contain the same value")
+        def test_same(col_name_1, col_name_2):
+            return self.orig_df[self.orig_df[col_name_1] == self.orig_df[col_name_2]]
+        run_test(test_same)
+
+        print_text(f"## Fraction of rows where both columns contain null")
+        def test_null(col_name_1, col_name_2):
+            return self.orig_df[(self.orig_df[col_name_1].isna()) & (self.orig_df[col_name_2].isna())]
+        run_test(test_null)
+
+        print_text(f"## Fraction of rows where both columns contain zero")
+        def test_zero(col_name_1, col_name_2):
+            return self.orig_df[(self.orig_df[col_name_1] == 0) & (self.orig_df[col_name_2] == 0)]
+        run_test(test_zero)
+
+        print_text(f"## Fraction of rows where both columns contain positive values")
+        def test_both_positive(col_name_1, col_name_2):
+            return self.orig_df[(self.orig_df[col_name_1] >= 0) & (self.orig_df[col_name_2] >= 0)]
+        run_test(test_both_positive)
+
+        print_text(f"## Fraction of rows where both columns contain negative values")
+        def test_both_negative(col_name_1, col_name_2):
+            return self.orig_df[(self.orig_df[col_name_1] < 0) & (self.orig_df[col_name_2] < 0)]
+        run_test(test_both_negative)
+
+        print_text(f"## Fraction of rows where one columns is the negative of the other")
+        def test_negative(col_name_1, col_name_2):
+            return self.orig_df[self.orig_df[col_name_1] == (-1)*self.orig_df[col_name_2]]
+        run_test(test_negative)
+
+        print_text(f"## Fraction of rows where one columns is an even multiple of the other")
+        def test_even_multiple(col_name_1, col_name_2):
+            val_arr_1 = self.numeric_vals_filled[col_name_1]
+            val_arr_2 = self.numeric_vals_filled[col_name_2]
+            test_series = np.where(val_arr_2 != 0, val_arr_1 / val_arr_2, val_arr_1).tolist()
+            test_series = [float(x).is_integer() for x in test_series]
+            return self.orig_df.loc[test_series]
+        run_test(test_even_multiple)
+
+        print_text(f"## Fraction of rows where one column is larger (using absolute values) than the other")
+        def test_larger(col_name_1, col_name_2):
+            return self.orig_df[abs(self.orig_df[col_name_1]) > abs(self.orig_df[col_name_2])]
+        run_test(test_larger)
+
+        print_text(f"## Fraction of rows where one columns is ten or more times (using absolute values) larger than the other")
+        def test_much_larger(col_name_1, col_name_2):
+            return self.orig_df[abs(self.orig_df[col_name_1]) > abs((10.0)*self.orig_df[col_name_2])]
+        run_test(test_much_larger)
 
     ##################################################################################################################
     # Public methods to output information about the tool, unrelated to any specific dataset or test execution
@@ -6606,6 +6690,43 @@ class DataConsistencyChecker:
             if not test_arrs(sample_df[col_name_1], sample_df[col_name_2], is_sample=True):
                 continue
             test_arrs(self.orig_df[col_name_1], self.orig_df[col_name_2], is_sample=False)
+
+    def __generate_unique_pair(self):
+        """
+        Patterns without exceptions: all_1 and all_2 have unique pairs of values
+        Patterns with exception: all_1 and most have unique pairs of values other than the last 2 rows
+        """
+        self.__add_synthetic_column('unique_pair rand', [random.random() for _ in range(self.num_synth_rows)])
+        self.__add_synthetic_column('unique_pair all_1',  [1]*500 + [2]*(self.num_synth_rows - 500))
+        self.__add_synthetic_column('unique_pair all_2', list(range(500)) + list(range(self.num_synth_rows - 500)))
+        self.__add_synthetic_column('unique_pair most', self.synth_df['unique_pair all_2'])
+        self.synth_df.loc[999, 'unique_pair most'] = self.synth_df.loc[998, 'unique_pair most']
+
+    def __check_unique_pair(self, test_id):
+        for col_name_1_idx, col_name_1 in enumerate(self.orig_df.columns):
+            if self.orig_df[col_name_1].nunique() < 2:
+                continue
+            if self.orig_df[col_name_1].nunique() > (self.num_rows / 2):
+                continue
+            for col_name_2 in self.orig_df.columns[col_name_1_idx + 1:]:
+                if self.orig_df[col_name_2].nunique() < 2:
+                    continue
+                if self.orig_df[col_name_2].nunique() > (self.num_rows / 2):
+                    continue
+                counts_arr = self.orig_df[[col_name_1, col_name_2]].fillna('NONE').value_counts(dropna=False)
+                repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
+                test_series = [True if counts_arr[x, y] == 1 else False
+                               for x, y in zip(self.orig_df[col_name_1].fillna('NONE'),
+                                               self.orig_df[col_name_2].fillna('NONE'))]
+                self.__process_analysis_binary(
+                    test_id,
+                    [col_name_1, col_name_2],
+                    test_series,
+                    (f"{col_name_1} contains {self.orig_df[col_name_1].nunique()} unique values and "
+                     f"{col_name_2} contains {self.orig_df[col_name_2].nunique()} unique values. "
+                     "The columns contain pairs of values that are consistently unique"),
+                    f" including {repeated_vals[:5]} ({len(repeated_vals)} identified repeated value(s))"
+                )
 
     ##################################################################################################################
     # Data consistency checks for single numeric columns
