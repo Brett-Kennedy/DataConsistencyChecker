@@ -4218,25 +4218,28 @@ class DataConsistencyChecker:
                 df = df[~df.index.duplicated(keep='first')]
 
             # Try to get a good set of unique values
-            last_col = cols[-1]
-            vc = df[last_col].value_counts(dropna=False)
-            vals = list(vc.index[:11])  # Try to cover the 3 to 10 most common values
-            num_vals = len(vals)
-            dfs_arr = []
-            num_examples_found = 0
-            num_per_value = 1
-            if num_vals < n_examples:
-                num_per_value = n_examples // num_vals
-            for v in vals:
-                if num_examples_found >= n_examples:
-                    break
-                if v == v:
-                    df_v = df[cols][(df[last_col] == v)].head(num_per_value)
-                else:
-                    df_v = df[cols][(df[last_col].isna())].head(num_per_value)
-                num_examples_found += len(df_v)
-                dfs_arr.append(df_v)
-            df = pd.concat(dfs_arr)
+            if test_id in ['UNIQUE_VALUES']:
+                df = df.sample(n=n_examples)
+            else:
+                last_col = cols[-1]
+                vc = df[last_col].value_counts(dropna=False)
+                vals = list(vc.index[:11])  # Try to cover the 3 to 10 most common values
+                num_vals = len(vals)
+                dfs_arr = []
+                num_examples_found = 0
+                num_per_value = 1
+                if num_vals < n_examples:
+                    num_per_value = n_examples // num_vals
+                for v in vals:
+                    if num_examples_found >= n_examples:
+                        break
+                    if v == v:
+                        df_v = df[cols][(df[last_col] == v)].head(num_per_value)
+                    else:
+                        df_v = df[cols][(df[last_col].isna())].head(num_per_value)
+                    num_examples_found += len(df_v)
+                    dfs_arr.append(df_v)
+                df = pd.concat(dfs_arr)
 
         if show_consecutive:
             assert df is None
