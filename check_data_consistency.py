@@ -6732,16 +6732,13 @@ class DataConsistencyChecker:
 
         sample_df = self.sample_df.copy().fillna('NONE')
         for col_name_1_idx, col_name_1 in enumerate(self.orig_df.columns):
-            print(col_name_1)
             if num_missing_dict[col_name_1] > missing_threshold:
                 continue
             if nunique_dict[col_name_1] < 2:
                 continue
             if nunique_dict[col_name_1] > nunique_threshold:
                 continue
-            #print("here")
             for col_name_2 in self.orig_df.columns[col_name_1_idx + 1:]:
-                #print(" ", col_name_2)
                 if num_missing_dict[col_name_2] > missing_threshold:
                     continue
                 if nunique_dict[col_name_2] < 2:
@@ -6750,13 +6747,10 @@ class DataConsistencyChecker:
                     continue
                 if nunique_dict[col_name_1] * nunique_dict[col_name_2] < min_number_combinations:
                     continue
-                #print(" here2")
 
                 counts_arr = sample_df[[col_name_1, col_name_2]].value_counts(dropna=False)
                 if len(counts_arr) < nunique_sample_pairs_threshold:
-                    #print("  skipping")
                     continue
-                #print("************************")
                 df = self.orig_df[[col_name_1, col_name_2]].copy().fillna('NONE')
                 counts_arr = df.fillna('NONE').value_counts(dropna=False)
                 repeated_vals = [x for x, y in zip(counts_arr.index, counts_arr.values) if y > 1]
