@@ -24,7 +24,10 @@ from itertools import combinations
 from IPython import get_ipython
 from IPython.display import display, Markdown, HTML
 from textwrap import wrap
-from termcolor import colored
+try:
+    from termcolor import colored
+except:
+    colored = None
 import concurrent
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Process, Queue
@@ -1543,7 +1546,10 @@ class DataConsistencyChecker:
                     while exc_tb.tb_next:
                         exc_tb = exc_tb.tb_next
                         line_number_str += " -- " + str(exc_tb.tb_lineno)
-                    print(colored(f"Error executing {test_id}: {e}, line number: {line_number_str}", 'red'))
+                    if colored:
+                        print(colored(f"Error executing {test_id}: {e}, line number: {line_number_str}", 'red'))
+                    else:
+                        print(f"Error executing {test_id}: {e}, line number: {line_number_str}")
                     self.num_exceptions += 1
                 self.n_tests_executed += 1
 
@@ -1600,10 +1606,10 @@ class DataConsistencyChecker:
             if matrix.sum().sum() == 0:
                 print_text("No instances found")
                 return
-            d = pd.DataFrame(matrix, columns=self.orig_df.columns[:max_features_shown],
-                             index=self.orig_df.columns[:max_features_shown])
+            d = pd.DataFrame(matrix, columns=self.numeric_cols[:max_features_shown],
+                             index=self.numeric_cols[:max_features_shown])
             d = d.replace(0, np.NaN)
-            num_feats = min(len(self.orig_df.columns), max_features_shown)
+            num_feats = min(len(self.numeric_cols), max_features_shown)
             fig, ax = plt.subplots(figsize=(num_feats, num_feats))
             s = sns.heatmap(d, annot=True, fmt='.4f', cmap="seismic", linewidths=1.1, linecolor='blue', cbar=False)
             for _, spine in s.spines.items():
@@ -11168,7 +11174,10 @@ class DataConsistencyChecker:
                 regr.fit(train_x_data, train_y)
             except Exception as e:
                 if self.DEBUG_MSG:
-                    print(colored(f"Error fitting Linear Regression in {test_id}: {e}", 'red'))
+                    if colored:
+                        print(colored(f"Error fitting Linear Regression in {test_id}: {e}", 'red'))
+                    else:
+                        print(f"Error fitting Linear Regression in {test_id}: {e}")
                 continue
 
             y_pred = regr.predict(x_data_scaled)
@@ -17675,7 +17684,10 @@ class DataConsistencyChecker:
                     corr = pairwise_correlation(numeric_sample_df[col_name_1], numeric_sample_df[col_name_2])
                 except Exception as e:
                     if self.DEBUG_MSG:
-                        print(colored(f"Error calculating correlation in {test_id}: {e}", 'red'))
+                        if colored:
+                            print(colored(f"Error calculating correlation in {test_id}: {e}", 'red'))
+                        else:
+                            print(f"Error calculating correlation in {test_id}: {e}")
                     continue
                 if abs(corr) >= 0.75:
                     continue
