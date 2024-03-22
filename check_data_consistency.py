@@ -9100,20 +9100,23 @@ class DataConsistencyChecker:
             return
 
         get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+        is_missing_dict = self.get_is_missing_dict()
 
         for pair_idx, (col_name_1, col_name_2) in enumerate(numeric_pairs_list):
             # Skip pairs where only rare rows have no nulls
             if get_col_pairs_either_null_bool_dict[tuple(sorted([col_name_1, col_name_2]))]:
                 continue
 
+            num_not_missing_1 = is_missing_dict[col_name_1].tolist().count(False)
+            num_not_missing_2 = is_missing_dict[col_name_2].tolist().count(False)
             zero_indicator_1 = self.orig_df[col_name_1] == 0
             num_zeros_1 = zero_indicator_1.tolist().count(True)
             zero_indicator_2 = self.orig_df[col_name_2] == 0
             num_zeros_2 = zero_indicator_2.tolist().count(True)
-            if num_zeros_1 < (self.num_rows * 0.01) or \
-                    num_zeros_1 > (self.num_rows * 0.99) or \
-                    num_zeros_2 < (self.num_rows * 0.01) or \
-                    num_zeros_2 > (self.num_rows * 0.99):
+            if num_zeros_1 < (num_not_missing_1 * 0.01) or \
+                    num_zeros_1 > (num_not_missing_1 * 0.99) or \
+                    num_zeros_2 < (num_not_missing_2 * 0.01) or \
+                    num_zeros_2 > (num_not_missing_2 * 0.99):
                 continue
             test_series = np.array([x == y for x, y in zip(zero_indicator_1, zero_indicator_2)])
             test_series = test_series | self.orig_df[col_name_1].isna() | self.orig_df[col_name_2].isna()
