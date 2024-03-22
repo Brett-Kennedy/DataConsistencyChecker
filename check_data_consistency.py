@@ -18804,6 +18804,10 @@ def is_missing(x):
     # todo: check NaD (not a date) too. and NaT (not a time)
     if x is None:
         return True
+    if 'NAType' in str(type(x)):
+        return False
+    if 'missing' in str(type(x)):
+        return False
     if isinstance(x, numbers.Number):
         return math.isnan(x)
     if x != x:
