@@ -18808,9 +18808,9 @@ def is_missing(x):
     if x is None:
         return True
     if 'NAType' in str(type(x)):
-        return False
+        return True
     if 'missing' in str(type(x)):
-        return False
+        return True
     if isinstance(x, numbers.Number):
         return math.isnan(x)
     if x != x:
