@@ -1215,6 +1215,18 @@ class DataConsistencyChecker:
         for col_name in self.orig_df.columns:
             self.num_valid_rows[col_name] = len([x for x in self.orig_df[col_name] if not is_missing(x)])
 
+        # Replace any NA values that cannot be treated as None or NaN
+        def test_NA(x):
+            try:
+                if x == x:
+                    x = x
+                return False
+            except:
+                return True
+
+        for col_name in self.orig_df.columns:
+            self.orig_df[col_name] = [x if not test_NA(x) else None for x in self.orig_df[col_name]]
+
         # patterns_df has a row for each test for each feature where there is a pattern with no exceptions.
         self.patterns_arr = []
         self.patterns_df = None
@@ -7743,6 +7755,8 @@ class DataConsistencyChecker:
         at least 1 (not zero).
         """
 
+        is_missing_dict = self.get_is_missing_dict()
+
         for col_name in self.numeric_cols:
             if self.orig_df[col_name].notna().sum() < self.freq_contamination_level:
                 continue
@@ -7773,7 +7787,7 @@ class DataConsistencyChecker:
             normal_vals = counts_series.index[:last_normal_index + 1]
             min_normal = min(normal_vals)
             max_normal = max(normal_vals)
-            test_series = (num_zeros_arr >= min_normal) & (num_zeros_arr <= max_normal + 2)
+            test_series = ((num_zeros_arr >= min_normal) & (num_zeros_arr <= max_normal + 2)) | is_missing_dict[col_name]
 
             desc_str = f'The column has values with consistently {min_normal} to {max_normal} trailing zeros.'
             if min_normal == max_normal:
