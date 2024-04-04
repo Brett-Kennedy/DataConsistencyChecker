@@ -88,6 +88,20 @@ dc.display_next()
 The display_next() API will output the results (or a sample of the results if there are many) for a single test. If this is called repeatedly, it will, on each execution, display the results for the next test for which there are results, ordering the tests in the same order in which they are executed. Where it is desirable to save the results in a notebook, a new cell may be used for the next call to display_next(). Where the results may be over-written (and this is preferred where there are many results to avoid memory issues), display_next() may be called repeatedly in the same cell, presenting the results for the next test each time. 
 
 
+## 3rd Example with More Output
+```python
+import pandas as pd
+from check_data_consistency import DataConsistencyChecker
+
+dc = DataConsistencyChecker()
+dc.init_data(df)
+dc.check_data_quality()
+dc.summarize_patterns_and_exceptions()
+dc.display_detailed_results(save_to_disk=True)
+```
+Saving to disk will create an HTML file called Data_Consistency.html with the full results. The folder may be specified for this. This can contain a large volume of output as it does not need to be rendered within a notebook.
+
+
 ## Example Notebooks
 
 **APIs Demo**
