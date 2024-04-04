@@ -158,6 +158,11 @@ class DataConsistencyChecker:
 
         self.results_dict = {}
 
+        # HTML exports
+        # For HTML exports, the images are saved as separate files in the same image and given sequential numbers
+        self.image_output_num = 0
+        self.output_folder = None
+
         # This maps the columns used in test_results_df and patterns_df to the original columns
         self.col_to_original_cols_dict = {}
 
@@ -1705,13 +1710,15 @@ class DataConsistencyChecker:
         return {x: self.test_dict[x][TEST_DEFN_DESC]
                 for x in self.test_dict.keys() if self.test_dict[x][TEST_DEFN_IMPLEMENTED]}
 
-    def print_test_descriptions(self, long_desc=False):
+    def print_test_descriptions(self, long_desc=False, f=None):
         """
         Prints to screen a prettified list of tests and their descriptions.
 
         long_desc: bool
             If True, longer descriptions will be displayed for tests where available. If False, the short descriptions
             only will be displayed.
+
+        f: file_handle
         """
 
         for test_id in self.test_dict.keys():
@@ -1722,10 +1729,16 @@ class DataConsistencyChecker:
                     text += doc_str
                     text = ' '.join(text.split())
             multiline_test_desc = wrap(text, 90)
-            print(f"{test_id+':':<30} {multiline_test_desc[0]}")
+            if f:
+                f.write(f"{test_id+':':<30} {multiline_test_desc[0]}" + "<br" + os.linesep)
+            else:
+                print(f"{test_id+':':<30} {multiline_test_desc[0]}")
             filler = ''.join([" "]*32)
             for line in multiline_test_desc[1:]:
-                print(f'{filler} {line}')
+                if f:
+                    f.write(f'{filler} {line}' + "<br>" + os.linesep)
+                else:
+                    print(f'{filler} {line}')
 
     def get_patterns_shortlist(self):
         """
@@ -2038,7 +2051,7 @@ class DataConsistencyChecker:
             s.set(ylabel=None)
             plt.show()
 
-        # Replace any 1 values with checkmarks to make the display more clear.
+        # Replace any '1' values with checkmarks to make the display more clear.
         df = df.replace(1, u'\u2714')
         df = df.replace(0, '')
 
@@ -2300,6 +2313,8 @@ class DataConsistencyChecker:
             include_examples=True,
             plot_results=True,
             max_shown=-1,
+            save_to_disk=False,
+            output_folder=None,
             ):
         """
         Loops through each test specified, and each feature specified, and presents a detailed description of each. If
@@ -2353,9 +2368,16 @@ class DataConsistencyChecker:
             if more patterns and/or exceptions are available. If filters are set, and the number is larger, the first
             max_shown will be set. If set to -1, a default will be used, which considers if plots and examples are
             to be displayed. The default is 200 without plots or examples, 100 with either, and 50 with both.
+
+        save_to_disk: bool
+            If set True, output will be written to a file on disk
+
+        output_folder: str
+            Used only if save_to_disk is True. Indicates the file path to use for the output. If not specified, the
+            current folder will be used.
         """
 
-        def print_test_header(test_id):
+        def print_test_header(test_id, f):
             nonlocal printed_test_header
             nonlocal test_id_list
 
@@ -2364,7 +2386,10 @@ class DataConsistencyChecker:
             if len(test_id_list) == 1 or (self.execute_list is not None and len(self.execute_list) == 1):
                 return
 
-            if is_notebook():
+            if f:
+                f.write(''.join(['.'] * 100) + "<br>" + os.linesep)
+                f.write("<H2>" + test_id + "</H2>" + os.linesep)
+            elif is_notebook():
                 print(''.join(['.'] * 100))
                 display(Markdown(f"### {test_id}"))
             else:
@@ -2375,14 +2400,19 @@ class DataConsistencyChecker:
 
             printed_test_header = True
 
-        def print_column_header(col_name, test_id):
-            print()
+        def print_column_header(col_name, test_id, f):
+            print_line(f)
             if not is_notebook():
-                print()
-                print(hyphens)
+                if f:
+                    f.write(hyphens + "<br" + os.linesep)
+                else:
+                    print_line(f)
+                    print(hyphens)
 
             s = f"Columns(s): {self.__get_condensed_col_list(test_id, col_name)}"
-            if is_notebook():
+            if f:
+                f.write(s + "<br>" + os.linesep)
+            elif is_notebook():
                 display(Markdown(f"### {s}"))
             else:
                 print(s)
@@ -2432,11 +2462,28 @@ class DataConsistencyChecker:
                 print(f"{len(self.exceptions_summary_df)} issues were identified. {msg}")
                 return
 
+        # Initialize the folder and file handle for HTML exports if specified
+        f = None  # file handle used for HTML export
+        if save_to_disk:
+            if output_folder is None:
+                self.output_folder = os.path.join(os.getcwd(), "Output")
+            else:
+                self.output_folder = output_folder
+            os.makedirs(self.output_folder, exist_ok=True)
+
+            f = open(os.path.join(self.output_folder, "Data_consistency.html"), 'w')
+            f.write("<html>" + os.linesep)
+            f.write("<head>" + os.linesep)
+            f.write("</head>" + os.linesep)
+            f.write("<body>" + os.linesep)
+            f.write("<h1>Data Consistency Check Results</h1>" + os.linesep)
+            f.write("<body>" + os.linesep)
+
         if test_id_list:
             if len(test_id_list) > 1:
-                print()
+                print_line(f)
                 s = f"Displaying results for tests: {str(test_id_list).replace('[','').replace(']','')}"
-                print_text(s)
+                print_text(s, f)
 
             # Check for any tests that are specified that contradict the setting for show_short_list_only
             if show_short_list_only:
@@ -2445,21 +2492,21 @@ class DataConsistencyChecker:
                         sub_patterns_test = self.patterns_df[self.patterns_df['Test ID'] == test_id]
                         if len(sub_patterns_test):
                             print_text((f"Not displaying patterns without exceptions for {test_id}. This test is not in "
-                                        f"the short list and the parameter show_short_list_only was set to True"))
+                                        f"the short list and the parameter show_short_list_only was set to True"), f)
 
             # Check for any invalid test IDs
             for test_id in test_id_list:
                 if test_id not in self.get_test_list():
-                    print_text(f"{test_id} is not a valid test ID")
+                    print_text(f"{test_id} is not a valid test ID", f)
 
         if col_name_list:
-            print()
-            print_text(f"Displaying results for columns: {col_name_list}")
+            print_line(f)
+            print_text(f"Displaying results for columns: {col_name_list}", f)
 
             # Check for any invalid column names
             for col_name in col_name_list:
                 if col_name not in self.orig_df.columns:
-                    print_text(f"{col_name} is not a valid column name")
+                    print_text(f"{col_name} is not a valid column name", f)
 
         if test_id_list is None:
             test_id_list = self.get_test_list()
@@ -2470,8 +2517,8 @@ class DataConsistencyChecker:
         if row_id_list:
             # Check the row_id_list is valid
             if (np.array(row_id_list) > self.num_rows).any():
-                print()
-                print_text("Row id specified was beyond the length of the dataframe. Use the 0-based row numbers.")
+                print_line(f)
+                print_text("Row id specified was beyond the length of the dataframe. Use the 0-based row numbers.", f)
                 return
 
             # Create a dataframe representing only the specified rows
@@ -2499,8 +2546,8 @@ class DataConsistencyChecker:
             if show_patterns and ((not show_short_list_only) or test_id in self.get_patterns_shortlist()):
                 for columns_set in sub_patterns_test['Column(s)'].values:
                     if count_shown >= max_shown:
-                        print()
-                        print_text(max_shown_msg)
+                        print_line(f)
+                        print_text(max_shown_msg, f)
                         return
 
                     sub_patterns = self.patterns_df[(self.patterns_df['Test ID'] == test_id) &
@@ -2516,15 +2563,15 @@ class DataConsistencyChecker:
 
                     if len(sub_patterns) > 0:
                         count_shown += 1
-                        print_test_header(test_id)
-                        print_column_header(columns_set, test_id)
-                        print_text("Pattern found (without exceptions)")
+                        print_test_header(test_id, f)
+                        print_column_header(columns_set, test_id, f)
+                        print_text("Pattern found (without exceptions)", f)
                         if test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
                                        'PREDICT_NULL_DT']:
-                            print_text("**Description**:")
-                            print(sub_patterns.iloc[0]['Description of Pattern'])
+                            print_text("**Description**:", f)
+                            print_text(sub_patterns.iloc[0]['Description of Pattern'], f)
                         else:
-                            print_text(f"**Description**: {sub_patterns.iloc[0]['Description of Pattern']}")
+                            print_text(f"**Description**: {sub_patterns.iloc[0]['Description of Pattern']}", f)
                         cols = [x.lstrip('"').rstrip('"') for x in columns_set.split(" AND ")]
                         if include_examples:
                             self.__display_examples_not_flagged(
@@ -2532,21 +2579,23 @@ class DataConsistencyChecker:
                                 cols,
                                 columns_set,
                                 is_patterns=True,
-                                display_info=sub_patterns.iloc[0]['Display Information'])
+                                display_info=sub_patterns.iloc[0]['Display Information'],
+                                f=f)
                         if plot_results:
                             self.__draw_results_plots(
                                 test_id,
                                 cols,
                                 columns_set,
                                 show_exceptions=False,
-                                display_info=sub_patterns.iloc[0]['Display Information'])
+                                display_info=sub_patterns.iloc[0]['Display Information'],
+                                f=f)
 
             # Display patterns with exceptions
             if show_exceptions:
                 for columns_set in sub_results_summary_test['Column(s)'].values:
                     if count_shown >= max_shown:
-                        print()
-                        print_text(max_shown_msg)
+                        print_line(f)
+                        print_text(max_shown_msg, f)
                         return
 
                     if row_id_list:
@@ -2574,30 +2623,30 @@ class DataConsistencyChecker:
                         continue
 
                     count_shown += 1
-                    print_test_header(test_id)
-                    print_column_header(columns_set, test_id)
-                    print_text(f"**Issue ID**: {issue_id}")
+                    print_test_header(test_id, f)
+                    print_column_header(columns_set, test_id, f)
+                    print_text(f"**Issue ID**: {issue_id}", f)
                     if test_id in ['RARE_VALUES', 'VERY_SMALL', 'VERY_LARGE', 'VERY_SMALL_ABS', 'LARGE_GIVEN_DATE',
                                    'SMALL_GIVEN_DATE', 'LARGE_GIVEN_VALUE', 'SMALL_GIVEN_VALUE', 'LARGE_GIVEN_PREFIX',
                                    'SMALL_GIVEN_PREFIX', 'LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
-                        print_text("Unusual values were found.\n")
+                        print_text("Unusual values were found.\n", f)
                     else:
-                        print_text("A strong pattern, and exceptions to the pattern, were found.\n")
+                        print_text("A strong pattern, and exceptions to the pattern, were found.\n", f)
                     if test_id in ['GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC']:
                         # These display special output, so the formatting must be preserved.
-                        print_text(f"**Description**:")
+                        print_text(f"**Description**:",f )
                         print_text(sub_summary.iloc[0]['Description of Pattern'])
                     elif test_id in ['PREV_VALUES_DT', 'DECISION_TREE_REGRESSOR', 'DECISION_TREE_CLASSIFIER',
                                      'PREDICT_NULL_DT']:
                         # These display a decision tree, so the formatting must be preserved.
-                        print_text(f"**Description**:")
-                        print(sub_summary.iloc[0]['Description of Pattern'])
+                        print_text(f"**Description**:", f)
+                        print_text(sub_summary.iloc[0]['Description of Pattern'], f)
                     else:
                         multiline_desc = wrap(sub_summary.iloc[0]['Description of Pattern'], 100)
-                        print_text(f"**Description**: {'<br>'.join(multiline_desc)}")
+                        print_text(f"**Description**: {'<br>'.join(multiline_desc)}", f)
                     num_exceptions = sub_summary.iloc[0]['Number of Exceptions']
                     print_text((f"**Number of exceptions**: {num_exceptions} "
-                                f"({num_exceptions * 100.0 / self.num_rows:.4f}% of rows)"))
+                                f"({num_exceptions * 100.0 / self.num_rows:.4f}% of rows)"), f)
 
                     # Provide examples of the pattern and, for exceptions, of the exceptions
                     if include_examples:
@@ -2609,16 +2658,17 @@ class DataConsistencyChecker:
                             cols,
                             columns_set,
                             is_patterns=False,
-                            display_info=sub_summary.iloc[0]['Display Information'])
+                            display_info=sub_summary.iloc[0]['Display Information'],
+                            f=f)
 
                         flagged_df = self.__get_rows_flagged(test_id, columns_set)
                         if flagged_df is None:
                             continue
-                        print()
+                        print_line(f)
                         if len(flagged_df) > 10:
-                            print_text("**Examples of flagged values**:")
+                            print_text("**Examples of flagged values**:", f)
                         else:
-                            print_text("**Flagged values**:")
+                            print_text("**Flagged values**:", f)
                         display_cols = list(self.col_to_original_cols_dict[self.get_results_col_name(test_id, columns_set)])
                         flagged_df = flagged_df.head(10)
                         self.__draw_sample_dataframe(
@@ -2626,22 +2676,24 @@ class DataConsistencyChecker:
                             test_id,
                             cols,
                             display_info=sub_summary.iloc[0]['Display Information'],
-                            is_patterns=False)
-                        print()
+                            is_patterns=False,
+                            f=f)
+                        print_line(f)
 
                         # For some tests, we display the rows before and after the flagged rows as well, to provide
                         # context
                         if test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC',
                                        'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC', 'SIMILAR_PREVIOUS', 'RUNNING_SUM',
                                        'GROUPED_STRINGS', 'GROUPED_STRINGS_BY_NUMERIC']:
-                            print()
+                            print_line(f)
                             print_text((f"Showing a flagged example (row {flagged_df.index[0]}) with 5 rows "
-                                        f"before and 5 rows after (if available) the flagged row"))
+                                        f"before and 5 rows after (if available) the flagged row"), f)
                             self.__draw_rows_around_flagged_row(
                                 flagged_df[display_cols],
                                 test_id,
                                 cols,
-                                display_info=sub_summary.iloc[0]['Display Information'])
+                                display_info=sub_summary.iloc[0]['Display Information'],
+                                f=f)
 
                     # For some tests, we display one or more plots to make the exceptions more clear
                     if plot_results:
@@ -2652,7 +2704,13 @@ class DataConsistencyChecker:
                             cols,
                             columns_set,
                             show_exceptions=True,
-                            display_info=sub_summary.iloc[0]['Display Information'])
+                            display_info=sub_summary.iloc[0]['Display Information'],
+                            f=f)
+
+        if save_to_disk:
+            f.write("</body>" + os.linesep)
+            f.write("</html>" + os.linesep)
+            f.close()
 
     def display_next(self):
         """
@@ -2875,7 +2933,21 @@ class DataConsistencyChecker:
     # Private methods to plot patterns
     ##################################################################################################################
 
-    def __plot_distribution(self, test_id, col_name, show_exceptions, display_info):
+    def save_image(self, f):
+        image_file_name = f"output_{self.image_output_num}.png"
+        full_image_file_name = os.path.join(self.output_folder, image_file_name)
+        plt.savefig(full_image_file_name)
+        self.image_output_num += 1
+        f.write(f"<img src={image_file_name}><br>")
+
+    def show_image(self, f):
+        if f:
+            self.save_image(f)
+            plt.close("all")
+        else:
+            plt.show()
+
+    def __plot_distribution(self, test_id, col_name, show_exceptions, display_info, f):
         fig, ax = plt.subplots(figsize=(5, 3))
         s = sns.histplot(data=self.orig_df, x=col_name, color='blue', bins=100, ax=ax)
 
@@ -2927,9 +2999,9 @@ class DataConsistencyChecker:
             flagged_vals = self.orig_df.loc[flagged_idxs, col_name].values
             for v in flagged_vals:
                 s.axvline(v, color='red')
-        plt.show()
+        self.show_image(f)
 
-    def __draw_scatter_plot(self, df, test_id, x_col, y_col, y_is_calculated, columns_set, show_expections, display_info):
+    def __draw_scatter_plot(self, df, test_id, x_col, y_col, y_is_calculated, columns_set, show_expections, display_info, f):
 
         def draw_diagonal(ax):
             if show_diagonal:
@@ -3062,9 +3134,9 @@ class DataConsistencyChecker:
             clean_x_tick_labels(fig, 2, ax[1])
 
         plt.tight_layout()
-        plt.show()
+        self.show_image(f)
 
-    def __plot_count_plot(self, column_name):
+    def __plot_count_plot(self, column_name, f):
         fig, ax = plt.subplots(figsize=(4, 4))
         if column_name in self.date_cols:
             s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE"))
@@ -3072,9 +3144,9 @@ class DataConsistencyChecker:
             s = sns.countplot(orient='h', y=self.orig_df[column_name].fillna("NONE").str.strip())
         s.set_title(f"Counts of unique values in {column_name}")
         clean_x_tick_labels(fig, 1, ax)
-        plt.show()
+        self.show_image(f)
 
-    def __plot_heatmap(self, test_id, cols):
+    def __plot_heatmap(self, test_id, cols, f):
         col_name_1, col_name_2 = cols
         plt.subplots(figsize=(4, 4))
 
@@ -3093,9 +3165,9 @@ class DataConsistencyChecker:
         s.set_xlabel(col_name_2)
         s.set_ylabel(col_name_1)
         plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
-        plt.show()
+        self.show_image(f)
 
-    def __draw_row_rank_plot(self, test_id, col_name, show_exceptions):
+    def __draw_row_rank_plot(self, test_id, col_name, show_exceptions, f):
         if not show_exceptions:
             fig, ax = plt.subplots(figsize=(8, 4))
             vals = self.orig_df[col_name]
@@ -3109,7 +3181,7 @@ class DataConsistencyChecker:
             s.set_xlabel("Row Number")
             clean_x_tick_labels(fig, 1, ax)
             plt.legend().remove()
-            plt.show()
+            self.show_image(f)
         else:
             fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(10, 4))
 
@@ -3136,9 +3208,9 @@ class DataConsistencyChecker:
 
             plt.legend().remove()
             plt.tight_layout()
-            plt.show()
+            self.show_image(f)
 
-    def __draw_box_plots(self, test_id, cols, columns_set):
+    def __draw_box_plots(self, test_id, cols, columns_set, f):
         # The first column is the string/binary value and the second is the numeric/date value
         # todo: this does not colour the outliers. We may wish to draw a histogram next to it, but this is somewhat
         # kludgy.
@@ -3150,7 +3222,7 @@ class DataConsistencyChecker:
             df['Days Since Min Date'] = (pd.to_datetime(self.orig_df[cols[1]]) - pd.to_datetime(self.orig_df[cols[1]]).min()).dt.days
             s = sns.boxplot(data=df, orient='h', y=cols[0], x='Days Since Min Date')
         clean_x_tick_labels(fig, 1, ax)
-        plt.show()
+        self.show_image(f)
 
         # Also draw a histogram of the relevant classes.
         results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -3175,9 +3247,9 @@ class DataConsistencyChecker:
             s.set_title(f'Distribution of \n"{cols[1]}" where \n"{cols[0]}" is \n"{v}" \n(Flagged values in red)')
             clean_x_tick_labels(fig, nvals, curr_ax)
         plt.tight_layout()
-        plt.show()
+        self.show_image(f)
 
-    def __plot_larger_relationship(self, test_id, cols, columns_set, show_exceptions, display_info):
+    def __plot_larger_relationship(self, test_id, cols, columns_set, show_exceptions, display_info, f):
         col_medians = [self.column_medians[c] for c in cols]
         cols = np.array(cols)[np.argsort(col_medians)]
 
@@ -3193,7 +3265,7 @@ class DataConsistencyChecker:
         if test_id in ['MUCH_LARGER']:
             plt.xscale('log')
         clean_x_tick_labels(fig, 1, ax)
-        plt.show()
+        self.show_image(f)
 
     def __draw_network_plot(self, nodes, edges):
         """
@@ -3309,12 +3381,12 @@ class DataConsistencyChecker:
                     'than the other column. Redundant edges are removed. The x-position of the nodes represents the '
                     'median value of the column.'))
 
-    def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info):
+    def __draw_results_plots(self, test_id, cols, columns_set, show_exceptions, display_info, f):
 
         if test_id in ['UNUSUAL_ORDER_MAGNITUDE', 'FEW_NEIGHBORS', 'FEW_WITHIN_RANGE', 'VERY_SMALL', 'VERY_LARGE',
                        'VERY_SMALL_ABS', 'LESS_THAN_ONE', 'GREATER_THAN_ONE', 'NON_ZERO', 'POSITIVE', 'NEGATIVE',
                        'EARLY_DATES', 'LATE_DATES']:
-            self.__plot_distribution(test_id, cols[0], show_exceptions, display_info)
+            self.__plot_distribution(test_id, cols[0], show_exceptions, display_info, f)
 
         if test_id in ['LARGER_DIFF_RANGE', 'LARGER_SAME_RANGE', 'MUCH_LARGER']:
             if len(cols) == 2:
@@ -3326,8 +3398,9 @@ class DataConsistencyChecker:
                     y_is_calculated=False,
                     columns_set=columns_set,
                     show_expections=show_exceptions,
-                    display_info=display_info)
-            self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info)
+                    display_info=display_info,
+                    f=f)
+            self.__plot_larger_relationship(test_id, cols, columns_set, show_exceptions, display_info, f)
 
         if test_id in ['SIMILAR_WRT_RATIO', 'SIMILAR_WRT_DIFF', 'SIMILAR_TO_INVERSE', 'CORRELATED_DATES',
                        'SIMILAR_TO_NEGATIVE', 'CORRELATED_NUMERIC', 'RARE_COMBINATION', 'BINARY_MATCHES_VALUES']:
@@ -3339,7 +3412,8 @@ class DataConsistencyChecker:
                 y_is_calculated=False,
                 columns_set=columns_set,
                 show_expections=show_exceptions,
-                display_info=display_info)
+                display_info=display_info,
+                f=f)
 
         if test_id in ['SAME_VALUES']:
             if self.orig_df[cols[0]].nunique() > 5:
@@ -3351,9 +3425,10 @@ class DataConsistencyChecker:
                     y_is_calculated=False,
                     columns_set=columns_set,
                     show_expections=show_exceptions,
-                    display_info=display_info)
+                    display_info=display_info,
+                    f=f)
             else:
-                self.__plot_heatmap(test_id, cols)
+                self.__plot_heatmap(test_id, cols, f)
 
         if test_id in ['MEAN_OF_COLUMNS', 'SUM_OF_COLUMNS', 'MIN_OF_COLUMNS', 'MAX_OF_COLUMNS',
                        'CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO']:
@@ -3389,7 +3464,8 @@ class DataConsistencyChecker:
                                      y_is_calculated=True,
                                      columns_set=columns_set,
                                      show_expections=show_exceptions,
-                                     display_info=display_info)
+                                     display_info=display_info,
+                                     f=f)
 
             # Also show the original features in some cases
             if test_id in ['CONSTANT_SUM', 'CONSTANT_DIFF', 'CONSTANT_PRODUCT', 'CONSTANT_RATIO']:
@@ -3400,7 +3476,8 @@ class DataConsistencyChecker:
                                          y_is_calculated=False,
                                          columns_set=columns_set,
                                          show_expections=show_exceptions,
-                                         display_info=display_info)
+                                         display_info=display_info,
+                                         f=f)
 
         if test_id in ['LARGER_THAN_SUM', 'SIMILAR_TO_DIFF', 'LARGER_THAN_ABS_DIFF', 'SIMILAR_TO_PRODUCT',
                        'SIMILAR_TO_RATIO']:
@@ -3425,20 +3502,21 @@ class DataConsistencyChecker:
                                      y_is_calculated=True,
                                      columns_set=columns_set,
                                      show_expections=show_exceptions,
-                                     display_info=display_info)
+                                     display_info=display_info,
+                                     f=f)
 
         if test_id in ['RARE_VALUES']:
-            self.__plot_count_plot(cols[0])
+            self.__plot_count_plot(cols[0], f)
 
         if test_id in ['RARE_PAIRS', 'BINARY_SAME', 'BINARY_OPPOSITE', 'BINARY_IMPLIES']:
-            self.__plot_heatmap(test_id, cols)
+            self.__plot_heatmap(test_id, cols, f)
 
         if test_id in ['COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC', 'COLUMN_TENDS_ASC', 'COLUMN_TENDS_DESC',
                        'SIMILAR_PREVIOUS']:
-            self.__draw_row_rank_plot(test_id, cols[0], show_exceptions)
+            self.__draw_row_rank_plot(test_id, cols[0], show_exceptions, f)
 
         if test_id in ['SMALL_GIVEN_VALUE', 'LARGE_GIVEN_VALUE', 'BINARY_MATCHES_VALUE']:
-            self.__draw_box_plots(test_id, cols, columns_set)
+            self.__draw_box_plots(test_id, cols, columns_set, f)
 
         if test_id in ['BINARY_MATCHES_SUM']:
             df2 = self.orig_df[cols].copy()
@@ -3453,34 +3531,34 @@ class DataConsistencyChecker:
 
             s = sns.boxplot(data=self.orig_df, orient='h', y=cols[2], x=cols[1], ax=ax[2])
             s.set_title(f"{cols[2]} vs \n{cols[1]} \nAlone")
-            plt.show()
+            self.show_image(f)
 
         if test_id in ['BINARY_TWO_OTHERS_MATCH']:
             if (cols[0] in self.numeric_cols) and (cols[1] in self.numeric_cols):
                 s = sns.scatterplot(data=self.orig_df, x=cols[0], y=cols[1], hue=cols[2])
                 s.set_title(f'"{cols[0]}" vs "{cols[1]}"\nColor indicates "{cols[2]}"')
                 plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-                plt.show()
+                self.show_image(f)
 
         if test_id in ['UNUSUAL_DAY_OF_WEEK']:
             sns.countplot(x=self.orig_df[cols[0]].dt.strftime('%A').fillna('NONE'))
-            plt.show()
+            self.show_image(f)
 
         if test_id in ['UNUSUAL_DAY_OF_MONTH']:
             sns.countplot(x=self.orig_df[cols[0]].dt.day.fillna('NONE'))
-            plt.show()
+            self.show_image(f)
 
         if test_id in ['UNUSUAL_MONTH']:
             sns.countplot(x=self.orig_df[cols[0]].dt.month.fillna('NONE'))
-            plt.show()
+            self.show_image(f)
 
         if test_id in ['UNUSUAL_HOUR']:
             sns.countplot(x=self.orig_df[cols[0]].dt.hour.fillna('NONE'))
-            plt.show()
+            self.show_image(f)
 
         if test_id in ['UNUSUAL_MINUTES']:
             sns.countplot(x=self.orig_df[cols[0]].dt.minute.fillna('NONE'))
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['CONSTANT_GAP', 'LARGE_GAP', 'SMALL_GAP', 'LATER']:
             fig, ax = plt.subplots()
@@ -3490,7 +3568,7 @@ class DataConsistencyChecker:
             else:
                 sns.countplot(x=gaps_arr)
             clean_x_tick_labels(fig, 1, ax)
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['RARE_PAIRS_FIRST_CHAR']:
             df2 = self.orig_df[cols].copy()
@@ -3499,7 +3577,7 @@ class DataConsistencyChecker:
             counts_data = pd.crosstab(df2[f'{cols[0]} First Char'], df2[f'{cols[1]} First Char'])
             s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
             s.set_title(f"Counts by First Characters of {cols[0]} and {cols[1]}")
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['RARE_PAIRS_FIRST_WORD']:
             df2 = self.orig_df[cols].copy()
@@ -3510,7 +3588,7 @@ class DataConsistencyChecker:
             counts_data = pd.crosstab(df2[f'{cols[0]} First Word'], df2[f'{cols[1]} First Word'])
             s = sns.heatmap(counts_data, cmap="Blues", annot=True, fmt='g')
             s.set_title(f"Counts by First Words of {cols[0]} and {cols[1]}")
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['CORRELATED_ALPHA_ORDER']:
             df2 = self.orig_df[cols].copy()
@@ -3525,7 +3603,7 @@ class DataConsistencyChecker:
                 results_col = self.test_results_df[results_col_name]
                 flagged_idxs = np.where(results_col)
                 sns.scatterplot(data=df2.loc[flagged_idxs], x=cols[0], y=cols[1], color='red', label='Flagged')
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['LARGE_GIVEN_DATE', 'SMALL_GIVEN_DATE']:
             df2 = self.orig_df[cols].copy()
@@ -3537,7 +3615,7 @@ class DataConsistencyChecker:
                 plt.ylabel(cols[0] + " Bin Number")
                 plt.xticks([])
                 plt.tight_layout()
-                plt.show()
+                self.show_image(f)
             else:
                 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 3))
                 sns.scatterplot(data=df2, x=cols[0], y=cols[1], ax=ax[0])
@@ -3553,7 +3631,7 @@ class DataConsistencyChecker:
                 s.set_xlabel(cols[0] + " Bin Number")
                 s.set_title("Values by Bin")
                 plt.tight_layout()
-                plt.show()
+                self.show_image(f)
 
             # Also draw a histogram of the relevant classes.
             results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -3578,7 +3656,7 @@ class DataConsistencyChecker:
                     if display_info['bin_assignments'][i] == bin_id:
                         curr_ax.axvline(flagged_df.loc[i, cols[1]], color='red')
             plt.tight_layout()
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['LARGE_GIVEN_PREFIX', 'SMALL_GIVEN_PREFIX']:
             df2 = self.orig_df[cols].copy()
@@ -3592,7 +3670,7 @@ class DataConsistencyChecker:
             else:
                 df2[cols[1]] = df2[cols[1]].astype(float)
                 sns.boxplot(data=df2, orient='h', y=cols[0], x=cols[1])
-            plt.show()
+            self.show_image(f)
 
             # Also draw a histogram of the relevant classes.
             results_col_name = self.get_results_col_name(test_id, columns_set)
@@ -3621,7 +3699,7 @@ class DataConsistencyChecker:
                 s.set_title(f"Distribution of {cols[1]} where the first word of {cols[0]} is {v} (Flagged values in red)")
                 if cols[1] in self.date_cols:
                     plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
-                plt.show()
+                self.show_image(f)
 
         elif test_id in ['SMALL_AVG_RANK_PER_ROW', 'LARGE_AVG_RANK_PER_ROW']:
             t_df = pd.DataFrame({"Avg. Percentiles": display_info['percentiles']})
@@ -3630,7 +3708,7 @@ class DataConsistencyChecker:
             for fv in display_info['flagged_vals']:
                 ax.axvline(fv, color='r')
             s.set_title("Mean Percentile of Numeric Values by Row")
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['CORRELATED_GIVEN_VALUE']:
             if show_exceptions:
@@ -3658,7 +3736,7 @@ class DataConsistencyChecker:
                         if flagged_idx in list(df2.index):
                             df3 = df2.loc[flagged_idx]
                             s = sns.scatterplot(data=df3, x=cols[1], y=cols[2], color='red')
-                plt.show()
+                self.show_image(f)
 
         elif test_id in ['GROUPED_STRINGS_BY_NUMERIC']:
             df2 = pd.DataFrame({cols[0]: self.numeric_vals_filled[cols[0]], cols[1]: self.orig_df[cols[1]]})
@@ -3669,7 +3747,7 @@ class DataConsistencyChecker:
                 s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], hue='Flagged')
             else:
                 s = sns.scatterplot(data=df2, x=cols[0], y=cols[1], color='blue')
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['LARGE_GIVEN_PAIR', 'SMALL_GIVEN_PAIR']:
 
@@ -3702,7 +3780,7 @@ class DataConsistencyChecker:
             s.set_title(f'Counts by combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
             plt.tight_layout()
             highlight_cells()
-            plt.show()
+            self.show_image(f)
 
             # Present a heatmap of the average value of col[2] for each pair
             if cols[2] in self.numeric_cols:
@@ -3713,7 +3791,7 @@ class DataConsistencyChecker:
                 s.set_title(f'Average value of \n"{cols[2]}" \nby combination of values in \n"{cols[0]}" and \n"{cols[1]}"')
                 plt.tight_layout()
                 highlight_cells()
-                plt.show()
+                self.show_image(f)
 
             # Present a histogram of the relevant classes
             fig, ax = plt.subplots(nrows=1, ncols=nvals, sharey=True, figsize=(nvals*4, 4))
@@ -3741,7 +3819,7 @@ class DataConsistencyChecker:
                 for label_idx, label in enumerate(ax_curr.xaxis.get_ticklabels()):
                     if label_idx != (num_ticks - 1):
                         label.set_visible(False)
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['BINARY_RARE_COMBINATION']:
             counts_df = self.orig_df.groupby(cols).size().reset_index()
@@ -3757,7 +3835,7 @@ class DataConsistencyChecker:
             s.set_title("Counts of combinations of values in columns")
             for p_idx, p in enumerate(s.patches):
                 s.annotate('{:.1f}'.format(counts[p_idx]), (p.get_width()+0.25, (p.get_y() + (p.get_height() / 2))+0.1))
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['DECISION_TREE_REGRESSOR', 'LINEAR_REGRESSION'] or (test_id in ['PREV_VALUES_DT'] and cols[-1] in self.numeric_cols):
             df2 = pd.DataFrame({
@@ -3772,17 +3850,17 @@ class DataConsistencyChecker:
             else:
                 s = sns.scatterplot(data=df2, y='Prediction', x=cols[-1])
             s.set_title(f'Actual vs Predicted values for "{cols[-1]}"')
-            plt.show()
+            self.show_image(f)
 
         elif test_id in ['FIRST_WORD_SMALL_SET']:
             if len(display_info['counts']) > 1:
                 s = sns.barplot(orient='h', y=display_info['counts'].index, x=display_info['counts'].values)
-                plt.show()
+                self.show_image(f)
 
     ##################################################################################################################
     # Private methods to display tables of example rows from the original data
     ##################################################################################################################
-    def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns):
+    def __draw_sample_dataframe(self, df, test_id, cols, display_info, is_patterns, f):
         """
         Adds columns to the passed dataframe as is necessary to explain the pattern, then displays the dataframe.
         Many tests have additional columns which can make the pattern between the columns more clear.
@@ -3803,6 +3881,9 @@ class DataConsistencyChecker:
 
         is_patterns: bool
             Indicates if this is being called when displaying patterns or exceptions
+
+        f: file handle
+            Output file for HTML report
         """
 
         col_name, col_name_1, col_name_2, col_set = "", "", "", ""
@@ -4009,12 +4090,15 @@ class DataConsistencyChecker:
             df = df.sort_index()
 
         pd.options.display.float_format = '{:f}'.format
-        if is_notebook():
+        if f:
+            f.write(df.to_html())
+            f.write("<br><br>")
+        elif is_notebook():
             display(df)
         else:
             print(df)
 
-    def __draw_rows_around_flagged_row(self, df, test_id, cols, display_info):
+    def __draw_rows_around_flagged_row(self, df, test_id, cols, display_info, f):
         """
         Called by display_detailed_results() to provide context for one flagged row, where the row order is relevant.
         This displays, where possible, 5 rows before and 5 rows after the flagged row.
@@ -4029,10 +4113,11 @@ class DataConsistencyChecker:
             test_id,
             cols,
             display_info=display_info,
-            is_patterns=False)
+            is_patterns=False,
+            f=f)
 
     def __get_sample_not_flagged(self, test_id, col_name, n_examples=10, show_consecutive=False, sort_col=None,
-                                 is_patterns=False, display_info=None):
+                                 is_patterns=False, display_info=None, f=None):
         """
         Called by __display_examples_not_flagged()
 
@@ -4060,6 +4145,8 @@ class DataConsistencyChecker:
 
         display_info: dict
             Set by individual test to describe each row with respect to the pattern
+
+        f: file handle
         """
 
         if is_patterns:
@@ -4283,7 +4370,7 @@ class DataConsistencyChecker:
 
         return df
 
-    def __display_examples_not_flagged(self, test_id, cols, columns_set, is_patterns, display_info):
+    def __display_examples_not_flagged(self, test_id, cols, columns_set, is_patterns, display_info, f):
         """
         Called by display_detailed_results(). This prints a set of rows that were not flagged. May be called in cases
         where some rows were flagged, or where none were.
@@ -4291,12 +4378,12 @@ class DataConsistencyChecker:
 
         # Do not show examples for some tests
         if is_patterns and test_id in ['UNIQUE_VALUES']:
-            print_text("Examples are not shown for this pattern.")
+            print_text("Examples are not shown for this pattern.", f)
             return
 
         if test_id in ['MISSING_VALUES_PER_ROW', 'ZERO_VALUES_PER_ROW',
                        'NEGATIVE_VALUES_PER_ROW', 'GROUPED_STRINGS']:
-            print_text("Examples are not shown for this pattern.")
+            print_text("Examples are not shown for this pattern.", f)
             return
 
         show_consecutive = test_id in ['PREV_VALUES_DT', 'COLUMN_ORDERED_ASC', 'COLUMN_ORDERED_DESC',
@@ -4314,11 +4401,11 @@ class DataConsistencyChecker:
                 sort_msg = f' sorted by {sort_col}'
             consecutive_str = f" (showing a consecutive set of rows{sort_msg})"
 
-        print()
+        print_line(f)
         if is_patterns:
-            print_text(f"**Examples{consecutive_str}**:")
+            print_text(f"**Examples{consecutive_str}**:", f)
         else:
-            print_text(f"**Examples of values NOT flagged{consecutive_str}**:")
+            print_text(f"**Examples of values NOT flagged{consecutive_str}**:", f)
 
         vals = self.__get_sample_not_flagged(
             test_id,
@@ -4326,9 +4413,9 @@ class DataConsistencyChecker:
             show_consecutive=show_consecutive,
             sort_col=sort_col,
             is_patterns=is_patterns,
-            display_info=display_info
-        )
-        self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns)
+            display_info=display_info,
+            f=f)
+        self.__draw_sample_dataframe(vals, test_id, cols, display_info, is_patterns, f)
 
     ##################################################################################################################
     # Private helper methods to support outputting the results of the analysis in various ways
@@ -7374,7 +7461,7 @@ class DataConsistencyChecker:
 
         for col_name in self.date_cols:
             # Skip columns with many null values
-            if self.orig_df[col_name].isna().sum() > (self.num_rows / 2):
+            if self.orig_df[col_name].isna().sum() > 0: # (self.num_rows / 2):
                 continue
 
             sorted_vals = copy.copy(pd.to_datetime(self.orig_df[col_name]).values)
@@ -7394,7 +7481,7 @@ class DataConsistencyChecker:
                 vals_arr = [x for x, y in zip(sorted_vals, test_arr) if y]
                 test_series = [False if x in vals_arr else True for x in self.orig_df[col_name].values]
                 prev_arr = np.array(sorted(self.orig_df[col_name].values))[list(self.orig_df[col_name].rank().astype(int)-2)]
-                next_arr = np.array([pd.Timestamp(x) for x in np.concatenate( # It converts to integer otherwise
+                next_arr = np.array([pd.Timestamp(x) for x in np.concatenate(  # It converts to integer otherwise
                         [np.array(sorted(self.orig_df[col_name].values)), np.array([self.orig_df[col_name].max()])]
                     ).astype(pd.Timestamp)])[list(self.orig_df[col_name].rank().astype(int))]
 
@@ -7556,8 +7643,8 @@ class DataConsistencyChecker:
                 [col_name],
                 test_series,
                 "The column consistently contains values that have several similar values in the column",
-                (f" -- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors within "
-                 f"their and the neighboring bins (width {bin_width.days} days)"),
+                (f" -- any values with fewer than an average of {math.floor(self.freq_contamination_level)} neighbors "
+                 f"within their and the neighboring bins (width {bin_width.days} days)"),
                 display_info={'Number in Range': [combined_bins_counts[x] for x in binned_values]})
 
     def __generate_very_small(self):
@@ -7928,7 +8015,7 @@ class DataConsistencyChecker:
 
         cols_same_bool_dict = self.get_cols_same_bool_dict()
         larger_dict = self.get_larger_pairs_dict(allow_equal=False, print_status=True)
-        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict(force=True)
         larger_pairs_arr = []
 
         q1_dict = {}
@@ -8133,7 +8220,7 @@ class DataConsistencyChecker:
             return
 
         larger_pairs_with_bool_dict = self.get_larger_pairs_with_bool_dict()
-        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict()
+        get_col_pairs_either_null_bool_dict = self.get_col_pairs_either_null_bool_dict(force=True)
         much_larger_pairs_arr = []
 
         for cols_idx, (col_name_1, col_name_2) in enumerate(col_pairs):
@@ -8152,7 +8239,8 @@ class DataConsistencyChecker:
                 continue
 
             # Test on a sample that the columns are correlated
-            corr = scipy.stats.spearmanr(self.sample_df[col_name_1], self.sample_df[col_name_2])
+            corr = scipy.stats.spearmanr(self.sample_df[col_name_1].fillna(self.sample_df[col_name_1].median()),
+                                         self.sample_df[col_name_2].fillna(self.sample_df[col_name_2].median()))
             if corr.correlation < 0.9:
                 continue
 
@@ -18784,15 +18872,34 @@ def is_notebook():
         return False      # Probably standard Python interpreter
 
 
-def print_text(s, remove_markdown=True):
+def print_line(f):
+    if not f:
+        print()
+
+
+def print_text(s, f=None):
     """
-    General method to handle printing text to either console or notebook, in the form of markdown.
+    General method to handle printing text to either HTML file, console, or notebook in the form of markdown.
     """
 
-    if is_notebook():
-        # Remove or replace any characters that are specific to console
+    if f:
+        s = s.replace("**", "<b>", 1)
+        s = s.replace("**", "</b>", 1)
+
+        s = s.replace("###", "<H2>", 1)
+        s = s.replace("##", "<H1>", 1)
+
+        s = s.replace(' ', '&nbsp;')
         s = s.replace('\n', '<br>')
-        display(Markdown(s))
+        f.write(s + "<br><br>" + os.linesep)
+    elif is_notebook():
+        # Remove or replace any characters that are specific to console
+        if 'decision tree' in s:
+            print(s)
+        else:
+            s = s.replace(' ', '&nbsp;')
+            s = s.replace('\n', '<br>')
+            display(Markdown(s))
     else:
         # Remove or replace any characters that are specific to markdown
         print(s.replace("**", "").replace("#", "").replace("<br>", "\n"))
