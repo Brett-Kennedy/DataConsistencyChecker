@@ -2435,7 +2435,10 @@ class DataConsistencyChecker:
             show_exceptions = False
 
         if max_shown == -1:
-            max_shown = 200  # This includes patterns & exceptions
+            if save_to_disk:
+                max_shown = 50_000
+            else:
+                max_shown = 200  # This includes patterns & exceptions
             if include_examples:
                 max_shown /= 2
             if plot_results:
@@ -4251,14 +4254,14 @@ class DataConsistencyChecker:
         elif test_id in ['POSITIVE']:
             # Show where col == 0 and where is > 0
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_pos = self.orig_df[cols][(self.orig_df[col_name_1] > 0)].head(n_examples - len(df_v_zero))
+            df_v_zero = self.orig_df[cols][(self.numeric_vals_filled[col_name_1] == 0)].head(n_examples // 2)
+            df_v_pos = self.orig_df[cols][(self.numeric_vals_filled[col_name_1] > 0)].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_pos])
         elif test_id in ['NEGATIVE']:
             # Show where col == 0 and where is < 0
             col_name_1 = cols[0]
-            df_v_zero = self.orig_df[cols][(self.orig_df[col_name_1] == 0)].head(n_examples // 2)
-            df_v_neg = self.orig_df[cols][(self.orig_df[col_name_1] < 0)].head(n_examples - len(df_v_zero))
+            df_v_zero = self.orig_df[cols][(self.numeric_vals_filled[col_name_1] == 0)].head(n_examples // 2)
+            df_v_neg = self.orig_df[cols][(self.numeric_vals_filled[col_name_1] < 0)].head(n_examples - len(df_v_zero))
             df = pd.concat([df_v_zero, df_v_neg])
         elif test_id in ['MATCHED_SET_POS_NEG']:
             # Show where col1 is positive and negative
