@@ -432,7 +432,9 @@
             show_short_list_only=True,
             include_examples=True,
             plot_results=True,
-            max_shown=-1
+            max_shown=-1,
+            save_to_disk=False,
+            output_folder=None
             )
         
         Loops through each test specified, and each feature specified, and presents a detailed description of each. If
@@ -486,6 +488,13 @@
             if more patterns and/or exceptions are available. If filters are set, and the number is larger, the first
             max_shown will be set. If set to -1, a default will be used, which considers if plots and examples are
             to be displayed. The default is 200 without plots or examples, 100 with either, and 50 with both.
+
+        save_to_disk: bool
+            If set True, output will be written to a file on disk
+
+        output_folder: str
+            Used only if save_to_disk is True. Indicates the file path to use for the output. If not specified, the
+            current folder will be used.
         
 ## display_next
 **display_next**()
