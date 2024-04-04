@@ -96,7 +96,6 @@ from check_data_consistency import DataConsistencyChecker
 dc = DataConsistencyChecker()
 dc.init_data(df)
 dc.check_data_quality()
-dc.summarize_patterns_and_exceptions()
 dc.display_detailed_results(save_to_disk=True)
 ```
 Saving to disk will create an HTML file called Data_Consistency.html with the full results. The folder may be specified for this. This can contain a large volume of output as it does not need to be rendered within a notebook.
